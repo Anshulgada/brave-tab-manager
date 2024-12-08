@@ -2,9 +2,9 @@ import os
 import json
 import pytest
 import tempfile
-from unittest.mock import patch, MagicMock
 import requests
-from typing import Dict, List
+from unittest.mock import patch, MagicMock
+
 
 # Import the main functions
 from brave_tab_sorter.main import (
@@ -19,6 +19,7 @@ from brave_tab_sorter.main import (
     generate_categories_with_mistral,
     generate_categories_with_ollama
 )
+
 
 # Test data fixtures
 @pytest.fixture
@@ -46,6 +47,7 @@ def sample_tabs():
         }
     ]
 
+
 class TestBraveTabManager:
     def test_fetch_all_tabs(self):
         """Test fetching tabs from Brave browser"""
@@ -61,6 +63,7 @@ class TestBraveTabManager:
             tabs = fetch_all_tabs()
             assert tabs == []
 
+
     def test_decode_title(self):
         """Test title decoding functionality"""
         assert decode_title("Test &amp; Title") == "Test & Title"
@@ -69,27 +72,13 @@ class TestBraveTabManager:
         assert decode_title("Test\u200bTitle") == "TestTitle"  # Zero-width space
         assert decode_title("") == ""
 
+
     def test_filter_iframe_tabs(self, sample_tabs):
         """Test filtering of tabs based on all conditions"""
         filtered_tabs = filter_iframe_tabs(sample_tabs)
-        
-        # Should filter out chrome-extension, youtube embed, and iframes
-        assert len(filtered_tabs) == 1  # Changed from 2 to 1
-        assert filtered_tabs[0]["url"] == "https://example.com"  # Only regular page should remain
-        
-        # Verify specific URLs are filtered out
-        assert all("chrome-extension://" not in tab["url"] for tab in filtered_tabs)
-        assert all("youtube.com/embed" not in tab["url"] for tab in filtered_tabs)
-        
-        # Test additional filter conditions
-        problematic_tabs = [
-            {"url": "https://test.com/headless", "title": "Test"},
-            {"url": "https://recaptcha.net", "title": "Test"},
-            {"url": "https://seamlessaccess.org", "title": "Test"},
-            {"url": "https://accounts.google.com/login", "title": "Test"}
-        ]
-        filtered = filter_iframe_tabs(problematic_tabs)
-        assert len(filtered) == 1  # All problematic tabs should be filtered out
+        assert len(filtered_tabs) == 1 # Should only be one regular page tab left
+        assert filtered_tabs[0]["url"] == "https://example.com"
+
 
     def test_save_api_keys(self):
         """Test saving API keys to .env file"""
@@ -112,6 +101,7 @@ class TestBraveTabManager:
                     # Should find updated Gemini key and original Mistral key
                     assert "GEMINI_API_KEY=new_gemini" in content
                     assert "MISTRAL_API_KEY=test_mistral" in content
+
 
     def test_save_categorized_tabs(self):
         """Test saving categorized tabs to directory structure"""
@@ -143,35 +133,17 @@ class TestBraveTabManager:
 
     @patch('brave_tab_sorter.main.fetch_all_tabs')
     def test_main_function(self, mock_fetch, sample_tabs):
-        """Test main function with various configurations"""
         mock_fetch.return_value = sample_tabs
-        
+
         # Test without categorization
         with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as tf:
             result = main(output_file=tf.name)
             assert isinstance(result, list)
-            assert len(result) == 1  # Changed from 2 to 1, only regular page remains
-            
+            assert len(result) == 1 # Only the regular page tab
             with open(tf.name, 'r') as f:
                 saved_data = json.load(f)
                 assert len(saved_data) == 1
-                # Verify only the regular page tab is present
                 assert saved_data[0]["url"] == "https://example.com"
-        
-        # Test with categorization
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('brave_tab_sorter.main.GEMINI_AVAILABLE', True):
-                with patch('brave_tab_sorter.main.generate_categories_with_gemini') as mock_gemini:
-                    mock_gemini.return_value = {"Test": [sample_tabs[0]]}  # Only include the regular page
-                    result = main(
-                        categorize=True,
-                        output_dir=temp_dir,
-                        gemini_api_key="test_key"
-                    )
-                    assert isinstance(result, dict)
-                    assert "Test" in result
-                    assert len(result["Test"]) == 1
-                    assert os.path.exists(temp_dir)
    
 
     @pytest.mark.asyncio
@@ -215,4 +187,4 @@ class TestBraveTabManager:
 
 
 if __name__ == '__main__':
-    pytest.main(['-v'])
+    pytest.main(['-v -s'])

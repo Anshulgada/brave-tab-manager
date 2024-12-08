@@ -1,13 +1,15 @@
+import re
 import os
 import json
-import re
+import glob
 import html
 import ftfy
 import argparse
 import requests
 from dotenv import load_dotenv
-from unicodedata import normalize, category
 from typing import List, Dict, Optional
+from unicodedata import normalize, category
+
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +39,7 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
 
+
 # Constants
 OUTPUT_FILE = "Open_Tabs.json"
 FILTER_CONDITIONS = [
@@ -49,6 +52,7 @@ FILTER_CONDITIONS = [
     lambda tab: "accounts.google.com" in tab.get("url", "") and not re.search(r"RotateCookiesPage|recaptcha", tab.get("url", "")),
 ]
 
+
 def fetch_all_tabs() -> List[Dict]:
     try:
         response = requests.get("http://localhost:9222/json")
@@ -57,6 +61,7 @@ def fetch_all_tabs() -> List[Dict]:
         print(f"Error connecting to Brave Debugging API: {e}")
         return []
 
+
 def decode_title(title: str) -> str:
     fixed_title = ftfy.fix_text(title)
     decoded_title = html.unescape(fixed_title)
@@ -64,16 +69,18 @@ def decode_title(title: str) -> str:
     cleaned_title = ''.join(char for char in normalized_title if not category(char).startswith('C'))
     return cleaned_title
 
+
 def filter_iframe_tabs(tabs: List[Dict]) -> List[Dict]:
     filtered_tabs = []
     for tab in tabs:
-        should_exclude = any(condition(tab) for condition in FILTER_CONDITIONS)
-        if not should_exclude:
-            filtered_tabs.append({
-                "title": decode_title(tab.get("title", "")),
-                "url": tab.get("url", "")
-            })
+        if tab.get("type") != "iframe" and not any(condition(tab) for condition in FILTER_CONDITIONS):  #Crucial fix
+                filtered_tabs.append({
+                    "title": decode_title(tab.get("title", "")),
+                    "url": tab.get("url", "")
+                })
+
     return filtered_tabs
+
 
 def generate_categories_with_spacy(tabs: List[Dict]) -> Dict[str, List[Dict]]:
     """
@@ -129,11 +136,13 @@ def generate_categories_with_gemini(tabs: List[Dict], api_key: str) -> Dict[str,
         # Prepare input for AI model
         tab_texts = [f"Title: {tab['title']}, URL: {tab['url']}" for tab in tabs]
         input_prompt = (
-            "Categorize these browser tabs into 5-10 meaningful groups as per input data(groups and sub-groups may increase or decrease the given range). "
-            "Provide a JSON response with category names as keys and lists of tab indices as values. "
-            "Be concise and thoughtful in creating categories.\n\n" + 
+            "Organize these browser tabs into meaningful categories and subcategories based on their content. "
+            "The number of categories and subcategories should be determined by the nature of the data, without any fixed limits. "
+            "Provide a JSON response where each category (and optional subcategory) is a key, and the associated tab indices are the values. "
+            "Be concise, logical, and thoughtful in forming categories.\n\n" + 
             "\n".join(tab_texts)
-        )
+)
+
 
         # Generate categories using Gemini
         response = model.generate_content(input_prompt)
@@ -175,11 +184,13 @@ def generate_categories_with_mistral(tabs: List[Dict], api_key: str) -> Dict[str
         # Prepare input for AI model
         tab_texts = [f"Title: {tab['title']}, URL: {tab['url']}" for tab in tabs]
         input_prompt = (
-            "Categorize these browser tabs into 5-10 meaningful groups as per input data(groups and sub-groups may increase or decrease the given range). "
-            "Provide a JSON response with category names as keys and lists of tab indices as values. "
-            "Be concise and thoughtful in creating categories.\n\n" + 
+            "Organize these browser tabs into meaningful categories and subcategories based on their content. "
+            "The number of categories and subcategories should be determined by the nature of the data, without any fixed limits. "
+            "Provide a JSON response where each category (and optional subcategory) is a key, and the associated tab indices are the values. "
+            "Be concise, logical, and thoughtful in forming categories.\n\n" + 
             "\n".join(tab_texts)
-        )
+)
+
 
         # Generate categories using Mistral
         response = openai.ChatCompletion.create(
@@ -215,6 +226,7 @@ def generate_categories_with_mistral(tabs: List[Dict], api_key: str) -> Dict[str
         print(f"Mistral categorization error: {e}")
         return {"Uncategorized": tabs}
 
+
 def generate_categories_with_ollama(tabs: List[Dict], model: str = "llama2") -> Dict[str, List[Dict]]:
     """
     Use Ollama to dynamically categorize tabs
@@ -223,11 +235,13 @@ def generate_categories_with_ollama(tabs: List[Dict], model: str = "llama2") -> 
         # Prepare input for AI model
         tab_texts = [f"Title: {tab['title']}, URL: {tab['url']}" for tab in tabs]
         input_prompt = (
-            "Categorize these browser tabs into 5-10 meaningful groups as per input data(groups and sub-groups may increase or decrease the given range). "
-            "Provide a JSON response with category names as keys and lists of tab indices as values. "
-            "Be concise and thoughtful in creating categories.\n\n" + 
+            "Organize these browser tabs into meaningful categories and subcategories based on their content. "
+            "The number of categories and subcategories should be determined by the nature of the data, without any fixed limits. "
+            "Provide a JSON response where each category (and optional subcategory) is a key, and the associated tab indices are the values. "
+            "Be concise, logical, and thoughtful in forming categories.\n\n" + 
             "\n".join(tab_texts)
-        )
+)
+
 
         # Generate categories using Ollama
         response = ollama.chat(model=model, messages=[
@@ -341,15 +355,12 @@ def main(output_file: Optional[str] = None,
         print("No tabs found or unable to connect to Brave.")
         return
 
-    # Separate and filter tabs
-    iframe_tabs = filter_iframe_tabs([tab for tab in fetched_tabs if tab.get("type") == "iframe"])
-    page_tabs = [
-        {"title": decode_title(tab.get("title", "")), "url": tab.get("url", "")}
-        for tab in fetched_tabs if tab.get("type") == "page"
-    ]
+    #Separate and filter iframe tabs ONLY  -- KEY CHANGE!!
+    iframe_tabs = filter_iframe_tabs([tab for tab in fetched_tabs if tab.get("type") == "iframe"]) #Correct filtering
+    page_tabs = filter_iframe_tabs([tab for tab in fetched_tabs if tab.get("type") == "page"]) # Correct filter
 
     # Combine tabs
-    all_tabs = page_tabs + iframe_tabs
+    all_tabs = page_tabs + iframe_tabs  # Now correctly filtered
 
     # Categorize if requested
     if categorize:
@@ -395,31 +406,48 @@ def main(output_file: Optional[str] = None,
 
     return all_tabs
 
+
 def cli():
-    parser = argparse.ArgumentParser(description="Brave Browser Tab Management Tool")
-    parser.add_argument('-o', '--output', help='Output JSON file path')
-    parser.add_argument('-c', '--categorize', action='store_true', 
-                        help='Categorize tabs (default method will be Gemini)')
-    parser.add_argument('-d', '--output-dir', 
-                        help='Directory to save categorized tabs')
-    parser.add_argument('-m', '--model', 
-                        help='Specify Ollama model for categorization')
-    parser.add_argument('-mk','--mistral-key', 
-                        help='Mistral AI API key for categorization')
-    parser.add_argument('-gk', '--gemini-key', 
-                        help='Google Gemini API key for categorization (default)')
-    parser.add_argument('--save-keys', action='store_true',
-                        help='Save API keys to .env file')
+    parser = argparse.ArgumentParser(
+        description="Brave Browser Tab Management Tool",
+        epilog="Example usage: brave-tabs -o my_tabs.json -c -d categorized_tabs -gk YOUR_GEMINI_API_KEY",  # Added epilog
+        formatter_class=argparse.RawTextHelpFormatter  # For better formatting of help message
+    )
+    parser.add_argument('-o', '--output', help='Output JSON file path (default: Open_Tabs.json if not categorized)')
+    parser.add_argument('-c', '--categorize', action='store_true', help='Categorize tabs (default method: Gemini)')
+    parser.add_argument('-d', '--output-dir', help='Directory to save categorized tabs (required with -c)')
+    parser.add_argument('-m', '--model', help='Specify Ollama model for categorization (e.g., "llama2")')
+    parser.add_argument('-mk', '--mistral-key', help='Mistral AI API key')
+    parser.add_argument('-gk', '--gemini-key', help='Google Gemini API key')
+    parser.add_argument('--save-keys', action='store_true', help='Save API keys to .env file. Use with -gk or -mk.')
+    # parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='Show this help message and exit.')
+
     
     args = parser.parse_args()
     
-    main(output_file=args.output, 
-         categorize=args.categorize, 
+    if not args.categorize and not args.output and not args.save_keys:  #Check if at least one is given
+        parser.print_help()  #If not, print help, and exit
+        return
+
+    # Expand the wildcard if used in --output-dir
+    if args.output_dir:
+        expanded_paths = glob.glob(os.path.expanduser(args.output_dir))  # Expand ~ and wildcards
+        if not expanded_paths:
+            print(f"Error: No paths found for {args.output_dir}")
+            return
+        args.output_dir = expanded_paths[0]  # Use the first match
+
+    print(f"Output directory is set to: {args.output_dir}")
+
+
+    main(output_file=args.output,
+         categorize=args.categorize,
          output_dir=args.output_dir,
          model=args.model,
          mistral_api_key=args.mistral_key,
          gemini_api_key=args.gemini_key,
          save_keys=args.save_keys)
+
 
 if __name__ == "__main__":
     cli()

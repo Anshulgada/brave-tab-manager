@@ -5,18 +5,18 @@ setup(
     version='0.1.0',
     packages=find_packages(where='brave_tab_sorter'),  # Correctly finds packages within subdirectory
     install_requires=[
-        'requests',
         'ftfy',
-        'ollama',
-        'google-generativeai',
         'spacy',
         'openai',
-        'python-dotenv',
+        'ollama',
+        'requests',
         'argparse',
+        'python-dotenv',
+        'google-generativeai',
     ],
     entry_points={
         'console_scripts': [
-            'brave-tabs = brave_tab_sorter.main:cli',  # Path to main function
+            'tab-man = brave_tab_sorter.main:cli',  # Path to main function
         ],
     },
     author='Anshul Gada',

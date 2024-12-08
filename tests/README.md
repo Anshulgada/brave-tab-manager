@@ -4,7 +4,7 @@
 
 1. Ensure you have the required dependencies installed:
    ```bash
-   pip install pytest 
+   pip install pytest pytest-asyncio pytest-mock
    pip install -r requirements.txt  # Include all project dependencies
    ```
 
