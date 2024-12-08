@@ -17,32 +17,33 @@ load_dotenv()
 # Optional imports for different categorization methods
 try:
     import ollama
-    OLLAMA_AVAILABLE = True
+    OLLAMA_AVAILABLE = True  # Ollama is available for categorization
 except ImportError:
-    OLLAMA_AVAILABLE = False
+    OLLAMA_AVAILABLE = False  # Ollama not available
 
 try:
     import openai
-    OPENAI_AVAILABLE = True
+    OPENAI_AVAILABLE = True  # OpenAI (Mistral) is available for categorization
 except ImportError:
-    OPENAI_AVAILABLE = False
+    OPENAI_AVAILABLE = False  # OpenAI not available
 
 try:
     import spacy
-    SPACY_AVAILABLE = True
+    SPACY_AVAILABLE = True  # spaCy is available for categorization
 except ImportError:
-    SPACY_AVAILABLE = False
+    SPACY_AVAILABLE = False  # spaCy not available
 
 try:
     import google.generativeai as genai
-    GEMINI_AVAILABLE = True
+    GEMINI_AVAILABLE = True  # Google Gemini is available for categorization
 except ImportError:
-    GEMINI_AVAILABLE = False
+    GEMINI_AVAILABLE = False  # Google Gemini not available
 
 
 # Constants
-OUTPUT_FILE = "Open_Tabs.json"
+OUTPUT_FILE = "Open_Tabs.json"  # Default file for saving the tabs
 FILTER_CONDITIONS = [
+    # Filter conditions to exclude specific tabs based on their URL or title
     lambda tab: "chrome-extension://" in tab.get("url", ""),
     lambda tab: "youtube.com/embed" in tab.get("url", ""),
     lambda tab: not tab.get("title", ""),
@@ -54,40 +55,53 @@ FILTER_CONDITIONS = [
 
 
 def fetch_all_tabs() -> List[Dict]:
+    """
+    Fetch all the open browser tabs from Brave Debugging API.
+    Returns a list of tab data as dictionaries.
+    """
     try:
-        response = requests.get("http://localhost:9222/json")
-        return response.json() if response.status_code == 200 else []
+        response = requests.get("http://localhost:9222/json")  # Connect to the browser debugging API
+        return response.json() if response.status_code == 200 else []  # Return JSON if successful
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to Brave Debugging API: {e}")
         return []
 
 
 def decode_title(title: str) -> str:
-    fixed_title = ftfy.fix_text(title)
-    decoded_title = html.unescape(fixed_title)
-    normalized_title = normalize('NFC', decoded_title)
-    cleaned_title = ''.join(char for char in normalized_title if not category(char).startswith('C'))
+    """
+    Clean and decode the title of a tab.
+    Fixes any encoding issues, unescapes HTML entities, and removes control characters.
+    """
+    fixed_title = ftfy.fix_text(title)  # Fix text encoding issues
+    decoded_title = html.unescape(fixed_title)  # Unescape HTML entities like &lt; -> <
+    normalized_title = normalize('NFC', decoded_title)  # Normalize the Unicode string
+    cleaned_title = ''.join(char for char in normalized_title if not category(char).startswith('C'))  # Remove control characters
     return cleaned_title
 
 
 def filter_iframe_tabs(tabs: List[Dict]) -> List[Dict]:
+    """
+    Filter out iframe tabs and any tabs that match the given filter conditions.
+    Returns only relevant tabs.
+    """
     filtered_tabs = []
     for tab in tabs:
-        if tab.get("type") != "iframe" and not any(condition(tab) for condition in FILTER_CONDITIONS):  #Crucial fix
-                filtered_tabs.append({
-                    "title": decode_title(tab.get("title", "")),
-                    "url": tab.get("url", "")
-                })
-
+        # Exclude iframe tabs and tabs that match any filter condition
+        if tab.get("type") != "iframe" and not any(condition(tab) for condition in FILTER_CONDITIONS):  
+            filtered_tabs.append({
+                "title": decode_title(tab.get("title", "")),  # Decode and clean the title
+                "url": tab.get("url", "")
+            })
     return filtered_tabs
 
 
 def generate_categories_with_spacy(tabs: List[Dict]) -> Dict[str, List[Dict]]:
     """
-    Use spaCy for lightweight categorization
+    Categorize tabs using spaCy's named entity recognition and keyword-based classification.
+    Returns a dictionary with categories as keys and list of tabs as values.
     """
     try:
-        # Use the smallest available spaCy model
+        # Load the spaCy model, or download it if not already available
         try:
             nlp = spacy.load("en_core_web_sm")
         except OSError:
@@ -95,15 +109,14 @@ def generate_categories_with_spacy(tabs: List[Dict]) -> Dict[str, List[Dict]]:
             os.system("python -m spacy download en_core_web_sm")
             nlp = spacy.load("en_core_web_sm")
 
-        # Basic categorization using spaCy's named entity recognition
         categories = {}
-        for i, tab in enumerate(tabs):
-            doc = nlp(tab['title'] + " " + tab['url'])
-            
-            # Extract named entities
+        for tab in tabs:
+            doc = nlp(tab['title'] + " " + tab['url'])  # Process the tab title and URL
+
+            # Extract named entities (e.g., organization names, locations)
             entities = set(ent.label_ for ent in doc.ents)
             
-            # Fallback to keyword-based categorization if no entities
+            # Fallback to keyword-based categorization if no entities found
             if not entities:
                 if any(keyword in tab['title'].lower() for keyword in ['research', 'paper', 'study']):
                     entities.add('Academic')
@@ -111,8 +124,8 @@ def generate_categories_with_spacy(tabs: List[Dict]) -> Dict[str, List[Dict]]:
                     entities.add('Development')
                 else:
                     entities.add('Miscellaneous')
-            
-            # Add to categories
+
+            # Add to categories based on the extracted entities
             for entity in entities:
                 if entity not in categories:
                     categories[entity] = []
@@ -127,13 +140,14 @@ def generate_categories_with_spacy(tabs: List[Dict]) -> Dict[str, List[Dict]]:
 
 def generate_categories_with_gemini(tabs: List[Dict], api_key: str) -> Dict[str, List[Dict]]:
     """
-    Use Google Gemini for tab categorization
+    Categorize tabs using Google Gemini API.
+    Returns a dictionary with categories as keys and list of tabs as values.
     """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
-        # Prepare input for AI model
+        # Prepare input for Gemini model
         tab_texts = [f"Title: {tab['title']}, URL: {tab['url']}" for tab in tabs]
         input_prompt = (
             "Organize these browser tabs into meaningful categories and subcategories based on their content. "
@@ -141,8 +155,7 @@ def generate_categories_with_gemini(tabs: List[Dict], api_key: str) -> Dict[str,
             "Provide a JSON response where each category (and optional subcategory) is a key, and the associated tab indices are the values. "
             "Be concise, logical, and thoughtful in forming categories.\n\n" + 
             "\n".join(tab_texts)
-)
-
+        )
 
         # Generate categories using Gemini
         response = model.generate_content(input_prompt)
@@ -152,7 +165,7 @@ def generate_categories_with_gemini(tabs: List[Dict], api_key: str) -> Dict[str,
         try:
             categories = json.loads(response_text)
         except json.JSONDecodeError:
-            # Fallback if direct JSON parsing fails
+            # Attempt to parse manually if JSON parsing fails
             print("AI response parsing failed. Attempting manual extraction.")
             json_match = re.search(r'\{.*?\}', response_text, re.DOTALL)
             if json_match:
@@ -161,7 +174,7 @@ def generate_categories_with_gemini(tabs: List[Dict], api_key: str) -> Dict[str,
                 print("Could not extract categories. Falling back to default.")
                 categories = {"Uncategorized": list(range(len(tabs)))}
 
-        # Convert indices to actual tabs
+        # Map the indices to the actual tabs
         categorized_tabs = {}
         for category, indices in categories.items():
             categorized_tabs[category] = [tabs[i] for i in indices if 0 <= i < len(tabs)]
@@ -279,11 +292,11 @@ def generate_categories_with_ollama(tabs: List[Dict], model: str = "llama2") -> 
 
 def save_api_keys(gemini_key: Optional[str] = None, mistral_key: Optional[str] = None):
     """
-    Save API keys to .env file
+    Save the Gemini and Mistral API keys to the .env file.
     """
     env_path = os.path.join(os.path.dirname(__file__), '.env')
     
-    # Read existing .env file
+    # Read the existing .env file if it exists
     existing_keys = {}
     if os.path.exists(env_path):
         with open(env_path, 'r') as f:
@@ -292,13 +305,13 @@ def save_api_keys(gemini_key: Optional[str] = None, mistral_key: Optional[str] =
                     key, value = line.strip().split('=', 1)
                     existing_keys[key] = value
     
-    # Update keys
+    # Update the API keys if provided
     if gemini_key:
         existing_keys['GEMINI_API_KEY'] = gemini_key
     if mistral_key:
         existing_keys['MISTRAL_API_KEY'] = mistral_key
     
-    # Write updated .env file
+    # Write the updated .env file
     with open(env_path, 'w') as f:
         for key, value in existing_keys.items():
             f.write(f"{key}={value}\n")
@@ -308,18 +321,19 @@ def save_api_keys(gemini_key: Optional[str] = None, mistral_key: Optional[str] =
 
 def save_categorized_tabs(categorized_tabs: Dict[str, List[Dict]], output_dir: str):
     """
-    Save categorized tabs to folder structure
+    Save the categorized tabs into a folder structure where each category is a folder.
+    Each tab within the category will be saved as a text file.
     """
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
 
     for category, tabs in categorized_tabs.items():
-        # Create safe directory name
+        # Create a safe directory name for the category
         safe_category = re.sub(r'[^\w\-_\. ]', '_', category)
         category_dir = os.path.join(output_dir, safe_category)
         os.makedirs(category_dir, exist_ok=True)
 
         for tab in tabs:
-            # Create a text file with tab details
+            # Save each tab's details in a text file
             filename = f"{tab['title'][:50].replace('/', '_')}.txt"
             filepath = os.path.join(category_dir, filename)
             
@@ -370,20 +384,17 @@ def main(output_file: Optional[str] = None,
             if gemini_api_key and GEMINI_AVAILABLE:
                 # Google Gemini categorization (default)
                 categorized_tabs = generate_categories_with_gemini(all_tabs, gemini_api_key)
-            elif model and OLLAMA_AVAILABLE:
-                # User-specified Ollama model
-                categorized_tabs = generate_categories_with_ollama(all_tabs, model)
             elif mistral_api_key and OPENAI_AVAILABLE:
                 # Mistral AI categorization
                 categorized_tabs = generate_categories_with_mistral(all_tabs, mistral_api_key)
+            elif model and OLLAMA_AVAILABLE:
+                # User-specified Ollama model
+                categorized_tabs = generate_categories_with_ollama(all_tabs, model)
             elif SPACY_AVAILABLE:
                 # Lightweight spaCy categorization
                 categorized_tabs = generate_categories_with_spacy(all_tabs)
-            elif OLLAMA_AVAILABLE:
-                # Fallback to default Ollama model
-                categorized_tabs = generate_categories_with_ollama(all_tabs)
             else:
-                print("No categorization method available. Using default.")
+                print("No categorization method available. Performing no categorization.")
                 categorized_tabs = {"Uncategorized": all_tabs}
             
             # Save to directory if output_dir is specified
@@ -420,13 +431,12 @@ def cli():
     parser.add_argument('-mk', '--mistral-key', help='Mistral AI API key')
     parser.add_argument('-gk', '--gemini-key', help='Google Gemini API key')
     parser.add_argument('--save-keys', action='store_true', help='Save API keys to .env file. Use with -gk or -mk.')
-    # parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='Show this help message and exit.')
-
+    
     
     args = parser.parse_args()
     
-    if not args.categorize and not args.output and not args.save_keys:  #Check if at least one is given
-        parser.print_help()  #If not, print help, and exit
+    if not args.categorize and not args.output and not args.save_keys:  # Check if at least one is given
+        parser.print_help()  # If not, print help, and exit
         return
 
     # Expand the wildcard if used in --output-dir

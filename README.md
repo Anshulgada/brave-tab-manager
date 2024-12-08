@@ -8,7 +8,7 @@ A command-line tool to fetch, filter, and categorize open tabs from the Brave br
 * **Fetching Tabs:** Retrieves all open tabs from Brave using its remote debugging API.
 * **Filtering:** Filters out unwanted tabs (e.g., extensions, embedded videos, blank tabs) based on customizable rules.
 * **Categorization:**  Dynamically categorizes tabs using AI-powered methods:
-    * **Google Gemini:**  (Default) Advanced categorization using Google's Gemini language model.
+    * **Google Gemini:**  (Default) Advanced categorization using Google's Gemini language model(Uses Gemini 1.5 Flash Model by default).
     * **Mistral AI:** Categorization using Mistral's large language models.
     * **Ollama:** Local categorization using Ollama, supporting various LLMs (e.g., Llama 2).
     * **spaCy:**  Lightweight, local categorization using spaCy's named entity recognition (suitable for offline use or as a fallback).
@@ -75,7 +75,7 @@ A command-line tool to fetch, filter, and categorize open tabs from the Brave br
 2. **Run the tool:**
 
    ```bash
-   brave-tabs [OPTIONS]
+   tab-man [OPTIONS]
    ```
 
 **Options:**
@@ -87,6 +87,7 @@ A command-line tool to fetch, filter, and categorize open tabs from the Brave br
 * `-mk, --mistral-key <KEY>`: Mistral AI API key.
 * `-gk, --gemini-key <KEY>`: Google Gemini API key (default if available and key is provided).
 * `--save-keys`: Save API keys to the `.env` file. Use this option with `-gk` or `-mk` to set the keys.
+* `-h, --help`: Shows this help message and exits.
 
 
 **Examples:**
@@ -100,18 +101,18 @@ A command-line tool to fetch, filter, and categorize open tabs from the Brave br
 * **Categorize tabs using Gemini and save to a directory:**
 
    ```bash
-   brave-tabs -c -d categorized_tabs -gk YOUR_GEMINI_API_KEY
+   tab-man -c -d categorized_tabs -gk YOUR_GEMINI_API_KEY
    ```
 
 * **Categorize tabs using a specific Ollama model:**
 
    ```bash
-   brave-tabs -c -d categorized_tabs -m llama2
+   tab-man -c -d categorized_tabs -m llama2
    ```
 * **Save API keys to the `.env` file:**
 
    ```bash
-   brave-tabs --save-keys -gk YOUR_GEMINI_API_KEY -mk YOUR_MISTRAL_API_KEY
+   tab-man --save-keys -gk YOUR_GEMINI_API_KEY -mk YOUR_MISTRAL_API_KEY
    ```
 
 ## Configuration
