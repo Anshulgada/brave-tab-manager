@@ -1,0 +1,16 @@
+# Core testing dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Project-specific dependencies (from original script)
+requests
+python-dotenv
+ftfy
+spacy
+openai
+google-generativeai
+ollama
+
+# Optional: for better test output
+pytest-sugar
+pytest-xdist
