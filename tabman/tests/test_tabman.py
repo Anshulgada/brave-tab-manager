@@ -3,13 +3,26 @@ import pytest
 from tabman.categorizer import categorize_tabs, get_main_category, generate_tags
 from tabman.content_fetcher import get_content_from_url
 from tabman.tab_saver import save_tabs_to_json, convert_json_to_markdown
-from unittest.mock import patch
-from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 import os
 import shutil
+import functools
 
 load_dotenv()
+
+
+def requires_api_key(test_function):
+    """Decorator to mark tests that require API keys."""
+
+    @functools.wraps(test_function)
+    async def wrapper(*args, **kwargs):
+        if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("MISTRAL_API_KEY")):
+            pytest.skip(
+                "Test requires API keys and they are not available in the environment"
+            )
+        return await test_function(*args, **kwargs)
+
+    return wrapper
 
 
 @pytest.mark.asyncio
@@ -23,6 +36,7 @@ async def test_get_main_category():
     assert get_main_category("https://facebook.com/profile") == "Social Media"
 
 
+@requires_api_key
 @pytest.mark.asyncio
 async def test_generate_tags():
     """Test the generate_tags function."""
@@ -37,6 +51,7 @@ async def test_generate_tags():
     assert len(tags) > 0
 
 
+@requires_api_key
 @pytest.mark.asyncio
 async def test_categorize_tabs():
     """Test the categorize_tabs function."""
@@ -96,14 +111,16 @@ async def test_save_and_convert_json():
             ],
         },
     ]
-    json_file = save_tabs_to_json(sample_tabs, "test_data")
+    output_dir = "test_data"
+    json_file = save_tabs_to_json(sample_tabs, output_dir)
     assert json_file
-    markdown_file = convert_json_to_markdown(json_file, "test_data")
+    markdown_file = convert_json_to_markdown(json_file, output_dir)
     assert markdown_file
 
     # Cleanup
     os.remove(json_file)
     shutil.rmtree(os.path.dirname(markdown_file))
+    shutil.rmtree(output_dir)
 
 
 @pytest.mark.asyncio

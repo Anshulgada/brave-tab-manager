@@ -65,7 +65,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -v -s tabman/tests
+          pytest -v -s -m "not requires_api_key" tabman/tests
 
   publish:
     name: Publish to PyPI
