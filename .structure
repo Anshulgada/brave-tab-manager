@@ -1,0 +1,18 @@
+Brave Tab Manager/
+├── tabman/
+│   ├── tabman-venv/
+│   ├── tests/
+│   │   └── tabman_tests.py
+│   ├── __init__.py
+│   ├── .env
+│   ├── categorizer.py
+│   ├── content_fetcher.py
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── tab_capture.py
+│   └── tab_saver.py
+├── .gitignore
+├── .structure
+├── README.md
+├── setup.py
+└── tabman.egg-info

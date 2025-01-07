@@ -1,0 +1,17 @@
+# Environment folder
+*/tabman-venv/
+
+# Data folder
+*/data/
+
+# Environment Variables
+*/.env
+
+# Python pycache
+*/__pycache__/
+**/__pycache__/
+**/build/
+tabman.egg-info/*
+
+# Test files
+.pytest_cache

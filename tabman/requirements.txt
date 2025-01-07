@@ -1,0 +1,12 @@
+playwright
+requests
+beautifulsoup4
+google-generativeai
+google-api-python-client
+tenacity
+markdown
+openai
+python-dotenv
+setuptools
+ollama
+pytest-asyncio
