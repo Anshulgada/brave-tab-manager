@@ -1,14 +1,13 @@
-import os
 import asyncio
 import argparse
-from dotenv import load_dotenv, set_key
 from .categorizer import main_categorizer
+import os
+from dotenv import load_dotenv, set_key
 
 load_dotenv()
 
 
 async def main():
-    # Create argument parser for CLI usage
     parser = argparse.ArgumentParser(description="Brave Tab Manager CLI Tool")
     parser.add_argument(
         "-c",
@@ -23,7 +22,7 @@ async def main():
         type=str,
         choices=["gemini", "mistral", "ollama"],
         default="gemini",
-        help="Specify the LLM model for categorization",
+        help="Specify the LLM model for categorization (gemini, mistral, or ollama)",
     )
     parser.add_argument(
         "--save-keys",
@@ -39,9 +38,15 @@ async def main():
         default="llama3.2",
         help="Ollama model to use for categorization (default: llama3.2)",
     )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        type=str,
+        default="data",
+        help="Path to store output files, central directory for all data (default: data)",
+    )
     args = parser.parse_args()
 
-    # If we're saving keys, update environment and .env file
     if args.save_keys:
         env_path = ".env"
         if args.gemini_key:
@@ -53,7 +58,6 @@ async def main():
             set_key(env_path, "MISTRAL_API_KEY", args.mistral_key)
             print("Mistral key has been set")
 
-    # Run categorization if requested
     if args.categorize:
         await main_categorizer(
             args.model,
@@ -61,15 +65,11 @@ async def main():
             args.mistral_key,
             args.gemini_key,
             args.ollama_model,
+            args.output_dir,
         )
     elif not args.save_keys and not getattr(args, "version", False):
         parser.print_help()
 
 
 def entry_point():
-    # Wrap async main in a synchronous entry point
     asyncio.run(main())
-
-
-if __name__ == "__main__":
-    entry_point()

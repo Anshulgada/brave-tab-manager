@@ -19,10 +19,8 @@ from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_t
 logging.getLogger("google.generativeai").setLevel(logging.ERROR)
 load_dotenv()  # Load the environment variables
 
-# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 gemini_model = genai.GenerativeModel("gemini-2.0-flash-exp")
-
 
 MAIN_CATEGORIES = {
     "YouTube": ["youtube.com", "youtu.be"],
@@ -184,9 +182,7 @@ async def generate_tags(
 
 
 async def categorize_tabs(
-    tabs: List[Dict[str, str]],
-    model_type: str = "gemini",
-    ollama_model: str = "llama3.2",
+    tabs: List[Dict[str, str]], model_type: str = "gemini", ollama_model: str = "llama3.2"
 ) -> List[Dict[str, str]]:
     """
     Categorizes a list of tabs based on their content.
@@ -223,6 +219,7 @@ async def main_categorizer(
     mistral_key=None,
     gemini_key=None,
     ollama_model="llama3.2",
+    output_dir="data",
 ):
     """
     Main function for categorizing and saving tabs
@@ -232,6 +229,7 @@ async def main_categorizer(
         mistral_key (str): Mistral api key if we want to set using command line args
         gemini_key (str): Gemini api key if we want to set using command line args
         ollama_model (str): The ollama model to use for generating tags
+        output_dir (str): The path to store the json and md files, and where the central data file will be stored
     """
     if save_keys:
         if gemini_key:
@@ -242,10 +240,10 @@ async def main_categorizer(
     tabs = await get_brave_tabs()
     if tabs:
         categorized_tabs = await categorize_tabs(tabs, model_type, ollama_model)
-        json_file = save_tabs_to_json(categorized_tabs)
+        json_file = save_tabs_to_json(categorized_tabs, output_dir)
         print(f"Saved tabs to JSON: {json_file}")
 
-        markdown_file = convert_json_to_markdown(json_file)
+        markdown_file = convert_json_to_markdown(json_file, output_dir)
         print(f"Converted JSON to markdown: {markdown_file}")
     else:
         print("Could not get the tabs from brave browser.")

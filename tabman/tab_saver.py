@@ -1,8 +1,10 @@
-import os
 import json
-import logging
 from datetime import datetime
+import os
 from typing import List, Dict
+import markdown
+import logging
+import shutil
 
 # Silence the google-generativeai logs, has to be done before the config import
 logging.getLogger("google.generativeai").setLevel(logging.ERROR)
@@ -99,8 +101,6 @@ def convert_json_to_markdown(json_filepath: str, data_dir: str = "data") -> str:
 
 
 if __name__ == "__main__":
-
-    # Testing the functions
     sample_tabs = [
         {
             "title": "Playwright Docs",
@@ -140,12 +140,13 @@ if __name__ == "__main__":
         },
         {
             "title": "Github OAuth",
-            "url": "https://github.com/login/oauth/authorize?client_id=01ab8ac9400c4e429b23&redirect_uri=https%3A%2F%2Fvscode.dev%2Fredirect&scope=user%3Aemail&skip_account_picker=true&state=vscode%253A%252F%2Fvscode.github-authentication%252Fdid-authenticate%253Fnonce%253Db9147fedcf4304bb%2526windowId%253D1",
+            "url": "https://github.com/login/oauth/authorize?client_id=01ab8ac9400c4e429b23&redirect_uri=https%3A%2F%2Fvscode.dev%2Fredirect&scope=user%3Aemail&skip_account_picker=true&state=vscode%253A%252F%252Fvscode.github-authentication%252Fdid-authenticate%253Fnonce%253Db9147fedcf4304bb%2526windowId%253D1",
             "main_category": "Coding",
             "tags": ["Projects", "Software", "Passkey", "Coding", "Github"],
         },
     ]
-    json_file = save_tabs_to_json(sample_tabs)
+    json_file = save_tabs_to_json(sample_tabs, "test_data")
     print(f"Saved tabs to JSON: {json_file}")
-    markdown_file = convert_json_to_markdown(json_file)
+
+    markdown_file = convert_json_to_markdown(json_file, "test_data")
     print(f"Converted JSON to markdown: {markdown_file}")
