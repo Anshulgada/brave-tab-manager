@@ -24,7 +24,6 @@ A command-line tool designed to streamline your browsing experience by intellige
     git clone https://github.com/Anshulgada/brave-tab-manager.git
     ```
 
-
 2.  **Navigate to the project directory:**
 
     ```bash
@@ -71,16 +70,15 @@ A command-line tool designed to streamline your browsing experience by intellige
 
     You can use the following options:
 
+    - `-h`, `--help`: Displays the `help` or `info` menu.
     - `-c`, `--categorize`: Categorize your open tabs using the selected LLM model, and save the data. This is not necessary when setting the api keys.
     - `-v`, `--version`: Display the version of `tabman` and exits.
-    - `-m`, `--model <MODEL>`: Specify the LLM model for categorization:
-      - `gemini` (default): Uses Google Gemini.
-      - `mistral`: Uses Mistral AI.
-      - `ollama`: Uses a local LLM with Ollama.
-    - `--save-keys`: Save the provided API keys to the `.env` file. Use this in combination with `-mk` and `-gk` options to save the keys.
-    - `-mk`, `--mistral-key <KEY>`: Provide your Mistral AI API key.
-    - `-gk`, `--gemini-key <KEY>`: Provide your Google Gemini API key.
-    - `-om`, `--ollama-model <MODEL>`: Provide the Ollama model name (e.g., `llama2`, `mistral`). Default is `llama2`.
+    - `-m`, `--model <MODEL-NAME>`: Specify the LLM model for categorization (`gemini`, `mistral`, or `ollama`).
+    - `--save-keys`: Save API keys to the `.env` file. Use this in combination with `-gk` or `-mk` to set the keys.
+    - `-mk`, `--mistral-key <API-KEY>`: Provide your Mistral AI API key.
+    - `-gk`, `--gemini-key <API-KEY>`: Provide your Google Gemini API key.
+    - `-om`, `--ollama-model <MODEL-NAME>`: Specify the Ollama model name (e.g., `llama3.2`, `mistral`). Default is `llama3.2`.
+    - `-o`, `--output-dir <PATH>`: Specify the directory to store the output JSON and Markdown files, as well as the central `all_tabs.md` file (default: `data`). You can specify any directory with absolute path as well, but do note that it will remove the directory if the test fails, or any new files with same name are created in that directory.
 
 **Examples:**
 
@@ -92,20 +90,29 @@ A command-line tool designed to streamline your browsing experience by intellige
   ```bash
   tabman -c -m mistral
   ```
-- **Categorize tabs using a specific Ollama model:**
+- **Categorize tabs using Ollama with a specific model:**
   ```bash
-  tabman -c -m ollama -om llama3.2
+  tabman -c -m ollama -om mistral
   ```
 - **Save API keys to the `.env` file:**
-
   ```bash
   tabman --save-keys -gk YOUR_GEMINI_API_KEY -mk YOUR_MISTRAL_API_KEY
   ```
   Replace `YOUR_GEMINI_API_KEY` and `YOUR_MISTRAL_API_KEY` with your actual API keys.
+- **Specify a custom output directory:**
+  ```bash
+  tabman -c -o custom_output
+  ```
+  This will save the output into a directory named `custom_output`, which will be created in the root of your project.
+- **Specify an absolute path as an output directory:**
+
+  ```bash
+   tabman -c -o "C:\\Users\\<user-name>\\Desktop\\My_Tabs"
+  ```
 
 - **Show help message:**
   ```bash
-  tabman
+   tabman
   ```
 
 ## Configuration

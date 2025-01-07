@@ -22,7 +22,8 @@ setup(
         'openai',
         'python-dotenv',
         'ollama',
-        'markdown'
+        'markdown',
+        'pytest-asyncio',
     ],
     long_description=get_long_description(),
     long_description_content_type='text/markdown',
