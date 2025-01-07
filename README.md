@@ -1,6 +1,6 @@
 # Tabman: Brave Tab Manager
 
-A command-line tool designed to streamline your browsing experience by intelligently organizing your open tabs from the Brave browser. `tabman` helps you categorize, tag, and save your browsing sessions, making it easier to find and revisit websites later.
+A command-line tool designed to streamline your browsing experience by intelligently organizing your open tabs from the Brave browser (Works for any chromium-based browser). `tabman` helps you categorize, tag, and save your browsing sessions, making it easier to find and revisit websites later.
 
 ## Features
 

@@ -10,8 +10,11 @@
 # Python pycache
 */__pycache__/
 **/__pycache__/
-**/build/
 tabman.egg-info/*
 
 # Test files
 .pytest_cache
+
+# Pypi files
+**/build/
+**/dist/
