@@ -2,7 +2,7 @@
 */tabman-venv/
 
 # Data folder
-*/data/
+data/
 
 # Environment Variables
 */.env
@@ -18,3 +18,15 @@ tabman.egg-info/*
 # Pypi files
 **/build/
 **/dist/
+
+# Ignore gui files
+**/gui/
+
+# Web Dev Files
+**/node_modules/
+**/package-lock.json
+**/package.json
+**/public/
+
+# Ignore the web tabman folder temporarily
+web_tabman/

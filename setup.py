@@ -30,6 +30,7 @@ setup(
     entry_points={
         'console_scripts': [
             'tabman = tabman.main:entry_point',
+            'tabman-gui = tabman.gui.gui_main:entry_point'
         ],
     },
 )

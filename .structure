@@ -1,5 +1,11 @@
 Brave Tab Manager/
+├── .github/workflows/pypi-publish.yml
+├── build/
+├── dist/
 ├── tabman/
+│   ├── gui/                  
+│   │   ├── __init__.py       
+│   │   └── gui_main.py       
 │   ├── tabman-venv/
 │   ├── tests/
 │   │   └── tabman_tests.py
@@ -9,10 +15,18 @@ Brave Tab Manager/
 │   ├── content_fetcher.py
 │   ├── main.py
 │   ├── requirements.txt
+│   ├── search.py
 │   ├── tab_capture.py
 │   └── tab_saver.py
+├── web_tabman/
+│   ├── client
+│   ├── server
+│   ├──
+│   └──
 ├── .gitignore
 ├── .structure
+├── LICENSE
+├── pytest.ini
 ├── README.md
 ├── setup.py
 └── tabman.egg-info

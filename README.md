@@ -8,7 +8,7 @@ A command-line tool designed to streamline your browsing experience by intellige
 - **Intelligent Categorization:** Uses AI-powered language models to categorize your tabs:
   - **Google Gemini:** Employs the Gemini 2.0 Flash model for advanced and fast categorization.
   - **Mistral AI:** Leverages Mistral's large language models as an alternative to Gemini.
-  - **Ollama:** Enables local categorization using Ollama, supporting a variety of LLMs (e.g., Llama 2, Mistral).
+  - **Ollama:** Enables local categorization using Ollama, supporting a variety of LLMs (e.g., llama 3.2, Mistral).
 - **Dynamic Tagging:** Generates a list of concise and relevant keywords to describe the content of each tab.
 - **Flexible Saving:**
   - Saves the tab data (title, URL, main category, and tags) as a JSON file, organized in date-based subfolders within the `data/` directory.

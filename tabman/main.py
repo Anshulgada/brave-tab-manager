@@ -3,6 +3,8 @@ import argparse
 from .categorizer import main_categorizer
 import os
 from dotenv import load_dotenv, set_key
+from .search import search_tabs
+from .gui.gui_main import entry_point as gui_entry_point
 
 load_dotenv()
 
@@ -35,8 +37,8 @@ async def main():
         "-om",
         "--ollama-model",
         type=str,
-        default="llama3.2",
-        help="Ollama model to use for categorization (default: llama3.2)",
+        default="llama2",
+        help="Ollama model to use for categorization (default: llama2)",
     )
     parser.add_argument(
         "-o",
@@ -51,6 +53,22 @@ async def main():
         type=str,
         help="Path where you want to save your central all_tabs.md file permanently. The existing central file and folder will be moved there.",
     )
+    parser.add_argument(
+        "-s",
+        "--search",
+        type=str,
+        help="Search for the given string in all tabs, title, url, main category and tags",
+    )
+    parser.add_argument(
+        "--search-tag", type=str, help="Search for the given string only inside tags"
+    )
+    parser.add_argument(
+        "--search-category",
+        type=str,
+        help="Search for the given string only inside main categories",
+    )
+    parser.add_argument("--gui", action="store_true", help="Run the gui application")
+
     args = parser.parse_args()
 
     if args.save_keys:
@@ -74,10 +92,16 @@ async def main():
             args.output_dir,
             args.central_repo,
         )
+    elif args.search:
+        await search_tabs(
+            args.search, args.search_tag, args.search_category, args.output_dir
+        )
     elif args.central_repo:
         await main_categorizer(
             output_dir=args.output_dir, central_repo=args.central_repo
         )
+    elif args.gui:
+        gui_entry_point()
     elif not args.save_keys and not getattr(args, "version", False):
         parser.print_help()
 
