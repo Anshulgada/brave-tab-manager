@@ -48,6 +48,10 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -65,11 +69,11 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -v -s -m "not requires_api_key" tabman/tests
+          pytest -v -s tabman/tests
 
   publish:
     name: Publish to PyPI
-    needs: build
+    needs: [build, test]
     runs-on: ubuntu-latest
     environment:
       name: pypi

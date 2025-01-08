@@ -45,6 +45,12 @@ async def main():
         default="data",
         help="Path to store output files, central directory for all data (default: data)",
     )
+    parser.add_argument(
+        "-cr",
+        "--central-repo",
+        type=str,
+        help="Path where you want to save your central all_tabs.md file permanently. The existing central file and folder will be moved there.",
+    )
     args = parser.parse_args()
 
     if args.save_keys:
@@ -66,6 +72,11 @@ async def main():
             args.gemini_key,
             args.ollama_model,
             args.output_dir,
+            args.central_repo,
+        )
+    elif args.central_repo:
+        await main_categorizer(
+            output_dir=args.output_dir, central_repo=args.central_repo
         )
     elif not args.save_keys and not getattr(args, "version", False):
         parser.print_help()

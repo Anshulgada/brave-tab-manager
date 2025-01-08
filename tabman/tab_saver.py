@@ -76,10 +76,10 @@ def convert_json_to_markdown(json_filepath: str, data_dir: str = "data") -> str:
     with open(json_filepath, "r", encoding="utf-8") as f:
         tabs = json.load(f)
 
-    now = datetime.now()
-    date_str = now.strftime("%d-%m-%Y")
-    time_str = now.strftime("%H-%M-%S")
-    day_str = now.strftime("%A")
+    now = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
+    date_str = now.split("_")[0]
+    time_str = now.split("_")[1]
+    day_str = datetime.now().strftime("%A")
     markdown_dir = os.path.join(data_dir, date_str)
     os.makedirs(markdown_dir, exist_ok=True)
     markdown_file = os.path.join(
@@ -98,6 +98,43 @@ def convert_json_to_markdown(json_filepath: str, data_dir: str = "data") -> str:
             f.write(f"- **Main Category:** {main_category}\n")
             f.write(f"- **Tags:** {', '.join(tags)}\n\n")
     return markdown_file
+
+
+def move_central_repo(current_path, new_path):
+    """
+    Moves the existing data to the new path
+
+    Args:
+        current_path: path to the current central repo
+        new_path: The path where the central repo has to be moved
+    """
+    try:
+        if not os.path.exists(current_path):
+            print(f"No current central repo exists at path:{current_path}")
+            return
+        if not os.path.exists(new_path):
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        shutil.move(current_path, new_path)
+        print(f"Central repo moved from {current_path} to {new_path}")
+    except Exception as e:
+        print(f"An error occurred while moving the central repo to: {new_path}")
+
+
+def get_central_repo_filepath(output_dir, central_repo):
+    """
+    Returns the central repository file path
+
+    Args:
+        output_dir: path for the output directory
+        central_repo: The path of the central repo file
+
+    Returns:
+        str: Path of the file
+    """
+    if central_repo:
+        return central_repo
+    else:
+        return os.path.join(output_dir, "all_tabs.md")
 
 
 if __name__ == "__main__":
@@ -145,8 +182,8 @@ if __name__ == "__main__":
             "tags": ["Projects", "Software", "Passkey", "Coding", "Github"],
         },
     ]
-    json_file = save_tabs_to_json(sample_tabs, "test_data")
+    json_file = save_tabs_to_json(sample_tabs)
     print(f"Saved tabs to JSON: {json_file}")
 
-    markdown_file = convert_json_to_markdown(json_file, "test_data")
+    markdown_file = convert_json_to_markdown(json_file)
     print(f"Converted JSON to markdown: {markdown_file}")

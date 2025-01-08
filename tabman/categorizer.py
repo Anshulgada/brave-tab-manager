@@ -1,25 +1,29 @@
-import re
-import os
-import openai
-import ollama
-import asyncio
-import logging
 import google.generativeai as genai
-from dotenv import load_dotenv
+from .content_fetcher import get_content_from_url
+from typing import List, Dict, Optional
+import asyncio
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from asyncio import TimeoutError
 from urllib.parse import urlparse
-from typing import List, Dict, Optional
+import re
+import logging
+from .tab_saver import (
+    save_tabs_to_json,
+    convert_json_to_markdown,
+    get_central_repo_filepath,
+    move_central_repo,
+)
 from .tab_capture import get_brave_tabs
-from .content_fetcher import get_content_from_url
-from .tab_saver import save_tabs_to_json, convert_json_to_markdown
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-
+import openai
+import os
+from dotenv import load_dotenv
+import ollama
 
 # Silence the google-generativeai logs, has to be done before the config import
 logging.getLogger("google.generativeai").setLevel(logging.ERROR)
 load_dotenv()  # Load the environment variables
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 gemini_model = genai.GenerativeModel("gemini-2.0-flash-exp")
 
 MAIN_CATEGORIES = {
@@ -133,7 +137,7 @@ async def generate_tags(
                 generate_with_timeout(), timeout=10
             )  # Run in thread to not block main thread and apply timeout
         elif model_type == "mistral":
-            client = openai.OpenAI(api_key=os.getenv("MISTRAL_API_KEY"))
+            client = openai.OpenAI(api_key=os.environ.get("MISTRAL_API_KEY"))
 
             async def generate_with_timeout():
                 return await asyncio.to_thread(
@@ -220,6 +224,7 @@ async def main_categorizer(
     gemini_key=None,
     ollama_model="llama3.2",
     output_dir="data",
+    central_repo=None,
 ):
     """
     Main function for categorizing and saving tabs
@@ -229,7 +234,8 @@ async def main_categorizer(
         mistral_key (str): Mistral api key if we want to set using command line args
         gemini_key (str): Gemini api key if we want to set using command line args
         ollama_model (str): The ollama model to use for generating tags
-        output_dir (str): The path to store the json and md files, and where the central data file will be stored
+        output_dir (str): The path to store the json and md files
+        central_repo (str): The path where the central repo is stored
     """
     if save_keys:
         if gemini_key:
@@ -247,6 +253,10 @@ async def main_categorizer(
         print(f"Converted JSON to markdown: {markdown_file}")
     else:
         print("Could not get the tabs from brave browser.")
+
+    if central_repo:
+        all_tabs_filepath = get_central_repo_filepath(output_dir, central_repo)
+        move_central_repo(os.path.join(output_dir, "all_tabs.md"), all_tabs_filepath)
 
 
 if __name__ == "__main__":

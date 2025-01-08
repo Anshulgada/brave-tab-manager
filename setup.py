@@ -9,7 +9,7 @@ def get_long_description():
 
 setup(
     name='tabman',
-    version='0.4.0',
+    version='0.2.1',
     url="https://github.com/Anshulgada/brave-tab-manager",
     packages=find_packages(),
     install_requires=[
