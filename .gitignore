@@ -20,7 +20,7 @@ tabman.egg-info/*
 **/dist/
 
 # Ignore gui files
-**/gui/
+# **/gui/
 
 # Web Dev Files
 **/node_modules/

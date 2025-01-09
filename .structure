@@ -1,6 +1,7 @@
 Brave Tab Manager/
 ├── .github/workflows/pypi-publish.yml
 ├── build/
+├── data/
 ├── dist/
 ├── tabman/
 │   ├── gui/                  
@@ -11,6 +12,7 @@ Brave Tab Manager/
 │   │   └── tabman_tests.py
 │   ├── __init__.py
 │   ├── .env
+│   ├── .env.example
 │   ├── categorizer.py
 │   ├── content_fetcher.py
 │   ├── main.py
@@ -20,9 +22,37 @@ Brave Tab Manager/
 │   └── tab_saver.py
 ├── web_tabman/
 │   ├── client
-│   ├── server
-│   ├──
-│   └──
+│   │   ├── node_modules/
+│   │   ├── public/
+│   │   │   └── index.html 
+│   │   ├── src/
+│   │   │   ├── components
+│   │   │   │   ├── FilterSection.jsx
+│   │   │   │   ├── MainContent.jsx
+│   │   │   │   ├── MainLayout.jsx
+│   │   │   │   ├── Navbar.jsx
+│   │   │   │   ├── ResultCard.jsx
+│   │   │   │   ├── ResultList.jsx
+│   │   │   │   ├── SearchBar.jsx
+│   │   │   │   ├── Sidebar.jsx
+│   │   │   │   ├── SortOptions.jsx
+│   │   │   │   ├── TabListItem.jsx
+│   │   │   │   └── ViewOptions.jsx
+│   │   │   ├── App.js
+│   │   │   ├── index.css
+│   │   │   └── index.js
+│   │   ├── .gitignore 
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   ├── postcss.config.js
+│   │   ├── README.md
+│   │   ├── requirements.txt
+│   │   └── tailwind.config.js
+│   │
+│   └── server/
+│       ├── .gitignore
+│       ├── requirements.txt
+│       └── server.py
 ├── .gitignore
 ├── .structure
 ├── LICENSE
