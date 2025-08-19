@@ -147,4 +147,4 @@ A command-line tool designed to streamline your browsing experience by intellige
 
 This project is licensed under the MIT License.
 
-This project is tested with BrowserStack.
+#### This project is tested with BrowserStack
