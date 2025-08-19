@@ -146,3 +146,5 @@ A command-line tool designed to streamline your browsing experience by intellige
 ## License
 
 This project is licensed under the MIT License.
+
+This project is tested with BrowserStack.
