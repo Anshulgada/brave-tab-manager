@@ -7,6 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.5]
+
+### Added
+
+- Dexie IndexedDB persistence with migrations and shared-fixture import/export.
+
 ## [0.3.4]
 
 ### Added
