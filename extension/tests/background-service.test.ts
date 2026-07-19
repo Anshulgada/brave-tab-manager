@@ -3,9 +3,13 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { handleSwitchboardRequest } from '../src/background-service';
+import {
+  clearStaleParkingLocks,
+  handleSwitchboardRequest,
+} from '../src/background-service';
 import { DEFAULT_DATABASE_NAME, TabmanDatabase } from '../src/database';
 import { exportDatabase } from '../src/import-export';
+import { loadLibrary } from '../src/library';
 
 const openDatabases: TabmanDatabase[] = [];
 
@@ -263,5 +267,65 @@ describe('background switchboard service', () => {
     const database = new TabmanDatabase();
     openDatabases.push(database);
     expect(await database.tabs.count()).toBe(0);
+  });
+
+  it('skips non-http(s) tabs when parking a selection', async () => {
+    const browserMock = installBrowserMock();
+    browserMock.tabs.get.mockImplementation(async (tabId: number) => {
+      if (tabId === 1) {
+        return {
+          ...tab(1),
+          url: 'chrome://settings/',
+          title: 'Settings',
+        };
+      }
+      return tab(tabId);
+    });
+
+    await expect(
+      handleSwitchboardRequest({
+        type: 'switchboard/park',
+        tabIds: [1, 2],
+        name: 'Mixed park',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      affected: 1,
+      warnings: ['Settings cannot be parked (http/https only)'],
+    });
+    expect(browserMock.tabs.remove).toHaveBeenCalledTimes(1);
+    expect(browserMock.tabs.remove).toHaveBeenCalledWith(2);
+  });
+
+  it('clears stale parking locks so interrupted parks become visible again', async () => {
+    const database = new TabmanDatabase();
+    openDatabases.push(database);
+    await database.settings.put({
+      id: 'settings',
+      theme: 'system',
+      defaultView: 'list',
+      includeFullUrlInAi: false,
+      aiProvider: null,
+      lastImportedAt: '2026-07-19T12:00:00.000Z',
+      parkingCollectionIds: ['10000000-0000-4000-8000-000000000099'],
+    });
+    await database.collections.add({
+      id: '10000000-0000-4000-8000-000000000099',
+      name: 'Interrupted',
+      description: null,
+      color: null,
+      createdAt: '2026-07-19T12:00:00.000Z',
+      updatedAt: '2026-07-19T12:00:00.000Z',
+      status: 'active',
+    });
+
+    await clearStaleParkingLocks();
+
+    await expect(loadLibrary(database)).resolves.toMatchObject({
+      collections: [{ name: 'Interrupted' }],
+    });
+    await expect(database.settings.get('settings')).resolves.toMatchObject({
+      parkingCollectionIds: [],
+    });
   });
 });

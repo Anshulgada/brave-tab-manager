@@ -1,4 +1,5 @@
 import {
+  clearStaleParkingLocks,
   handleSwitchboardRequest,
   notifySwitchboardChanged,
 } from '../src/background-service';
@@ -15,6 +16,8 @@ const REQUEST_TYPES = new Set<SwitchboardRequest['type']>([
 ]);
 
 export default defineBackground(() => {
+  void clearStaleParkingLocks();
+
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   const scheduleRefresh = () => {
     if (refreshTimer !== undefined) {

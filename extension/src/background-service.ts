@@ -48,6 +48,18 @@ function supportedAddress(value: string | undefined): string | undefined {
   }
 }
 
+function parkableAddress(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === 'http:' || protocol === 'https:' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function notifySwitchboardChanged(): Promise<void> {
   try {
     await browser.runtime.sendMessage({ type: 'switchboard/changed' });
@@ -264,9 +276,11 @@ async function parkTabs(
       );
       continue;
     }
-    const url = supportedAddress(source.url);
+    const url = parkableAddress(source.url);
     if (!url || source.id === undefined) {
-      warnings.push(`${source.title || 'A tab'} uses an unsupported URL`);
+      warnings.push(
+        `${source.title || 'A tab'} cannot be parked (http/https only)`,
+      );
       continue;
     }
     try {
@@ -348,37 +362,34 @@ async function parkTabs(
         }
       },
     );
-  } catch (error) {
-    database.close();
-    throw error;
-  }
 
-  const closeResults = await Promise.allSettled(
-    parkedBrowserTabIds.map((tabId) => browser.tabs.remove(tabId)),
-  );
-  for (const [index, result] of closeResults.entries()) {
-    if (result.status === 'rejected') {
-      warnings.push(
-        `Parked tab ${parkedBrowserTabIds[index] ?? 'unknown'} could not be closed`,
-      );
-    }
-  }
-
-  try {
-    await database.transaction('rw', database.settings, async () => {
-      const existingSettings = await database.settings.get('settings');
-      if (!existingSettings?.parkingCollectionIds) {
-        return;
+    const closeResults = await Promise.allSettled(
+      parkedBrowserTabIds.map((tabId) => browser.tabs.remove(tabId)),
+    );
+    for (const [index, result] of closeResults.entries()) {
+      if (result.status === 'rejected') {
+        warnings.push(
+          `Parked tab ${parkedBrowserTabIds[index] ?? 'unknown'} could not be closed`,
+        );
       }
-      await database.settings.put({
-        ...existingSettings,
-        parkingCollectionIds: existingSettings.parkingCollectionIds.filter(
-          (id) => id !== collectionId,
-        ),
-      });
-    });
+    }
   } finally {
-    database.close();
+    try {
+      await database.transaction('rw', database.settings, async () => {
+        const existingSettings = await database.settings.get('settings');
+        if (!existingSettings?.parkingCollectionIds) {
+          return;
+        }
+        await database.settings.put({
+          ...existingSettings,
+          parkingCollectionIds: existingSettings.parkingCollectionIds.filter(
+            (id) => id !== collectionId,
+          ),
+        });
+      });
+    } finally {
+      database.close();
+    }
   }
 
   await notifyLibraryChanged();
@@ -388,6 +399,24 @@ async function parkTabs(
     affected: records.length,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+export async function clearStaleParkingLocks(): Promise<void> {
+  const database = new TabmanDatabase();
+  try {
+    await database.transaction('rw', database.settings, async () => {
+      const existingSettings = await database.settings.get('settings');
+      if (!existingSettings?.parkingCollectionIds?.length) {
+        return;
+      }
+      await database.settings.put({
+        ...existingSettings,
+        parkingCollectionIds: [],
+      });
+    });
+  } finally {
+    database.close();
+  }
 }
 
 export async function handleSwitchboardRequest(
