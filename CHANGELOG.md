@@ -7,6 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.3]
+
+### Added
+
+- Versioned shared schema contract with Pydantic and Zod mirrors plus fixture tests.
+
 ## [0.3.2]
 
 ### Added

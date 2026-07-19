@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-07-19T10:00:00Z",
+  "collections": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "Research",
+      "description": "Papers and implementation references",
+      "color": "#5B6CFF",
+      "createdAt": "2026-07-18T09:00:00Z",
+      "updatedAt": "2026-07-19T10:00:00Z",
+      "status": "active",
+      "tags": [
+        {
+          "id": "20000000-0000-4000-8000-000000000001",
+          "name": "browser",
+          "color": "#00A884"
+        }
+      ],
+      "tabs": [
+        {
+          "id": "30000000-0000-4000-8000-000000000001",
+          "title": "Chrome Extensions documentation",
+          "url": "https://developer.chrome.com/docs/extensions/",
+          "hostname": "developer.chrome.com",
+          "favIconUrl": "https://developer.chrome.com/static/images/favicon.png",
+          "pinned": false,
+          "position": 0,
+          "createdAt": "2026-07-18T09:00:00Z",
+          "lastAccessedAt": "2026-07-19T09:55:00Z",
+          "tagIds": [
+            "20000000-0000-4000-8000-000000000001"
+          ]
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000000002",
+          "title": "WXT",
+          "url": "https://wxt.dev/",
+          "hostname": "wxt.dev",
+          "pinned": true,
+          "position": 1,
+          "createdAt": "2026-07-18T09:05:00Z",
+          "lastAccessedAt": null,
+          "tagIds": [
+            "20000000-0000-4000-8000-000000000001"
+          ]
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "40000000-0000-4000-8000-000000000001",
+      "name": "Morning research",
+      "capturedAt": "2026-07-19T09:58:00Z",
+      "browser": "Brave",
+      "windowCount": 1,
+      "tabs": []
+    }
+  ],
+  "proposals": [
+    {
+      "id": "50000000-0000-4000-8000-000000000001",
+      "createdAt": "2026-07-19T09:59:00Z",
+      "provider": "deterministic",
+      "status": "preview",
+      "items": [
+        {
+          "tabId": "30000000-0000-4000-8000-000000000002",
+          "collectionName": "Research",
+          "tags": [
+            "browser",
+            "wxt"
+          ]
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "theme": "system",
+    "defaultView": "list",
+    "includeFullUrlInAi": false,
+    "aiProvider": null
+  }
+}

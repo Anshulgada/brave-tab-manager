@@ -1,0 +1,19 @@
+[
+  {
+    "title": "Playwright documentation",
+    "url": "https://playwright.dev/docs/intro",
+    "main_category": "Coding",
+    "tags": [
+      "testing",
+      "browser"
+    ]
+  },
+  {
+    "title": "Brave Help Center",
+    "url": "https://support.brave.com/",
+    "main_category": "Research",
+    "tags": [
+      "browser"
+    ]
+  }
+]
