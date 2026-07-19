@@ -7,6 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2]
+
+### Added
+
+- WXT React extension scaffold with side panel, dashboard, and local typography.
+
 ## [0.3.1]
 
 ### Added
