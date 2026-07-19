@@ -105,10 +105,15 @@ describe('local collection library', () => {
     expect(await database.tags.count()).toBe(1);
 
     await moveTabs(database, [tabId], targetId);
-    expect(await database.tabs.get(tabId)).toMatchObject({
+    const moved = await database.tabs.get(tabId);
+    expect(moved?.collectionId).toBe(targetId);
+    expect(moved?.tagIds).toHaveLength(1);
+    const destinationTag = await database.tags.get(moved?.tagIds[0] ?? '');
+    expect(destinationTag).toMatchObject({
       collectionId: targetId,
-      tagIds: [],
+      name: 'Research',
     });
+    expect(await database.tags.count()).toBe(2);
   });
 
   it('supports tab deletion and recoverable collection trash', async () => {
@@ -144,13 +149,37 @@ describe('local collection library', () => {
       },
       {
         title: 'Blocked',
-        url: 'chrome://settings/',
+        url: 'https://example.com/blocked',
         pinned: false,
       },
     ]);
 
     expect(result).toEqual({ restored: 1, failures: ['Blocked'] });
     expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips non-http(s) restore URLs without calling the browser API', async () => {
+    const create = vi.fn();
+    vi.stubGlobal('browser', { tabs: { create } });
+
+    const result = await restoreTabs([
+      {
+        title: 'Settings',
+        url: 'chrome://settings/',
+        pinned: false,
+      },
+      {
+        title: 'About',
+        url: 'about:blank',
+        pinned: false,
+      },
+    ]);
+
+    expect(result).toEqual({
+      restored: 0,
+      failures: ['Settings', 'About'],
+    });
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('persists appearance and privacy controls', async () => {

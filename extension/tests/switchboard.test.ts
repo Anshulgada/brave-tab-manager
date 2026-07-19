@@ -79,12 +79,17 @@ describe('switchboard snapshot', () => {
 
     expect(snapshot).toMatchObject({
       capturedAt: '2026-07-19T12:00:00.000Z',
-      tabCount: 3,
+      tabCount: 4,
       duplicateCount: 2,
     });
     expect(snapshot.windows[0]?.tabs[0]).toMatchObject({
       hostname: 'wxt.dev',
       duplicateCount: 2,
+    });
+    expect(snapshot.windows[0]?.tabs[1]).toMatchObject({
+      title: 'Incomplete tab',
+      url: '',
+      duplicateCount: 1,
     });
     expect(snapshot.windows[1]?.tabs[0]).toMatchObject({
       audible: true,
@@ -107,6 +112,12 @@ describe('switchboard snapshot', () => {
   it('ignores URL fragments when identifying duplicate tabs', () => {
     expect(duplicateKey('https://example.com/docs#one')).toBe(
       duplicateKey('https://example.com/docs#two'),
+    );
+  });
+
+  it('normalizes host case, www, and trailing slashes for duplicates', () => {
+    expect(duplicateKey('https://WWW.Example.com/docs/')).toBe(
+      duplicateKey('https://example.com/docs'),
     );
   });
 });

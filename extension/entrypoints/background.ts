@@ -36,7 +36,7 @@ export default defineBackground(() => {
     ) {
       return undefined;
     }
-    return handleSwitchboardRequest(message as SwitchboardRequest);
+    return handleSwitchboardRequest(message);
   });
 
   browser.tabs.onCreated.addListener(scheduleRefresh);
@@ -48,5 +48,7 @@ export default defineBackground(() => {
   browser.windows.onCreated.addListener(scheduleRefresh);
   browser.windows.onRemoved.addListener(scheduleRefresh);
   browser.windows.onFocusChanged.addListener(scheduleRefresh);
+  browser.tabGroups.onCreated.addListener(scheduleRefresh);
+  browser.tabGroups.onRemoved.addListener(scheduleRefresh);
   browser.tabGroups.onUpdated.addListener(scheduleRefresh);
 });

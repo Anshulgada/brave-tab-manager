@@ -612,7 +612,12 @@ export function App() {
                       aria-pressed={settings?.defaultView === view}
                       onClick={() => {
                         if (settings) {
-                          void saveSettings({ ...settings, defaultView: view });
+                          void saveSettings({
+                            theme: settings.theme,
+                            defaultView: view,
+                            includeFullUrlInAi: settings.includeFullUrlInAi,
+                            aiProvider: settings.aiProvider,
+                          });
                         }
                       }}
                     >
@@ -658,7 +663,7 @@ export function App() {
                       if (target) {
                         void runMutation(
                           () => moveTabs(database, [...selectedTabs], target),
-                          'Selected tabs moved. Collection-specific tags were removed.',
+                          'Selected tabs moved. Matching tag names were kept in the destination collection.',
                         );
                       }
                       event.target.value = '';
@@ -773,9 +778,23 @@ interface SettingsPanelProps {
 }
 
 function SettingsPanel({ settings, busy, onSave }: SettingsPanelProps) {
-  const [draft, setDraft] = useState(settings);
+  const [draft, setDraft] = useState<Settings>({
+    theme: settings.theme,
+    defaultView: settings.defaultView,
+    includeFullUrlInAi: settings.includeFullUrlInAi,
+    aiProvider: settings.aiProvider,
+  });
 
-  useEffect(() => setDraft(settings), [settings]);
+  useEffect(
+    () =>
+      setDraft({
+        theme: settings.theme,
+        defaultView: settings.defaultView,
+        includeFullUrlInAi: settings.includeFullUrlInAi,
+        aiProvider: settings.aiProvider,
+      }),
+    [settings],
+  );
 
   return (
     <section className="settings-panel">
@@ -788,7 +807,12 @@ function SettingsPanel({ settings, busy, onSave }: SettingsPanelProps) {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          onSave(draft);
+          onSave({
+            theme: draft.theme,
+            defaultView: draft.defaultView,
+            includeFullUrlInAi: draft.includeFullUrlInAi,
+            aiProvider: draft.aiProvider,
+          });
         }}
       >
         <label>

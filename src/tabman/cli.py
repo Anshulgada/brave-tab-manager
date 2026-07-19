@@ -228,6 +228,10 @@ def organize(
             )
         )
         if apply:
+            typer.echo(
+                "Applying replaces the entire vault with the proposal result.",
+                err=True,
+            )
             source.import_document(
                 apply_proposal(document, proposal),
                 replace=True,

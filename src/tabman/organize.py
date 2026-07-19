@@ -91,13 +91,22 @@ class DeterministicProvider:
         return tuple(
             Suggestion(
                 tabId=tab.id,
-                collectionName=tab.hostname,
+                collectionName=_fallback_collection_name(tab),
                 tags=tuple(
                     dict.fromkeys(part for part in tab.hostname.split(".") if part)
                 )[-2:],
             )
             for tab in tabs
         )
+
+
+def _fallback_collection_name(tab: Tab) -> str:
+    if tab.hostname.strip():
+        return tab.hostname
+    scheme = urlsplit(tab.url).scheme.casefold()
+    if scheme:
+        return scheme
+    return "Tabs"
 
 
 class MistralProvider:

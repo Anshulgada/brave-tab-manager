@@ -18,11 +18,13 @@ def test_capture_reads_metadata_without_browser_control_calls() -> None:
                     "type": "page",
                     "title": "Example",
                     "url": "https://example.com/path",
+                    "faviconUrl": "data:image/png;base64,abc",
                 },
                 {
                     "type": "page",
                     "title": "Duplicate URL in another target",
                     "url": "https://example.com/path",
+                    "faviconUrl": "https://example.com/favicon.ico",
                 },
                 {
                     "type": "service_worker",
@@ -41,6 +43,8 @@ def test_capture_reads_metadata_without_browser_control_calls() -> None:
     assert len(collection.tabs) == 2
     assert collection.tabs[0].id != collection.tabs[1].id
     assert collection.tabs[0].hostname == "example.com"
+    assert collection.tabs[0].fav_icon_url is None
+    assert collection.tabs[1].fav_icon_url == "https://example.com/favicon.ico"
 
 
 @pytest.mark.parametrize(

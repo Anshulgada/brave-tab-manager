@@ -240,14 +240,62 @@ export async function tagTabs(
         for (const tab of tabs.filter(
           (item) => item.collectionId === collectionId,
         )) {
+          const current = await database.tabs.get(tab.id);
+          if (!current) {
+            continue;
+          }
           await database.tabs.update(tab.id, {
-            tagIds: [...new Set([...tab.tagIds, tagId])],
+            tagIds: [...new Set([...current.tagIds, tagId])],
           });
         }
         await database.collections.update(collectionId, { updatedAt: now });
       }
     },
   );
+}
+
+async function remapTagsForMove(
+  database: TabmanDatabase,
+  tabs: TabRecord[],
+  targetCollectionId: string,
+): Promise<Map<string, string>> {
+  const remap = new Map<string, string>();
+  const sourceTagIds = [...new Set(tabs.flatMap((tab) => tab.tagIds))];
+  if (sourceTagIds.length === 0) {
+    return remap;
+  }
+
+  const sourceTags = (await database.tags.bulkGet(sourceTagIds)).flatMap(
+    (tag) => (tag ? [tag] : []),
+  );
+  const targetTags = await database.tags
+    .where('collectionId')
+    .equals(targetCollectionId)
+    .toArray();
+  const targetByName = new Map(
+    targetTags.map((tag) => [tag.name.toLocaleLowerCase(), tag] as const),
+  );
+
+  for (const sourceTag of sourceTags) {
+    const key = sourceTag.name.toLocaleLowerCase();
+    let targetTag = targetByName.get(key);
+    if (!targetTag) {
+      targetTag = {
+        id: crypto.randomUUID(),
+        collectionId: targetCollectionId,
+        name: sourceTag.name,
+        color: sourceTag.color,
+        sortOrder: await database.tags
+          .where('collectionId')
+          .equals(targetCollectionId)
+          .count(),
+      };
+      await database.tags.add(targetTag);
+      targetByName.set(key, targetTag);
+    }
+    remap.set(sourceTag.id, targetTag.id);
+  }
+  return remap;
 }
 
 export async function moveTabs(
@@ -258,7 +306,7 @@ export async function moveTabs(
   const ids = [...new Set(tabIds)];
   await database.transaction(
     'rw',
-    [database.tabs, database.collections],
+    [database.tabs, database.collections, database.tags],
     async () => {
       const target = await database.collections.get(targetCollectionId);
       if (target?.status !== 'active') {
@@ -275,12 +323,24 @@ export async function moveTabs(
         .where('collectionId')
         .equals(targetCollectionId)
         .count();
+      const tagRemap = await remapTagsForMove(
+        database,
+        tabs,
+        targetCollectionId,
+      );
       await database.tabs.bulkPut(
         tabs.map((tab, index) => ({
           ...tab,
           collectionId: targetCollectionId,
           position: targetCount + index,
-          tagIds: [],
+          tagIds: [
+            ...new Set(
+              tab.tagIds.flatMap((tagId) => {
+                const remapped = tagRemap.get(tagId);
+                return remapped ? [remapped] : [];
+              }),
+            ),
+          ],
         })),
       );
       const now = new Date().toISOString();
@@ -292,12 +352,25 @@ export async function moveTabs(
   );
 }
 
+function isRestorableUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export async function restoreTabs(
   tabs: Pick<TabRecord, 'title' | 'url' | 'pinned'>[],
 ): Promise<RestoreResult> {
   const failures: string[] = [];
   let restored = 0;
   for (const tab of tabs) {
+    if (!isRestorableUrl(tab.url)) {
+      failures.push(tab.title || tab.url);
+      continue;
+    }
     try {
       await browser.tabs.create({ url: tab.url, pinned: tab.pinned });
       restored += 1;

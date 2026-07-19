@@ -61,12 +61,20 @@ function hostnameFromUrl(url: string): string {
 }
 
 export function duplicateKey(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return '';
+  }
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(trimmed);
     parsed.hash = '';
+    parsed.hostname = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith('/')) {
+      parsed.pathname = parsed.pathname.slice(0, -1);
+    }
     return parsed.href;
   } catch {
-    return url.trim();
+    return trimmed;
   }
 }
 
@@ -79,21 +87,37 @@ export function buildSwitchboardSnapshot(
       return [];
     }
     const tabs = (window.tabs ?? []).flatMap((tab) => {
-      if (
-        tab.id === undefined ||
-        tab.windowId === undefined ||
-        tab.url === undefined
-      ) {
+      if (tab.id === undefined || tab.windowId === undefined) {
         return [];
+      }
+      const url = tab.url;
+      if (url === undefined) {
+        return [
+          {
+            id: tab.id,
+            windowId: tab.windowId,
+            index: tab.index,
+            title: tab.title?.trim() || 'Loading…',
+            url: '',
+            hostname: '',
+            ...(tab.favIconUrl ? { favIconUrl: tab.favIconUrl } : {}),
+            pinned: tab.pinned,
+            active: tab.active,
+            audible: tab.audible === true,
+            discarded: tab.discarded,
+            groupId: tab.groupId,
+            duplicateCount: 1,
+          } satisfies SwitchboardTab,
+        ];
       }
       return [
         {
           id: tab.id,
           windowId: tab.windowId,
           index: tab.index,
-          title: tab.title?.trim() || tab.url,
-          url: tab.url,
-          hostname: hostnameFromUrl(tab.url),
+          title: tab.title?.trim() || url,
+          url,
+          hostname: hostnameFromUrl(url),
           ...(tab.favIconUrl ? { favIconUrl: tab.favIconUrl } : {}),
           pinned: tab.pinned,
           active: tab.active,
@@ -117,7 +141,7 @@ export function buildSwitchboardSnapshot(
 
   const occurrences = new Map<string, number>();
   for (const tab of validWindows.flatMap((window) => window.tabs)) {
-    const key = duplicateKey(tab.url);
+    const key = tab.url ? duplicateKey(tab.url) : `loading:${tab.id}`;
     occurrences.set(key, (occurrences.get(key) ?? 0) + 1);
   }
 
@@ -125,7 +149,8 @@ export function buildSwitchboardSnapshot(
   const windows = validWindows.map((window) => ({
     ...window,
     tabs: window.tabs.map((tab) => {
-      const count = occurrences.get(duplicateKey(tab.url)) ?? 1;
+      const key = tab.url ? duplicateKey(tab.url) : `loading:${tab.id}`;
+      const count = occurrences.get(key) ?? 1;
       if (count > 1) {
         duplicateCount += 1;
       }

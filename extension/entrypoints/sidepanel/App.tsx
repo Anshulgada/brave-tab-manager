@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -20,6 +21,8 @@ function tabLabel(tab: SwitchboardTab): string {
 }
 
 export function App() {
+  const loadGeneration = useRef(0);
+  const busyRef = useRef(false);
   const [snapshot, setSnapshot] = useState<SwitchboardSnapshot>();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -28,10 +31,12 @@ export function App() {
   const [groupName, setGroupName] = useState('Tabman group');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
   const [notice, setNotice] = useState<string>();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { clearActionError?: boolean }) => {
+    const generation = ++loadGeneration.current;
     try {
       const response = await sendSwitchboardRequest({
         type: 'switchboard/get',
@@ -41,6 +46,9 @@ export function App() {
       }
       if (!('snapshot' in response)) {
         throw new Error('The switchboard response was incomplete');
+      }
+      if (generation !== loadGeneration.current) {
+        return;
       }
       setSnapshot(response.snapshot);
       const liveTabIds = new Set(
@@ -52,20 +60,26 @@ export function App() {
         (current) =>
           new Set([...current].filter((tabId) => liveTabIds.has(tabId))),
       );
-      setError(undefined);
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : 'Could not load browser tabs',
+      setLoadError(undefined);
+      if (options?.clearActionError) {
+        setActionError(undefined);
+      }
+    } catch (error) {
+      if (generation !== loadGeneration.current) {
+        return;
+      }
+      setLoadError(
+        error instanceof Error ? error.message : 'Could not load browser tabs',
       );
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void load({ clearActionError: true });
     const listener = (message: SwitchboardChangedMessage) => {
       if (message.type === 'switchboard/changed') {
         void load();
@@ -88,9 +102,14 @@ export function App() {
     async (
       request: Parameters<typeof sendSwitchboardRequest>[0],
       successMessage: string,
+      onSuccess?: () => void,
     ) => {
+      if (busyRef.current) {
+        return;
+      }
+      busyRef.current = true;
       setBusy(true);
-      setError(undefined);
+      setActionError(undefined);
       setNotice(undefined);
       try {
         const response = await sendSwitchboardRequest(request);
@@ -105,14 +124,16 @@ export function App() {
             : successMessage,
         );
         setSelected(new Set());
+        onSuccess?.();
         await load();
       } catch (mutationError) {
-        setError(
+        setActionError(
           mutationError instanceof Error
             ? mutationError.message
             : 'The browser action failed',
         );
       } finally {
+        busyRef.current = false;
         setBusy(false);
       }
     },
@@ -120,6 +141,9 @@ export function App() {
   );
 
   const activate = useCallback(async (tab: SwitchboardTab) => {
+    if (busyRef.current) {
+      return;
+    }
     try {
       const response = await sendSwitchboardRequest({
         type: 'switchboard/activate',
@@ -129,8 +153,9 @@ export function App() {
       if (!response.ok) {
         throw new Error(response.error);
       }
+      setNotice(undefined);
     } catch (activationError) {
-      setError(
+      setActionError(
         activationError instanceof Error
           ? activationError.message
           : 'Could not focus the selected tab',
@@ -172,6 +197,19 @@ export function App() {
       event.preventDefault();
       const direction = event.key === 'ArrowDown' ? 1 : -1;
       focusTabAt(index + direction);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSelected(new Set());
+      return;
+    }
+    if (event.key === ' ') {
+      event.preventDefault();
+      const tab = visibleTabs[index];
+      if (tab) {
+        toggleSelected(tab.id);
+      }
     }
   };
 
@@ -180,6 +218,7 @@ export function App() {
     snapshot?.windows.filter((window) =>
       window.tabs.some((tab) => !selected.has(tab.id)),
     ) ?? [];
+  const error = actionError ?? loadError;
 
   return (
     <main className="switchboard">
@@ -191,6 +230,7 @@ export function App() {
         <button
           className="secondary compact"
           type="button"
+          disabled={busy}
           onClick={() =>
             void runMutation({ type: 'dashboard/open' }, 'Library opened.')
           }
@@ -213,6 +253,9 @@ export function App() {
             if (event.key === 'ArrowDown') {
               event.preventDefault();
               focusTabAt(0);
+            }
+            if (event.key === 'Escape') {
+              setSelected(new Set());
             }
           }}
         />
@@ -314,7 +357,7 @@ export function App() {
                     tabIds: selectedIds,
                     title: groupName,
                   },
-                  'Selected tabs grouped.',
+                  'Selected tabs grouped per window.',
                 )
               }
             >
@@ -325,6 +368,13 @@ export function App() {
             className="named-action"
             onSubmit={(event) => {
               event.preventDefault();
+              if (
+                !window.confirm(
+                  `Park ${selected.size} selected tab${selected.size === 1 ? '' : 's'} into the library and close them?`,
+                )
+              ) {
+                return;
+              }
               void runMutation(
                 {
                   type: 'switchboard/park',
@@ -332,8 +382,8 @@ export function App() {
                   name: parkName,
                 },
                 'Selection parked in the library.',
+                () => setParkName(''),
               );
-              setParkName('');
             }}
           >
             <input
@@ -356,7 +406,7 @@ export function App() {
           <button
             className="text-button"
             type="button"
-            onClick={() => void load()}
+            onClick={() => void load({ clearActionError: true })}
           >
             Retry
           </button>
@@ -372,6 +422,11 @@ export function App() {
         <div className="empty-state" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
           <p>Reading open windows…</p>
+        </div>
+      ) : loadError && !snapshot ? (
+        <div className="empty-state">
+          <h2>Could not read open windows</h2>
+          <p>Retry after confirming the extension still has tabs permission.</p>
         </div>
       ) : visibleTabs.length === 0 ? (
         <div className="empty-state">
@@ -390,7 +445,12 @@ export function App() {
                 <div>
                   <h2>
                     Window {browserWindow.id}
-                    {browserWindow.focused && <span className="live-dot" />}
+                    {browserWindow.focused && (
+                      <>
+                        <span className="live-dot" aria-hidden="true" />
+                        <span className="sr-only">Focused window</span>
+                      </>
+                    )}
                   </h2>
                   <p>
                     {browserWindow.tabs.length} tab
@@ -405,12 +465,18 @@ export function App() {
                     const fullWindow = snapshot?.windows.find(
                       (window) => window.id === browserWindow.id,
                     );
+                    const tabs = (fullWindow ?? browserWindow).tabs;
+                    if (
+                      !window.confirm(
+                        `Park all ${tabs.length} tabs from window ${browserWindow.id} and close them?`,
+                      )
+                    ) {
+                      return;
+                    }
                     void runMutation(
                       {
                         type: 'switchboard/park',
-                        tabIds: (fullWindow ?? browserWindow).tabs.map(
-                          (tab) => tab.id,
-                        ),
+                        tabIds: tabs.map((tab) => tab.id),
                         name: `Window ${browserWindow.id}`,
                       },
                       `Window ${browserWindow.id} parked.`,
@@ -469,12 +535,23 @@ export function App() {
                         {tab.duplicateCount > 1 && (
                           <span title={`${tab.duplicateCount} matching tabs`}>
                             ×{tab.duplicateCount}
+                            <span className="sr-only">
+                              {`${tab.duplicateCount} matching open tabs`}
+                            </span>
                           </span>
                         )}
                         {tab.audible && (
-                          <span title="Playing audio">Audio</span>
+                          <span title="Playing audio">
+                            Audio
+                            <span className="sr-only">Playing audio</span>
+                          </span>
                         )}
-                        {tab.discarded && <span title="Discarded">Sleep</span>}
+                        {tab.discarded && (
+                          <span title="Discarded">
+                            Sleep
+                            <span className="sr-only">Discarded tab</span>
+                          </span>
+                        )}
                       </div>
                     </article>
                   );

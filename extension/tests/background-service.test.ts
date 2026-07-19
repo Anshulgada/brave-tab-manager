@@ -29,11 +29,16 @@ function tab(id: number, windowId = 1) {
   };
 }
 
-function installBrowserMock() {
+function installBrowserMock(options?: {
+  pinnedIds?: number[];
+  removeRejectIds?: number[];
+}) {
+  const pinnedIds = new Set(options?.pinnedIds ?? []);
+  const removeRejectIds = new Set(options?.removeRejectIds ?? []);
   const tabsById = new Map([
-    [1, tab(1)],
-    [2, tab(2)],
-    [3, tab(3, 2)],
+    [1, { ...tab(1), pinned: pinnedIds.has(1) }],
+    [2, { ...tab(2), pinned: pinnedIds.has(2) }],
+    [3, { ...tab(3, 2), pinned: pinnedIds.has(3) }],
   ]);
   const mock = {
     runtime: {
@@ -49,9 +54,22 @@ function installBrowserMock() {
         return item;
       }),
       update: vi.fn().mockResolvedValue(undefined),
-      remove: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn(async (tabId: number) => {
+        if (removeRejectIds.has(tabId)) {
+          throw new Error('remove failed');
+        }
+      }),
       discard: vi.fn().mockResolvedValue(undefined),
-      move: vi.fn().mockResolvedValue(undefined),
+      move: vi.fn(
+        async (tabIds: number | number[], props: { index: number }) => {
+          const ids = Array.isArray(tabIds) ? tabIds : [tabIds];
+          return ids.map((id) => ({
+            ...(tabsById.get(id) ?? tab(id)),
+            id,
+            index: props.index,
+          }));
+        },
+      ),
       group: vi.fn().mockResolvedValue(12),
       create: vi.fn().mockResolvedValue(undefined),
     },
@@ -152,5 +170,55 @@ describe('background switchboard service', () => {
     expect(browserMock.tabs.remove).toHaveBeenCalledTimes(2);
     expect(browserMock.tabs.remove).toHaveBeenNthCalledWith(1, 1);
     expect(browserMock.tabs.remove).toHaveBeenNthCalledWith(2, 2);
+  });
+
+  it('rejects invalid action payloads instead of closing tabs', async () => {
+    const browserMock = installBrowserMock();
+
+    await expect(
+      handleSwitchboardRequest({
+        type: 'switchboard/action',
+        action: 'explode',
+        tabIds: [1],
+      }),
+    ).resolves.toMatchObject({ ok: false });
+    expect(browserMock.tabs.remove).not.toHaveBeenCalled();
+  });
+
+  it('reports partial close failures without aborting the batch', async () => {
+    installBrowserMock({ removeRejectIds: [2] });
+
+    await expect(
+      handleSwitchboardRequest({
+        type: 'switchboard/action',
+        action: 'close',
+        tabIds: [1, 2],
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      affected: 1,
+      warnings: ['Tab 2 could not be closed'],
+    });
+  });
+
+  it('moves pinned tabs ahead of unpinned tabs', async () => {
+    const browserMock = installBrowserMock({ pinnedIds: [1] });
+
+    await expect(
+      handleSwitchboardRequest({
+        type: 'switchboard/move',
+        tabIds: [1, 2],
+        windowId: 2,
+      }),
+    ).resolves.toEqual({ ok: true, affected: 2 });
+
+    expect(browserMock.tabs.move).toHaveBeenNthCalledWith(1, [1], {
+      windowId: 2,
+      index: 0,
+    });
+    expect(browserMock.tabs.move).toHaveBeenNthCalledWith(2, [2], {
+      windowId: 2,
+      index: -1,
+    });
   });
 });

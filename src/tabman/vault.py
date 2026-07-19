@@ -242,6 +242,8 @@ class Vault:
         """Search collection tabs locally with label-safe hostname suffix matching."""
         needle = query.casefold()
         domain = hostname.casefold().strip(".") if hostname else None
+        if not domain:
+            domain = None
         matches: list[tuple[Collection, Tab]] = []
         for collection in self.export_document().collections:
             for tab in collection.tabs:

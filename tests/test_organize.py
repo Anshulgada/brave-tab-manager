@@ -197,3 +197,17 @@ def test_apply_normalizes_case_variants_without_duplicate_ids() -> None:
     assert {tab.tag_ids for tab in applied.collections[0].tabs} == {
         (applied.collections[0].tags[0].id,)
     }
+
+
+def test_deterministic_provider_handles_blank_hostnames() -> None:
+    document = read_document(FIXTURE)
+    blank = (
+        document.collections[0]
+        .tabs[0]
+        .model_copy(update={"url": "about:blank", "hostname": ""})
+    )
+
+    suggestions = DeterministicProvider().suggest((blank,), include_full_url=False)
+
+    assert suggestions[0].collection_name == "about"
+    assert suggestions[0].tags == ()

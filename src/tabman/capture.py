@@ -58,6 +58,12 @@ def capture_collection(
         target_identity = item.get("id")
         if not isinstance(target_identity, str) or not target_identity:
             target_identity = f"{url}#{len(tabs)}"
+        raw_favicon = item.get("faviconUrl")
+        fav_icon = raw_favicon if isinstance(raw_favicon, str) else None
+        if fav_icon is not None:
+            fav_scheme = urlsplit(fav_icon).scheme.casefold()
+            if fav_scheme not in {"http", "https"}:
+                fav_icon = None
         tabs.append(
             Tab(
                 id=uuid5(
@@ -67,9 +73,7 @@ def capture_collection(
                 title=title,
                 url=url,
                 hostname=parsed.hostname,
-                fav_icon_url=item.get("faviconUrl")
-                if isinstance(item.get("faviconUrl"), str)
-                else None,
+                fav_icon_url=fav_icon,
                 pinned=False,
                 position=len(tabs),
                 created_at=now,

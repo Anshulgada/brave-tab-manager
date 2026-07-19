@@ -1,6 +1,9 @@
-import { TabmanDatabase, type TabRecord } from './database';
-import type { SwitchboardRequest, SwitchboardResponse } from './messages';
-import { errorResponse } from './messages';
+import { normalizeHostname, TabmanDatabase, type TabRecord } from './database';
+import {
+  errorResponse,
+  parseSwitchboardRequest,
+  type SwitchboardResponse,
+} from './messages';
 import { collectionSchema, tabSchema } from './schema';
 import { buildSwitchboardSnapshot } from './switchboard';
 
@@ -72,13 +75,18 @@ async function getSnapshot(): Promise<SwitchboardResponse> {
   };
 }
 
-async function discardTabs(tabIds: number[]): Promise<SwitchboardResponse> {
+async function settleTabIds(
+  tabIds: number[],
+  action: (tabId: number) => Promise<unknown>,
+  verb: string,
+): Promise<SwitchboardResponse> {
+  const unique = requireTabIds(tabIds);
   const results = await Promise.allSettled(
-    requireTabIds(tabIds).map((tabId) => browser.tabs.discard(tabId)),
+    unique.map((tabId) => action(tabId)),
   );
   const warnings = results.flatMap((result, index) =>
     result.status === 'rejected'
-      ? [`Tab ${tabIds[index] ?? 'unknown'} could not be discarded`]
+      ? [`Tab ${unique[index] ?? 'unknown'} could not be ${verb}`]
       : [],
   );
   await notifySwitchboardChanged();
@@ -89,14 +97,81 @@ async function discardTabs(tabIds: number[]): Promise<SwitchboardResponse> {
   };
 }
 
+async function discardTabs(tabIds: number[]): Promise<SwitchboardResponse> {
+  return settleTabIds(
+    tabIds,
+    (tabId) => browser.tabs.discard(tabId),
+    'discarded',
+  );
+}
+
+async function closeTabs(tabIds: number[]): Promise<SwitchboardResponse> {
+  return settleTabIds(tabIds, (tabId) => browser.tabs.remove(tabId), 'closed');
+}
+
 async function moveTabs(
   tabIds: number[],
   windowId: number,
 ): Promise<SwitchboardResponse> {
   const unique = requireTabIds(tabIds);
-  await browser.tabs.move(unique, { windowId, index: -1 });
+  const tabs = await Promise.all(
+    unique.map(async (tabId) => {
+      try {
+        return await browser.tabs.get(tabId);
+      } catch {
+        return undefined;
+      }
+    }),
+  );
+  const pinned = tabs.flatMap((tab) =>
+    tab?.id !== undefined && tab.pinned ? [tab.id] : [],
+  );
+  const unpinned = tabs.flatMap((tab) =>
+    tab?.id !== undefined && !tab.pinned ? [tab.id] : [],
+  );
+  const missing = unique.filter(
+    (tabId) => !pinned.includes(tabId) && !unpinned.includes(tabId),
+  );
+  const warnings = missing.map(
+    (tabId) => `Tab ${tabId} is no longer available`,
+  );
+
+  if (pinned.length > 0) {
+    const moved = await browser.tabs.move(pinned, { windowId, index: 0 });
+    const movedIds = new Set(
+      (Array.isArray(moved) ? moved : [moved]).flatMap((tab) =>
+        tab.id === undefined ? [] : [tab.id],
+      ),
+    );
+    for (const tabId of pinned) {
+      if (!movedIds.has(tabId)) {
+        warnings.push(`Pinned tab ${tabId} could not be moved`);
+      }
+    }
+  }
+  if (unpinned.length > 0) {
+    const moved = await browser.tabs.move(unpinned, {
+      windowId,
+      index: -1,
+    });
+    const movedIds = new Set(
+      (Array.isArray(moved) ? moved : [moved]).flatMap((tab) =>
+        tab.id === undefined ? [] : [tab.id],
+      ),
+    );
+    for (const tabId of unpinned) {
+      if (!movedIds.has(tabId)) {
+        warnings.push(`Tab ${tabId} could not be moved`);
+      }
+    }
+  }
+
   await notifySwitchboardChanged();
-  return { ok: true, affected: unique.length };
+  return {
+    ok: true,
+    affected: unique.length - warnings.length,
+    ...(warnings.length > 0 ? { warnings } : {}),
+  };
 }
 
 async function groupTabs(
@@ -113,25 +188,34 @@ async function groupTabs(
     byWindow.set(tab.windowId, windowTabs);
   }
   let affected = 0;
+  const warnings: string[] = [];
   for (const [windowId, windowTabs] of byWindow) {
-    const tabIds = windowTabs.flatMap((tab) =>
+    const groupedIds = windowTabs.flatMap((tab) =>
       tab.id === undefined ? [] : [tab.id],
     );
-    const [firstTabId, ...remainingTabIds] = tabIds;
+    const [firstTabId, ...remainingTabIds] = groupedIds;
     if (firstTabId === undefined) {
       continue;
     }
-    const groupId = await (browser.tabs.group({
-      tabIds: [firstTabId, ...remainingTabIds],
-      createProperties: { windowId },
-    }) as Promise<number>);
-    await browser.tabGroups.update(groupId, {
-      title: cleanName(title, 'Tabman group').slice(0, 64),
-    });
-    affected += windowTabs.length;
+    try {
+      const groupId = await (browser.tabs.group({
+        tabIds: [firstTabId, ...remainingTabIds],
+        createProperties: { windowId },
+      }) as Promise<number>);
+      await browser.tabGroups.update(groupId, {
+        title: cleanName(title, 'Tabman group').slice(0, 64),
+      });
+      affected += windowTabs.length;
+    } catch {
+      warnings.push(`Could not group tabs in window ${windowId}`);
+    }
   }
   await notifySwitchboardChanged();
-  return { ok: true, affected };
+  return {
+    ok: true,
+    affected,
+    ...(warnings.length > 0 ? { warnings } : {}),
+  };
 }
 
 async function parkTabs(
@@ -146,6 +230,7 @@ async function parkTabs(
   const collectionId = crypto.randomUUID();
   const warnings: string[] = [];
   const records: TabRecord[] = [];
+  const parkedBrowserTabIds: number[] = [];
 
   for (const [index, result] of results.entries()) {
     if (result.status === 'rejected') {
@@ -158,25 +243,30 @@ async function parkTabs(
       warnings.push(`${source.title || 'A tab'} uses an unsupported URL`);
       continue;
     }
-    const parsedUrl = new URL(url);
-    const favIconUrl = supportedAddress(source.favIconUrl);
-    const tab = tabSchema.parse({
-      id: crypto.randomUUID(),
-      title: source.title ?? url,
-      url,
-      hostname: parsedUrl.hostname,
-      ...(favIconUrl ? { favIconUrl } : {}),
-      pinned: source.pinned,
-      position: records.length,
-      createdAt: now,
-      lastAccessedAt: null,
-      tagIds: [],
-    });
-    records.push({
-      ...tab,
-      collectionId,
-      normalizedHostname: tab.hostname.toLocaleLowerCase(),
-    });
+    try {
+      const parsedUrl = new URL(url);
+      const favIconUrl = supportedAddress(source.favIconUrl);
+      const tab = tabSchema.parse({
+        id: crypto.randomUUID(),
+        title: (source.title ?? url).slice(0, 2048),
+        url,
+        hostname: parsedUrl.hostname,
+        ...(favIconUrl ? { favIconUrl } : {}),
+        pinned: source.pinned,
+        position: records.length,
+        createdAt: now,
+        lastAccessedAt: null,
+        tagIds: [],
+      });
+      records.push({
+        ...tab,
+        collectionId,
+        normalizedHostname: normalizeHostname(tab.hostname),
+      });
+      parkedBrowserTabIds.push(source.id);
+    } catch {
+      warnings.push(`${source.title || url} could not be parked`);
+    }
   }
 
   if (records.length === 0) {
@@ -225,13 +315,6 @@ async function parkTabs(
     database.close();
   }
 
-  const parkedBrowserTabIds = results.flatMap((result) =>
-    result.status === 'fulfilled' &&
-    result.value.id !== undefined &&
-    supportedAddress(result.value.url)
-      ? [result.value.id]
-      : [],
-  );
   const closeResults = await Promise.allSettled(
     parkedBrowserTabIds.map((tabId) => browser.tabs.remove(tabId)),
   );
@@ -252,31 +335,27 @@ async function parkTabs(
 }
 
 export async function handleSwitchboardRequest(
-  message: SwitchboardRequest,
+  message: unknown,
 ): Promise<SwitchboardResponse> {
   try {
-    switch (message.type) {
+    const request = parseSwitchboardRequest(message);
+    switch (request.type) {
       case 'switchboard/get':
         return await getSnapshot();
       case 'switchboard/activate':
-        await browser.tabs.update(message.tabId, { active: true });
-        await browser.windows.update(message.windowId, { focused: true });
+        await browser.tabs.update(request.tabId, { active: true });
+        await browser.windows.update(request.windowId, { focused: true });
         return { ok: true };
-      case 'switchboard/action': {
-        const tabIds = requireTabIds(message.tabIds);
-        if (message.action === 'discard') {
-          return await discardTabs(tabIds);
-        }
-        await browser.tabs.remove(tabIds);
-        await notifySwitchboardChanged();
-        return { ok: true, affected: tabIds.length };
-      }
+      case 'switchboard/action':
+        return request.action === 'discard'
+          ? await discardTabs(request.tabIds)
+          : await closeTabs(request.tabIds);
       case 'switchboard/move':
-        return await moveTabs(message.tabIds, message.windowId);
+        return await moveTabs(request.tabIds, request.windowId);
       case 'switchboard/group':
-        return await groupTabs(message.tabIds, message.title);
+        return await groupTabs(request.tabIds, request.title);
       case 'switchboard/park':
-        return await parkTabs(message.tabIds, message.name);
+        return await parkTabs(request.tabIds, request.name);
       case 'dashboard/open':
         await browser.tabs.create({
           url: browser.runtime.getURL('/dashboard.html'),
