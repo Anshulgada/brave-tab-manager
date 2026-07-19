@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "tabman"
-version = "0.3.0"
+version = "0.3.1"
 description = "Local-first tab collections and automation for Chromium browsers."
 readme = "README.md"
 requires-python = ">=3.12"

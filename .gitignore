@@ -1,32 +1,45 @@
-# Environment folder
-*/tabman-venv/
+# Operating systems and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
 
-# Data folder
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ty_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+
+# Node, Bun, and WXT
+node_modules/
+.wxt/
+.output/
+coverage/
+*.zip
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local vaults and captured browser data
 data/
-
-# Environment Variables
-*/.env
-
-# Python pycache
-*/__pycache__/
-**/__pycache__/
-tabman.egg-info/*
-
-# Test files
-.pytest_cache
-
-# Pypi files
-**/build/
-**/dist/
-
-# Ignore gui files
-# **/gui/
-
-# Web Dev Files
-**/node_modules/
-**/package-lock.json
-**/package.json
-**/public/
-
-# Ignore the web tabman folder temporarily
-web_tabman/
+vault/
+*.sqlite
+*.sqlite3
+*.db

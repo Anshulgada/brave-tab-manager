@@ -102,9 +102,9 @@ Brave Tab Manager/
 ├── data/
 ├── dist/
 ├── tabman/
-│   ├── gui/                  
-│   │   ├── __init__.py       
-│   │   └── gui_main.py       
+│   ├── gui/
+│   │   ├── __init__.py
+│   │   └── gui_main.py
 │   ├── tabman-venv/
 │   ├── tests/
 │   │   └── tabman_tests.py
@@ -122,7 +122,7 @@ Brave Tab Manager/
 │   ├── client
 │   │   ├── node_modules/
 │   │   ├── public/
-│   │   │   └── index.html 
+│   │   │   └── index.html
 │   │   ├── src/
 │   │   │   ├── components
 │   │   │   │   ├── FilterSection.jsx
@@ -139,7 +139,7 @@ Brave Tab Manager/
 │   │   │   ├── App.js
 │   │   │   ├── index.css
 │   │   │   └── index.js
-│   │   ├── .gitignore 
+│   │   ├── .gitignore
 │   │   ├── package-lock.json
 │   │   ├── package.json
 │   │   ├── postcss.config.js

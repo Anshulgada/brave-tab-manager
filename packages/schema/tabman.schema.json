@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Anshulgada/brave-tab-manager/packages/schema/tabman.schema.json",
+  "title": "Tabman shared document",
+  "description": "Phase 2 placeholder; the versioned data model is defined in Phase 3.",
+  "type": "object",
+  "additionalProperties": true
+}
