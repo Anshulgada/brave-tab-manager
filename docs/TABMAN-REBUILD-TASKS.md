@@ -1,6 +1,6 @@
 # Tabman Rebuild — Task Checklist
 
-> **Status:** Phase **0** clone done · Planning docs saved · implementation not started · updated 2026-07-18
+> **Status:** Phases **0–2** complete · product implementation not started · updated 2026-07-19
 > **Branch:** `feat/rebuild` (create from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
 > **Product:** Sideload WXT+React extension (switchboard + Raindrop-like library) + SokWatch-grade Python CLI vault
 
@@ -12,10 +12,10 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 - [x] Clone repo to `D:\brave-tab-manager`
 - [x] Confirm `main` tracks `origin/main`
-- [ ] `git fetch origin`
-- [ ] `git checkout -b feat/rebuild` (from current `main` / `origin/main`)
-- [ ] Confirm no implementation on `main` until reviewed merge
-- [ ] Inspect local toolchain: `uv`, `bun`, `node` (24+), `pre-commit` availability
+- [x] `git fetch origin`
+- [x] `git checkout -b feat/rebuild` (from current `main` / `origin/main`)
+- [x] Confirm no implementation on `main` until reviewed merge
+- [x] Install and verify local toolchain: `uv`, `bun`, `node` (24+), `pre-commit`
 
 **Phase 0 gate:** On `feat/rebuild` with clean working tree aside from intentional docs.
 
@@ -37,16 +37,16 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 > **Gate:** Do not ship product features until hooks/tooling skeleton exists.
 
-- [ ] **2.1** Root `pyproject.toml` + `uv.lock` (`requires-python >=3.12`)
-- [ ] **2.2** Move/create package under `src/tabman/` (full layout overhaul OK)
-- [ ] **2.3** Configure `[tool.ruff]`, `[tool.ty]`, `[tool.bandit]`, `[tool.pytest.ini_options]`
-- [ ] **2.4** Scaffold `extension/` with WXT + React + TypeScript + Bun
-- [ ] **2.5** `extension/biome.json`, Node 24 pin, `tsc --noEmit`, scripts (`check`, `test`, `build`, `zip`)
-- [ ] **2.6** `.pre-commit-config.yaml` — Ruff, ty, Biome, tsc, hygiene, detect-secrets + `.secrets.baseline`
-- [ ] **2.7** Pre-push path-filtered gates (`pytest` unit / `wxt build`)
-- [ ] **2.8** Hardened `.gitignore`, `.gitattributes`, `.env.example`, `CHANGELOG.md`
-- [ ] **2.9** `packages/schema/` stub for shared JSON Schema
-- [ ] **2.10** CI workflow skeleton: `python` job + `extension` job (no store publish)
+- [x] **2.1** Root `pyproject.toml` + `uv.lock` (`requires-python >=3.12`)
+- [x] **2.2** Move/create package under `src/tabman/` (full layout overhaul OK)
+- [x] **2.3** Configure `[tool.ruff]`, `[tool.ty]`, `[tool.bandit]`, `[tool.pytest.ini_options]`
+- [x] **2.4** Scaffold `extension/` with WXT + React + TypeScript + Bun
+- [x] **2.5** `extension/biome.json`, Node 24 pin, `tsc --noEmit`, scripts (`check`, `test`, `build`, `zip`)
+- [x] **2.6** `.pre-commit-config.yaml` — Ruff, ty, Biome, tsc, hygiene, detect-secrets + `.secrets.baseline`
+- [x] **2.7** Pre-push path-filtered gates (`pytest` unit / `wxt build`)
+- [x] **2.8** Hardened `.gitignore`, `.gitattributes`, `.env.example`, `CHANGELOG.md`
+- [x] **2.9** `packages/schema/` stub for shared JSON Schema
+- [x] **2.10** CI workflow skeleton: `python` job + `extension` job (no store publish)
 
 **Phase 2 gate:** `uv sync` and `cd extension && bun install` work; pre-commit installs; empty/smoke checks pass.
 
