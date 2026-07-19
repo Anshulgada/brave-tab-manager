@@ -53,6 +53,14 @@ export async function notifySwitchboardChanged(): Promise<void> {
   }
 }
 
+async function notifyLibraryChanged(): Promise<void> {
+  try {
+    await browser.runtime.sendMessage({ type: 'library/changed' });
+  } catch {
+    // No library surface is currently listening.
+  }
+}
+
 async function getSnapshot(): Promise<SwitchboardResponse> {
   const windows = await browser.windows.getAll({
     populate: true,
@@ -234,6 +242,7 @@ async function parkTabs(
       );
     }
   }
+  await notifyLibraryChanged();
   await notifySwitchboardChanged();
   return {
     ok: true,

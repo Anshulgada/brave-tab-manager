@@ -21,6 +21,10 @@ export interface SwitchboardChangedMessage {
   type: 'switchboard/changed';
 }
 
+export interface LibraryChangedMessage {
+  type: 'library/changed';
+}
+
 export function errorResponse(error: unknown): SwitchboardResponse {
   return {
     ok: false,
