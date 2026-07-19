@@ -1,6 +1,6 @@
 # Tabman Rebuild — Task Checklist
 
-> **Status:** Phases **0–5** complete · product implementation underway · updated 2026-07-19
+> **Status:** Phases **0–6** complete · product implementation underway · updated 2026-07-19
 > **Branch:** `feat/rebuild` (create from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
 > **Product:** Sideload WXT+React extension (switchboard + Raindrop-like library) + SokWatch-grade Python CLI vault
 
@@ -99,14 +99,14 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 ## Phase 6 — Extension Library Dashboard
 
-- [ ] **6.1** Full-page dashboard entrypoint
-- [ ] **6.2** Collections list + detail (Raindrop-like)
-- [ ] **6.3** Tags, filters, list/grid views
-- [ ] **6.4** Bulk tag/move/delete + trash
-- [ ] **6.5** Restore selected/all with partial-failure feedback
-- [ ] **6.6** Import/export UI (shared schema)
-- [ ] **6.7** Settings + privacy controls + onboarding
-- [ ] **6.8** System light/dark + a11y pass
+- [x] **6.1** Full-page dashboard entrypoint
+- [x] **6.2** Collections list + detail (Raindrop-like)
+- [x] **6.3** Tags, filters, list/grid views
+- [x] **6.4** Bulk tag/move/delete + trash
+- [x] **6.5** Restore selected/all with partial-failure feedback
+- [x] **6.6** Import/export UI (shared schema)
+- [x] **6.7** Settings + privacy controls + onboarding
+- [x] **6.8** System light/dark + a11y pass
 
 **Phase 6 gate:** Full park → browse library → restore loop works without AI.
 
