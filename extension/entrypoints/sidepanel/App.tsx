@@ -265,7 +265,9 @@ export function App() {
         <div className="summary" role="status" aria-label="Browser summary">
           <span>{snapshot.windows.length} windows</span>
           <span>{snapshot.tabCount} tabs</span>
-          <span>{snapshot.duplicateCount} duplicates</span>
+          <span title="Duplicates share the same URL after ignoring hash, www, and a trailing slash. Query strings still count as distinct.">
+            {snapshot.duplicateCount} duplicates
+          </span>
         </div>
       )}
 
@@ -533,7 +535,9 @@ export function App() {
                       </button>
                       <div className="tab-badges">
                         {tab.duplicateCount > 1 && (
-                          <span title={`${tab.duplicateCount} matching tabs`}>
+                          <span
+                            title={`${tab.duplicateCount} matching tabs (hash, www, and trailing slash ignored)`}
+                          >
                             ×{tab.duplicateCount}
                             <span className="sr-only">
                               {`${tab.duplicateCount} matching open tabs`}

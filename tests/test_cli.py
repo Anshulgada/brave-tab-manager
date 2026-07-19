@@ -99,7 +99,7 @@ def test_deterministic_organize_previews_before_apply(tmp_path: Path) -> None:
         "--vault",
         str(vault),
     )
-    applied = invoke("organize", "--vault", str(vault), "--apply")
+    applied = invoke("organize", "--vault", str(vault), "--apply", "--yes")
     applied_export = invoke(
         "export",
         str(tmp_path / "applied.json"),

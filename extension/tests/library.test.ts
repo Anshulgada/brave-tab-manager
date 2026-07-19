@@ -177,7 +177,7 @@ describe('local collection library', () => {
 
     expect(result).toEqual({
       restored: 0,
-      failures: ['Settings', 'About'],
+      failures: ['Settings (http/https only)', 'About (http/https only)'],
     });
     expect(create).not.toHaveBeenCalled();
   });

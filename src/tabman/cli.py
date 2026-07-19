@@ -213,6 +213,13 @@ def organize(
     apply: Annotated[
         bool, typer.Option("--apply", help="Persist the previewed proposal.")
     ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Skip the replace confirmation when applying a proposal.",
+        ),
+    ] = False,
     prompt_for_secret: Annotated[
         bool,
         typer.Option(
@@ -276,13 +283,18 @@ def organize(
                 "Applying replaces the entire vault with the proposal result.",
                 err=True,
             )
+            if not yes and not typer.confirm(
+                "Replace the entire vault with this proposal?",
+                default=False,
+            ):
+                raise typer.Abort()
             source.import_document(
                 apply_proposal(document, proposal),
                 replace=True,
             )
             typer.echo("Applied proposal.")
         else:
-            typer.echo("Preview only; rerun with --apply to persist.")
+            typer.echo("Preview only; rerun with --apply --yes to persist.")
     except (OrganizeError, OSError, ValidationError, RuntimeError, ValueError) as error:
         _fail(error)
 

@@ -361,6 +361,14 @@ function isRestorableUrl(url: string): boolean {
   }
 }
 
+function restoreFailureLabel(tab: Pick<TabRecord, 'title' | 'url'>): string {
+  const label = tab.title || tab.url;
+  if (!isRestorableUrl(tab.url)) {
+    return `${label} (http/https only)`;
+  }
+  return label;
+}
+
 export async function restoreTabs(
   tabs: Pick<TabRecord, 'title' | 'url' | 'pinned'>[],
 ): Promise<RestoreResult> {
@@ -368,14 +376,14 @@ export async function restoreTabs(
   let restored = 0;
   for (const tab of tabs) {
     if (!isRestorableUrl(tab.url)) {
-      failures.push(tab.title || tab.url);
+      failures.push(restoreFailureLabel(tab));
       continue;
     }
     try {
       await browser.tabs.create({ url: tab.url, pinned: tab.pinned });
       restored += 1;
     } catch {
-      failures.push(tab.title || tab.url);
+      failures.push(restoreFailureLabel(tab));
     }
   }
   return { restored, failures };
