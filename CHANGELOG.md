@@ -7,6 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.4]
+
+### Added
+
+- SQLite vault persistence with guarded legacy JSON/Markdown import.
+
 ## [0.3.3]
 
 ### Added
