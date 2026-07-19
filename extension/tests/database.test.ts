@@ -133,6 +133,88 @@ describe('Tabman database import and export', () => {
     ]);
   });
 
+  it('preserves local-only tabs when merging an overlapping collection', async () => {
+    const database = createDatabase();
+    const fixture = loadFixture();
+    await importExportDocument(database, fixture);
+
+    const firstCollection = fixture.collections[0];
+    expect(firstCollection).toBeDefined();
+    if (!firstCollection) {
+      throw new Error('Fixture must contain a collection');
+    }
+
+    const localOnlyId = '10000000-0000-4000-8000-000000000077';
+    await database.tabs.add({
+      id: localOnlyId,
+      collectionId: firstCollection.id,
+      title: 'Local only',
+      url: 'https://example.com/local-only',
+      hostname: 'example.com',
+      normalizedHostname: 'example.com',
+      pinned: false,
+      position: 99,
+      createdAt: '2026-07-19T12:00:00.000Z',
+      lastAccessedAt: null,
+      tagIds: [],
+    });
+
+    await importExportDocument(database, fixture);
+    const exported = await exportDatabase(database);
+    const tabs = exported.collections[0]?.tabs ?? [];
+    expect(tabs.some((tab) => tab.id === localOnlyId)).toBe(true);
+    expect(tabs).toHaveLength(firstCollection.tabs.length + 1);
+  });
+
+  it('rejects merges that move an existing tab onto another collection', async () => {
+    const database = createDatabase();
+    const fixture = loadFixture();
+    await importExportDocument(database, fixture);
+
+    const stolen = structuredClone(fixture);
+    const firstTab = stolen.collections[0]?.tabs[0];
+    expect(firstTab).toBeDefined();
+    if (!firstTab || !stolen.collections[0]) {
+      throw new Error('Fixture must contain a tab');
+    }
+    stolen.collections = [
+      {
+        ...stolen.collections[0],
+        id: '10000000-0000-4000-8000-000000000088',
+        name: 'Thief',
+        tabs: [{ ...firstTab, tagIds: [] }],
+        tags: [],
+      },
+    ];
+    stolen.sessions = [];
+    stolen.proposals = [];
+
+    await expect(importExportDocument(database, stolen)).rejects.toThrow(
+      /already belongs to another collection/,
+    );
+  });
+
+  it('keeps local settings when merging an export', async () => {
+    const database = createDatabase();
+    const fixture = loadFixture();
+    await importExportDocument(database, fixture);
+    await database.settings.put({
+      id: 'settings',
+      theme: 'dark',
+      defaultView: 'grid',
+      includeFullUrlInAi: true,
+      aiProvider: null,
+      lastImportedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await importExportDocument(database, fixture);
+    await expect(database.settings.get('settings')).resolves.toMatchObject({
+      theme: 'dark',
+      defaultView: 'grid',
+      includeFullUrlInAi: true,
+    });
+  });
+
   it('rolls back all writes when storage identities are invalid', async () => {
     const database = createDatabase();
     const fixture = loadFixture();

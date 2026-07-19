@@ -221,4 +221,27 @@ describe('background switchboard service', () => {
       index: -1,
     });
   });
+
+  it('refuses to park tabs from an incognito window', async () => {
+    const browserMock = installBrowserMock();
+    browserMock.tabs.get.mockImplementation(async (tabId: number) => ({
+      ...tab(tabId),
+      incognito: true,
+    }));
+
+    await expect(
+      handleSwitchboardRequest({
+        type: 'switchboard/park',
+        tabIds: [1],
+        name: 'Private stash',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'None of the selected tabs can be parked',
+    });
+    expect(browserMock.tabs.remove).not.toHaveBeenCalled();
+    const database = new TabmanDatabase();
+    openDatabases.push(database);
+    expect(await database.tabs.count()).toBe(0);
+  });
 });

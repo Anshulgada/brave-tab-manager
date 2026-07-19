@@ -22,6 +22,7 @@ from tabman.config import (
     store_secret,
 )
 from tabman.legacy import LegacyImportError, import_legacy
+from tabman.models import ExportDocument, ProposalStatus
 from tabman.organize import (
     OrganizeError,
     apply_proposal,
@@ -47,6 +48,15 @@ VaultOption = Annotated[
 
 def _vault(path: Path | None) -> Vault:
     return Vault(path or load_config().vault_path)
+
+
+def _require_vault(source: Vault) -> None:
+    if not source.path.is_file():
+        raise FileNotFoundError(f"vault does not exist: {source.path}")
+
+
+def _tsv_cell(value: str) -> str:
+    return value.replace("\t", " ").replace("\r", " ").replace("\n", " ")
 
 
 def _fail(error: Exception) -> None:
@@ -120,6 +130,7 @@ def export(
     """Export the SQLite vault; Markdown remains a read-only snapshot."""
     try:
         source = _vault(vault)
+        _require_vault(source)
         if format_.casefold() == "json":
             write_document(destination, source.export_document())
         elif format_.casefold() in {"markdown", "md"}:
@@ -144,7 +155,9 @@ def search(
 ) -> None:
     """Search titles, URLs, and hosts and always print the matches."""
     try:
-        matches = _vault(vault).search_tabs(query, hostname=hostname)
+        source = _vault(vault)
+        _require_vault(source)
+        matches = source.search_tabs(query, hostname=hostname)
     except (OSError, ValidationError, RuntimeError) as error:
         _fail(error)
     rows = [
@@ -162,7 +175,10 @@ def search(
         typer.echo("COLLECTION\tTITLE\tHOSTNAME\tURL")
         for row in rows:
             typer.echo(
-                f"{row['collection']}\t{row['title']}\t{row['hostname']}\t{row['url']}"
+                "\t".join(
+                    _tsv_cell(row[key])
+                    for key in ("collection", "title", "hostname", "url")
+                )
             )
     else:
         _fail(ValueError("format must be table or json"))
@@ -210,13 +226,41 @@ def organize(
         config = load_config()
         selected = provider or config.provider
         source = _vault(vault)
+        _require_vault(source)
         document = source.export_document()
-        adapter = build_provider(selected, config, prompt_for_secret=prompt_for_secret)
-        proposal = create_proposal(
-            document,
-            adapter,
-            include_full_url=config.include_full_url_in_ai,
-        )
+        if apply:
+            pending = [
+                item
+                for item in document.proposals
+                if item.status == ProposalStatus.PREVIEW
+            ]
+            if not pending:
+                raise ValueError(
+                    "No stored preview proposal; "
+                    "run `tabman organize` without --apply first"
+                )
+            proposal = max(pending, key=lambda item: item.created_at)
+        else:
+            adapter = build_provider(
+                selected, config, prompt_for_secret=prompt_for_secret
+            )
+            proposal = create_proposal(
+                document,
+                adapter,
+                include_full_url=config.include_full_url_in_ai,
+            )
+            source.import_document(
+                ExportDocument(
+                    schema_version=1,
+                    exported_at=proposal.created_at,
+                    collections=(),
+                    sessions=(),
+                    proposals=(proposal,),
+                    settings=document.settings,
+                ),
+                replace=False,
+                write_settings=False,
+            )
         typer.echo(
             json.dumps(
                 {

@@ -134,12 +134,20 @@ def import_legacy(path: Path) -> ExportDocument:
 
     collections: list[Collection] = []
     for category, items in grouped.items():
-        tag_names = tuple(dict.fromkeys(tag for item in items for tag in item["tags"]))
+        seen_tag_keys: set[str] = set()
+        tag_names: list[str] = []
+        for item in items:
+            for name in item["tags"]:
+                key = name.casefold()
+                if key in seen_tag_keys:
+                    continue
+                seen_tag_keys.add(key)
+                tag_names.append(name)
         tags = tuple(
             Tag(id=_stable_id("tag", f"{category}/{name.casefold()}"), name=name)
             for name in tag_names
         )
-        tag_by_name = {tag.name: tag.id for tag in tags}
+        tag_by_key = {tag.name.casefold(): tag.id for tag in tags}
         tabs = tuple(
             Tab(
                 id=_stable_id("tab", item["url"]),
@@ -150,7 +158,9 @@ def import_legacy(path: Path) -> ExportDocument:
                 position=position,
                 created_at=captured_at,
                 last_accessed_at=None,
-                tag_ids=tuple(tag_by_name[name] for name in item["tags"]),
+                tag_ids=tuple(
+                    dict.fromkeys(tag_by_key[name.casefold()] for name in item["tags"])
+                ),
             )
             for position, item in enumerate(items)
         )

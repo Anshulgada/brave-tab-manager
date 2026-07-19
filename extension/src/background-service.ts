@@ -238,6 +238,12 @@ async function parkTabs(
       continue;
     }
     const source = result.value;
+    if (source.incognito) {
+      warnings.push(
+        `${source.title || 'A private tab'} cannot be parked from an incognito window`,
+      );
+      continue;
+    }
     const url = supportedAddress(source.url);
     if (!url || source.id === undefined) {
       warnings.push(`${source.title || 'A tab'} uses an unsupported URL`);

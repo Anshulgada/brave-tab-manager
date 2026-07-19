@@ -110,6 +110,54 @@ class Vault:
     def _json(model: Collection | Session | Proposal | Settings) -> str:
         return model.model_dump_json(by_alias=True, exclude_none=False)
 
+    def _owned_identities(
+        self, connection: sqlite3.Connection
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Map existing tab/tag IDs to the collection that currently owns them."""
+        tab_owners: dict[str, str] = {}
+        tag_owners: dict[str, str] = {}
+        for row in connection.execute("SELECT id, payload FROM collections"):
+            collection = Collection.model_validate_json(row["payload"])
+            collection_id = str(collection.id)
+            for tab in collection.tabs:
+                tab_owners[str(tab.id)] = collection_id
+            for tag in collection.tags:
+                tag_owners[str(tag.id)] = collection_id
+        return tab_owners, tag_owners
+
+    def _assert_merge_identities(
+        self, connection: sqlite3.Connection, document: ExportDocument
+    ) -> None:
+        """Reject merges that would duplicate tab/tag IDs across collections."""
+        tab_owners, tag_owners = self._owned_identities(connection)
+        incoming_collections = {str(item.id) for item in document.collections}
+        for collection_id in incoming_collections:
+            for tab_id, owner in list(tab_owners.items()):
+                if owner == collection_id:
+                    del tab_owners[tab_id]
+            for tag_id, owner in list(tag_owners.items()):
+                if owner == collection_id:
+                    del tag_owners[tag_id]
+
+        for collection in document.collections:
+            collection_id = str(collection.id)
+            for tab in collection.tabs:
+                tab_id = str(tab.id)
+                owner = tab_owners.get(tab_id)
+                if owner is not None and owner != collection_id:
+                    raise ValueError(
+                        f"tab {tab_id} already belongs to another collection"
+                    )
+                tab_owners[tab_id] = collection_id
+            for tag in collection.tags:
+                tag_id = str(tag.id)
+                owner = tag_owners.get(tag_id)
+                if owner is not None and owner != collection_id:
+                    raise ValueError(
+                        f"tag {tag_id} already belongs to another collection"
+                    )
+                tag_owners[tag_id] = collection_id
+
     def import_document(
         self,
         document: ExportDocument,
@@ -126,8 +174,11 @@ class Vault:
                 connection.execute("DELETE FROM collections")
                 connection.execute("DELETE FROM sessions")
                 connection.execute("DELETE FROM proposals")
-                connection.execute("DELETE FROM settings")
+                if write_settings:
+                    connection.execute("DELETE FROM settings")
                 connection.execute("DELETE FROM metadata")
+            else:
+                self._assert_merge_identities(connection, document)
             connection.executemany(
                 """
                 INSERT INTO collections(id, updated_at, payload)
@@ -186,7 +237,16 @@ class Vault:
     def append_collection(self, collection: Collection) -> None:
         """Atomically persist one newly captured collection."""
         Collection.model_validate(collection.model_dump(by_alias=True, mode="json"))
+        document = ExportDocument(
+            schema_version=1,
+            exported_at=collection.updated_at,
+            collections=(collection,),
+            sessions=(),
+            proposals=(),
+            settings=DEFAULT_SETTINGS,
+        )
         with self.connect() as connection, connection:
+            self._assert_merge_identities(connection, document)
             connection.execute(
                 """
                 INSERT INTO collections(id, updated_at, payload)

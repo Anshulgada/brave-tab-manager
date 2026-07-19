@@ -5,7 +5,7 @@ import type { SwitchboardSnapshot } from './switchboard';
 export type TabAction = 'close' | 'discard';
 
 const tabActionSchema = z.enum(['close', 'discard']);
-const positiveInt = z.number().int();
+const positiveInt = z.number().int().positive();
 
 export const switchboardRequestSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('switchboard/get') }),

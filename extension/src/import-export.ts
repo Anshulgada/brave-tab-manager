@@ -104,15 +104,21 @@ export async function importExportDocument(
     if (replace) {
       await Promise.all(tables.map((table) => table.clear()));
     } else {
-      for (const collection of document.collections) {
-        await database.tabs
-          .where('collectionId')
-          .equals(collection.id)
-          .delete();
-        await database.tags
-          .where('collectionId')
-          .equals(collection.id)
-          .delete();
+      for (const tab of tabs) {
+        const existing = await database.tabs.get(tab.id);
+        if (existing && existing.collectionId !== tab.collectionId) {
+          throw new Error(
+            `Tab ${tab.id} already belongs to another collection`,
+          );
+        }
+      }
+      for (const tag of tags) {
+        const existing = await database.tags.get(tag.id);
+        if (existing && existing.collectionId !== tag.collectionId) {
+          throw new Error(
+            `Tag ${tag.id} already belongs to another collection`,
+          );
+        }
       }
     }
     await database.collections.bulkPut(collections);
@@ -120,7 +126,19 @@ export async function importExportDocument(
     await database.tags.bulkPut(tags);
     await database.sessions.bulkPut(sessions);
     await database.proposals.bulkPut(proposals);
-    await database.settings.put(settings);
+    if (replace) {
+      await database.settings.put(settings);
+    } else {
+      const existing = await database.settings.get(SETTINGS_ID);
+      if (existing) {
+        await database.settings.put({
+          ...existing,
+          lastImportedAt: document.exportedAt,
+        });
+      } else {
+        await database.settings.put(settings);
+      }
+    }
   });
 
   return document;

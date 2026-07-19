@@ -52,6 +52,7 @@ function collectionMatches(
 export function App() {
   const importInput = useRef<HTMLInputElement>(null);
   const loadGeneration = useRef(0);
+  const busyRef = useRef(false);
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>();
   const [section, setSection] = useState<LibrarySection>('collections');
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
@@ -180,6 +181,10 @@ export function App() {
       successMessage: string,
       clearSelection = true,
     ) => {
+      if (busyRef.current) {
+        return;
+      }
+      busyRef.current = true;
       setBusy(true);
       setError(undefined);
       setNotice(undefined);
@@ -197,6 +202,7 @@ export function App() {
             : 'The library action failed',
         );
       } finally {
+        busyRef.current = false;
         setBusy(false);
       }
     },
@@ -216,6 +222,10 @@ export function App() {
   };
 
   const restore = async (tabs: LibraryCollection['tabs'], label: string) => {
+    if (busyRef.current) {
+      return;
+    }
+    busyRef.current = true;
     setBusy(true);
     setError(undefined);
     setNotice(undefined);
@@ -233,6 +243,7 @@ export function App() {
           : 'Could not restore saved tabs',
       );
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -262,6 +273,10 @@ export function App() {
   };
 
   const downloadExport = async () => {
+    if (busyRef.current) {
+      return;
+    }
+    busyRef.current = true;
     setBusy(true);
     setError(undefined);
     try {
@@ -284,6 +299,7 @@ export function App() {
           : 'Could not export the library',
       );
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };

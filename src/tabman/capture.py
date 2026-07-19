@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import uuid4
 
 import httpx
 
@@ -55,21 +55,18 @@ def capture_collection(
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             continue
-        target_identity = item.get("id")
-        if not isinstance(target_identity, str) or not target_identity:
-            target_identity = f"{url}#{len(tabs)}"
         raw_favicon = item.get("faviconUrl")
         fav_icon = raw_favicon if isinstance(raw_favicon, str) else None
         if fav_icon is not None:
-            fav_scheme = urlsplit(fav_icon).scheme.casefold()
-            if fav_scheme not in {"http", "https"}:
+            fav_parsed = urlsplit(fav_icon)
+            if (
+                fav_parsed.scheme.casefold() not in {"http", "https"}
+                or not fav_parsed.hostname
+            ):
                 fav_icon = None
         tabs.append(
             Tab(
-                id=uuid5(
-                    NAMESPACE_URL,
-                    f"https://tabman.local/capture/{target_identity}",
-                ),
+                id=uuid4(),
                 title=title,
                 url=url,
                 hostname=parsed.hostname,

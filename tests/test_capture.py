@@ -47,6 +47,28 @@ def test_capture_reads_metadata_without_browser_control_calls() -> None:
     assert collection.tabs[1].fav_icon_url == "https://example.com/favicon.ico"
 
 
+def test_capture_drops_http_favicons_without_a_host() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "type": "page",
+                    "title": "Example",
+                    "url": "https://example.com/",
+                    "faviconUrl": "https://",
+                }
+            ],
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        collection = capture_collection(
+            "http://127.0.0.1:9222", "Captured", client=client
+        )
+
+    assert collection.tabs[0].fav_icon_url is None
+
+
 @pytest.mark.parametrize(
     "endpoint",
     [

@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -82,3 +83,46 @@ def test_vault_revalidates_copied_documents_before_writing(tmp_path: Path) -> No
         vault.import_document(invalid_copy, replace=True)
 
     assert vault.counts()["collections"] == 1
+
+
+def test_merge_rejects_tab_ids_owned_by_another_collection(tmp_path: Path) -> None:
+    source = read_document(FIXTURE)
+    vault = Vault(tmp_path / "vault.sqlite3")
+    vault.import_document(source)
+    stolen_tab = source.collections[0].tabs[0].model_copy(update={"tag_ids": ()})
+    collision = source.model_copy(
+        update={
+            "collections": (
+                source.collections[0].model_copy(
+                    update={
+                        "id": UUID("10000000-0000-4000-8000-000000000088"),
+                        "name": "Collision",
+                        "tabs": (stolen_tab,),
+                        "tags": (),
+                    }
+                ),
+            ),
+            "sessions": (),
+            "proposals": (),
+        }
+    )
+
+    with pytest.raises(ValueError, match="already belongs to another collection"):
+        vault.import_document(collision)
+
+    assert vault.export_document().collections == source.collections
+
+
+def test_legacy_replace_preserves_existing_settings(tmp_path: Path) -> None:
+    source = read_document(FIXTURE)
+    vault = Vault(tmp_path / "vault.sqlite3")
+    vault.import_document(source)
+    custom = source.settings.model_copy(update={"theme": "dark"})
+    vault.import_document(
+        source.model_copy(update={"settings": custom}),
+        replace=True,
+        write_settings=True,
+    )
+    vault.import_document(source, replace=True, write_settings=False)
+
+    assert vault.export_document().settings.theme == "dark"

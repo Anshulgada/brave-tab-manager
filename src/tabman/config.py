@@ -53,13 +53,16 @@ def load_config() -> AppConfig:
         raise ValueError(f"cannot read configuration: {error}") from error
     if not isinstance(payload, dict):
         raise ValueError("configuration must be a JSON object")
+    include_full_url = payload.get("includeFullUrlInAi", False)
+    if not isinstance(include_full_url, bool):
+        raise ValueError("includeFullUrlInAi must be a JSON boolean")
     return AppConfig(
         vault_path=Path(payload.get("vaultPath", default_vault_path())),
         provider=str(payload.get("provider", "deterministic")),
         mistral_base_url=str(
             payload.get("mistralBaseUrl", "https://api.mistral.ai/v1")
         ).rstrip("/"),
-        include_full_url_in_ai=bool(payload.get("includeFullUrlInAi", False)),
+        include_full_url_in_ai=include_full_url,
     )
 
 

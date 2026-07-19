@@ -351,18 +351,18 @@ def apply_proposal(document: ExportDocument, proposal: Proposal) -> ExportDocume
             )
         )
 
-    emitted_names = {item.name.casefold() for item in collections}
+    emitted_ids = {item.id for item in collections}
     for collection in document.collections:
-        if collection.name.casefold() in emitted_names:
+        if collection.id in emitted_ids:
             continue
         collections.append(
             collection
-            if not collection.tabs
+            if not collection.tabs and not collection.tags
             else collection.model_copy(
                 update={"tabs": (), "tags": (), "updated_at": now}
             )
         )
-        emitted_names.add(collection.name.casefold())
+        emitted_ids.add(collection.id)
 
     applied = proposal.model_copy(update={"status": ProposalStatus.APPLIED})
     payload = document.model_dump(by_alias=True, mode="json")
@@ -374,7 +374,10 @@ def apply_proposal(document: ExportDocument, proposal: Proposal) -> ExportDocume
             ],
             "proposals": [
                 item.model_dump(by_alias=True, mode="json")
-                for item in (*document.proposals, applied)
+                for item in (
+                    *(item for item in document.proposals if item.id != proposal.id),
+                    applied,
+                )
             ],
         }
     )
