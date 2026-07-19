@@ -1,0 +1,118 @@
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[project]
+name = "tabman"
+version = "0.3.0"
+description = "Local-first tab collections and automation for Chromium browsers."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Anshul Gada" },
+]
+keywords = [
+    "brave",
+    "chromium",
+    "tabs",
+    "tab-manager",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Anshulgada/brave-tab-manager"
+Issues = "https://github.com/Anshulgada/brave-tab-manager/issues"
+
+[project.scripts]
+tabman = "tabman.cli:main"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.3",
+    "detect-secrets>=1.5.0",
+    "pip-audit>=2.10.0",
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.14",
+    "ty>=0.0.16",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = [
+    "src",
+    "tests",
+]
+
+[tool.ruff.lint]
+select = [
+    "B",
+    "C4",
+    "E",
+    "F",
+    "I",
+    "PIE",
+    "RUF",
+    "SIM",
+    "UP",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+include = [
+    "src",
+    "tests",
+    "scripts",
+]
+
+[tool.bandit]
+exclude_dirs = [
+    ".venv",
+    "tests",
+]
+skips = ["B101"]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "-ra",
+]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require external services, browsers, or credentials",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["tabman"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 80
