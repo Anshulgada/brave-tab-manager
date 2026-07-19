@@ -1,6 +1,6 @@
 # Tabman Rebuild — Task Checklist
 
-> **Status:** Phases **0–4** complete · product implementation underway · updated 2026-07-19
+> **Status:** Phases **0–5** complete · product implementation underway · updated 2026-07-19
 > **Branch:** `feat/rebuild` (create from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
 > **Product:** Sideload WXT+React extension (switchboard + Raindrop-like library) + SokWatch-grade Python CLI vault
 
@@ -85,13 +85,13 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 ## Phase 5 — Extension Switchboard (Side Panel)
 
-- [ ] **5.1** Background service worker messaging + tab/window queries
-- [ ] **5.2** Side panel: list all windows with counts
-- [ ] **5.3** Cross-window search + activate/focus tab
-- [ ] **5.4** Multi-select close / discard / move / tab groups
-- [ ] **5.5** Cross-window duplicate detection
-- [ ] **5.6** Park window / park selection → collection
-- [ ] **5.7** Keyboard navigation + empty/loading/error states
+- [x] **5.1** Background service worker messaging + tab/window queries
+- [x] **5.2** Side panel: list all windows with counts
+- [x] **5.3** Cross-window search + activate/focus tab
+- [x] **5.4** Multi-select close / discard / move / tab groups
+- [x] **5.5** Cross-window duplicate detection
+- [x] **5.6** Park window / park selection → collection
+- [x] **5.7** Keyboard navigation + empty/loading/error states
 
 **Phase 5 gate:** Sideload in Brave; find and focus a tab in another window; park a selection.
 
