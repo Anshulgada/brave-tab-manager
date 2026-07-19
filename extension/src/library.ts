@@ -65,8 +65,10 @@ export async function loadLibrary(
       if (!settings) {
         throw new Error('Library settings are unavailable');
       }
+      const parking = new Set(settings.parkingCollectionIds ?? []);
       return {
         collections: collections
+          .filter((collection) => !parking.has(collection.id))
           .sort(
             (left, right) =>
               Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
@@ -186,9 +188,16 @@ export async function deleteTabs(
   const ids = [...new Set(tabIds)];
   await database.transaction(
     'rw',
-    [database.tabs, database.collections],
+    [database.tabs, database.collections, database.settings],
     async () => {
       const records = await database.tabs.bulkGet(ids);
+      const settings = await database.settings.get('settings');
+      const parking = new Set(settings?.parkingCollectionIds ?? []);
+      if (records.some((tab) => tab && parking.has(tab.collectionId))) {
+        throw new Error(
+          'Cannot delete tabs while their collection is still being parked',
+        );
+      }
       const collectionIds = new Set(
         records.flatMap((tab) => (tab ? [tab.collectionId] : [])),
       );

@@ -284,14 +284,22 @@ def apply_proposal(document: ExportDocument, proposal: Proposal) -> ExportDocume
     if set(suggestions) != set(all_tabs):
         raise OrganizeError("proposal must map every vault tab exactly once")
 
-    name_keys = [item.name.casefold() for item in document.collections]
+    name_keys = [
+        item.name.casefold()
+        for item in document.collections
+        if item.status == CollectionStatus.ACTIVE
+    ]
     if len(name_keys) != len(set(name_keys)):
         raise OrganizeError(
             "cannot apply when collections differ only by letter case; "
             "rename them first"
         )
 
-    existing_by_name = {item.name.casefold(): item for item in document.collections}
+    existing_by_name = {
+        item.name.casefold(): item
+        for item in document.collections
+        if item.status == CollectionStatus.ACTIVE
+    }
     target_tabs: defaultdict[str, list[Tab]] = defaultdict(list)
     target_names: dict[str, str] = {}
     target_tags: defaultdict[str, dict[str, str]] = defaultdict(dict)
@@ -352,7 +360,7 @@ def apply_proposal(document: ExportDocument, proposal: Proposal) -> ExportDocume
                 color=existing.color if existing else None,
                 created_at=existing.created_at if existing else now,
                 updated_at=now,
-                status=existing.status if existing else CollectionStatus.ACTIVE,
+                status=CollectionStatus.ACTIVE,
                 tags=tags,
                 tabs=rebuilt_tabs,
             )
@@ -372,6 +380,17 @@ def apply_proposal(document: ExportDocument, proposal: Proposal) -> ExportDocume
         emitted_ids.add(collection.id)
 
     applied = proposal.model_copy(update={"status": ProposalStatus.APPLIED})
+    retained_proposals = []
+    for item in document.proposals:
+        if item.id == proposal.id:
+            continue
+        if item.status == ProposalStatus.PREVIEW:
+            retained_proposals.append(
+                item.model_copy(update={"status": ProposalStatus.REJECTED})
+            )
+        else:
+            retained_proposals.append(item)
+    retained_proposals.append(applied)
     payload = document.model_dump(by_alias=True, mode="json")
     payload.update(
         {
@@ -381,10 +400,7 @@ def apply_proposal(document: ExportDocument, proposal: Proposal) -> ExportDocume
             ],
             "proposals": [
                 item.model_dump(by_alias=True, mode="json")
-                for item in (
-                    *(item for item in document.proposals if item.id != proposal.id),
-                    applied,
-                )
+                for item in retained_proposals
             ],
         }
     )

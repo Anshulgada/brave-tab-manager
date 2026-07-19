@@ -69,6 +69,41 @@ def test_capture_drops_http_favicons_without_a_host() -> None:
     assert collection.tabs[0].fav_icon_url is None
 
 
+def test_capture_skips_credentialed_urls_without_aborting() -> None:
+    secret_page = "https://user:unused@example.com/private"  # pragma: allowlist secret
+    secret_icon = (
+        "https://user:unused@example.com/favicon.ico"  # pragma: allowlist secret
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "type": "page",
+                    "title": "Secret",
+                    "url": secret_page,
+                    "faviconUrl": "https://example.com/favicon.ico",
+                },
+                {
+                    "type": "page",
+                    "title": "Safe",
+                    "url": "https://example.com/public",
+                    "faviconUrl": secret_icon,
+                },
+            ],
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        collection = capture_collection(
+            "http://127.0.0.1:9222", "Captured", client=client
+        )
+
+    assert len(collection.tabs) == 1
+    assert collection.tabs[0].title == "Safe"
+    assert collection.tabs[0].fav_icon_url is None
+
+
 @pytest.mark.parametrize(
     "endpoint",
     [

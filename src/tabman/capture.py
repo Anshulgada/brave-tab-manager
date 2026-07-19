@@ -53,7 +53,12 @@ def capture_collection(
         if not isinstance(title, str) or not isinstance(url, str):
             continue
         parsed = urlsplit(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             continue
         raw_favicon = item.get("faviconUrl")
         fav_icon = raw_favicon if isinstance(raw_favicon, str) else None
@@ -62,6 +67,8 @@ def capture_collection(
             if (
                 fav_parsed.scheme.casefold() not in {"http", "https"}
                 or not fav_parsed.hostname
+                or fav_parsed.username is not None
+                or fav_parsed.password is not None
             ):
                 fav_icon = None
         tabs.append(

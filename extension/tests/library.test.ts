@@ -134,6 +134,33 @@ describe('local collection library', () => {
     expect(await database.collections.count()).toBe(0);
   });
 
+  it('hides and protects a collection while parking is in progress', async () => {
+    const database = createDatabase();
+    const collectionId = await createCollection(database, 'Parking');
+    const tabId = '10000000-0000-4000-8000-000000000099';
+    await database.tabs.add(tabRecord(tabId, collectionId, 0));
+    const settings = await database.settings.get('settings');
+    if (!settings) {
+      throw new Error('Settings must exist');
+    }
+    await database.settings.put({
+      ...settings,
+      parkingCollectionIds: [collectionId],
+    });
+
+    await expect(loadLibrary(database)).resolves.toMatchObject({
+      collections: [],
+    });
+    await expect(deleteTabs(database, [tabId])).rejects.toThrow(
+      /still being parked/,
+    );
+    await expect(
+      permanentlyDeleteCollections(database, [collectionId]),
+    ).rejects.toThrow(/still being parked/);
+    expect(await database.tabs.count()).toBe(1);
+    expect(await database.collections.count()).toBe(1);
+  });
+
   it('reports partial restore failures without stopping the batch', async () => {
     const create = vi
       .fn()

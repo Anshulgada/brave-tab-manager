@@ -194,6 +194,63 @@ describe('Tabman database import and export', () => {
     );
   });
 
+  it('rejects merges that reuse a collection tab id in a session', async () => {
+    const database = createDatabase();
+    const fixture = loadFixture();
+    await importExportDocument(database, fixture);
+
+    const firstTab = fixture.collections[0]?.tabs[0];
+    const firstSession = fixture.sessions[0];
+    if (!firstTab || !firstSession) {
+      throw new Error('Fixture must contain a tab and session');
+    }
+    const collision = structuredClone(fixture);
+    collision.collections = [];
+    collision.sessions = [
+      {
+        ...firstSession,
+        tabs: [{ ...firstTab, tagIds: [] }],
+      },
+    ];
+    collision.proposals = [];
+
+    await expect(importExportDocument(database, collision)).rejects.toThrow(
+      /already belongs to another collection or session/,
+    );
+    expectSemanticExport(await exportDatabase(database), fixture);
+  });
+
+  it('rejects a second tag id with the same collection-local name', async () => {
+    const database = createDatabase();
+    const fixture = loadFixture();
+    await importExportDocument(database, fixture);
+
+    const collection = fixture.collections[0];
+    const firstTag = collection?.tags[0];
+    if (!collection || !firstTag) {
+      throw new Error('Fixture must contain a collection tag');
+    }
+    const collision = structuredClone(fixture);
+    collision.collections = [
+      {
+        ...collection,
+        tabs: [],
+        tags: [
+          {
+            ...firstTag,
+            id: '20000000-0000-4000-8000-000000000099',
+          },
+        ],
+      },
+    ];
+    collision.sessions = [];
+    collision.proposals = [];
+
+    await expect(importExportDocument(database, collision)).rejects.toThrow(
+      /already exists in this collection/,
+    );
+  });
+
   it('keeps local settings when merging an export', async () => {
     const database = createDatabase();
     const fixture = loadFixture();

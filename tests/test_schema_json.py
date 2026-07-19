@@ -41,6 +41,17 @@ def test_json_schema_rejects_javascript_urls(
     assert not validator.is_valid(document)
 
 
+def test_json_schema_rejects_credentialed_urls(
+    validator: Draft202012Validator,
+) -> None:
+    document = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    credentialed = (
+        "https://user:unused@developer.chrome.com/docs/"  # pragma: allowlist secret
+    )
+    document["collections"][0]["tabs"][0]["url"] = credentialed
+    assert not validator.is_valid(document)
+
+
 def test_json_schema_rejects_empty_ai_provider(
     validator: Draft202012Validator,
 ) -> None:

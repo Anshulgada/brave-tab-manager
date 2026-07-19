@@ -7,7 +7,7 @@ from uuid import UUID
 import httpx
 import pytest
 
-from tabman.models import Proposal, ProposalItem, ProposalStatus
+from tabman.models import CollectionStatus, Proposal, ProposalItem, ProposalStatus
 from tabman.organize import (
     DeterministicProvider,
     MistralProvider,
@@ -211,3 +211,55 @@ def test_deterministic_provider_handles_blank_hostnames() -> None:
 
     assert suggestions[0].collection_name == "about"
     assert suggestions[0].tags == ()
+
+
+def test_apply_rejects_older_preview_proposals() -> None:
+    document = read_document(FIXTURE)
+    first = create_proposal(
+        document,
+        DeterministicProvider(),
+        include_full_url=False,
+    )
+    second = create_proposal(
+        document,
+        DeterministicProvider(),
+        include_full_url=False,
+    )
+    with_previews = document.model_copy(update={"proposals": (first, second)})
+
+    applied = apply_proposal(with_previews, second)
+
+    statuses = {item.id: item.status for item in applied.proposals}
+    assert statuses[first.id] == ProposalStatus.REJECTED
+    assert statuses[second.id] == ProposalStatus.APPLIED
+
+
+def test_apply_does_not_bury_tabs_in_trashed_collections() -> None:
+    document = read_document(FIXTURE)
+    trashed = document.collections[0].model_copy(
+        update={
+            "id": UUID("10000000-0000-4000-8000-000000000099"),
+            "name": "wxt.dev",
+            "status": CollectionStatus.TRASHED,
+            "tabs": (),
+            "tags": (),
+        }
+    )
+    document = document.model_copy(
+        update={"collections": (*document.collections, trashed)}
+    )
+    proposal = create_proposal(
+        document,
+        DeterministicProvider(),
+        include_full_url=False,
+    )
+
+    applied = apply_proposal(document, proposal)
+    active = next(item for item in applied.collections if item.name == "wxt.dev")
+
+    assert active.status == CollectionStatus.ACTIVE
+    assert active.id != trashed.id
+    assert any(
+        item.id == trashed.id and item.status == CollectionStatus.TRASHED
+        for item in applied.collections
+    )

@@ -89,7 +89,12 @@ def _clean_record(record: dict[str, Any], index: int) -> dict[str, Any]:
     if not isinstance(title, str) or not isinstance(url, str):
         raise LegacyImportError(f"legacy record {index} requires string title and URL")
     parsed = urlsplit(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
         raise LegacyImportError(f"legacy record {index} has an unsafe or invalid URL")
     if not isinstance(category, str) or not category.strip():
         category = "Imported"

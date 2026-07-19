@@ -96,7 +96,7 @@
         "url": {
           "type": "string",
           "maxLength": 8192,
-          "pattern": "^(https?|chrome|chrome-extension|brave|edge|about):"
+          "pattern": "^(https?://[^@\\s]+|(chrome|chrome-extension|brave|edge|about):.*)$"
         },
         "hostname": {
           "type": "string",
@@ -107,7 +107,7 @@
             "string",
             "null"
           ],
-          "pattern": "^(https?|chrome|chrome-extension|brave|edge|about):"
+          "pattern": "^(https?://[^@\\s]+|(chrome|chrome-extension|brave|edge|about):.*)$"
         },
         "pinned": {
           "type": "boolean"

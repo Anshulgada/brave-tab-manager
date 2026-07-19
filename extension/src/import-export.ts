@@ -111,20 +111,65 @@ export async function importExportDocument(
       }
       await Promise.all(tables.map((table) => table.clear()));
     } else {
-      for (const tab of tabs) {
-        const existing = await database.tabs.get(tab.id);
-        if (existing && existing.collectionId !== tab.collectionId) {
-          throw new Error(
-            `Tab ${tab.id} already belongs to another collection`,
-          );
+      const tabOwners = new Map<string, string>();
+      for (const existing of await database.tabs.toArray()) {
+        tabOwners.set(existing.id, `collection:${existing.collectionId}`);
+      }
+      for (const session of await database.sessions.toArray()) {
+        for (const tab of session.tabs) {
+          tabOwners.set(tab.id, `session:${session.id}`);
         }
       }
+      for (const tab of tabs) {
+        const owner = `collection:${tab.collectionId}`;
+        const existingOwner = tabOwners.get(tab.id);
+        if (existingOwner && existingOwner !== owner) {
+          throw new Error(
+            `Tab ${tab.id} already belongs to another collection or session`,
+          );
+        }
+        tabOwners.set(tab.id, owner);
+      }
+      for (const session of sessions) {
+        const owner = `session:${session.id}`;
+        for (const tab of session.tabs) {
+          const existingOwner = tabOwners.get(tab.id);
+          if (existingOwner && existingOwner !== owner) {
+            throw new Error(
+              `Tab ${tab.id} already belongs to another collection or session`,
+            );
+          }
+          tabOwners.set(tab.id, owner);
+        }
+      }
+      const existingTags = await database.tags.toArray();
       for (const tag of tags) {
-        const existing = await database.tags.get(tag.id);
+        const existing = existingTags.find(
+          (candidate) => candidate.id === tag.id,
+        );
         if (existing && existing.collectionId !== tag.collectionId) {
           throw new Error(
             `Tag ${tag.id} already belongs to another collection`,
           );
+        }
+        const sameName = existingTags.find(
+          (candidate) =>
+            candidate.collectionId === tag.collectionId &&
+            candidate.id !== tag.id &&
+            candidate.name.toLocaleLowerCase() === tag.name.toLocaleLowerCase(),
+        );
+        if (sameName) {
+          throw new Error(
+            `Tag name "${tag.name}" already exists in this collection`,
+          );
+        }
+        const existingIndex = existingTags.findIndex(
+          (candidate) => candidate.id === tag.id,
+        );
+        if (existingIndex >= 0) {
+          existingTags[existingIndex] = tag;
+        } else {
+          existingTags.push(tag);
         }
       }
     }
