@@ -1,6 +1,6 @@
 # Tabman Rebuild — Task Checklist
 
-> **Status:** Phases **0–2** complete · product implementation not started · updated 2026-07-19
+> **Status:** Phases **0–4** complete · product implementation underway · updated 2026-07-19
 > **Branch:** `feat/rebuild` (create from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
 > **Product:** Sideload WXT+React extension (switchboard + Raindrop-like library) + SokWatch-grade Python CLI vault
 
@@ -54,13 +54,13 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 ## Phase 3 — Shared Schema + Data Model
 
-- [ ] **3.1** Define collection / tab / tag / proposal / settings schema in `packages/schema/`
-- [ ] **3.2** Python Pydantic models generated/mirrored from schema
-- [ ] **3.3** Extension Zod schemas mirrored from schema
-- [ ] **3.4** CLI vault: SQLite or JSONL source of truth + Markdown export-only
-- [ ] **3.5** Extension Dexie/IndexedDB with migrations
-- [ ] **3.6** Import/export round-trip tests (fixture JSON)
-- [ ] **3.7** Legacy importer for old `all_tabs.md` / dated JSON (guarded)
+- [x] **3.1** Define collection / tab / tag / proposal / settings schema in `packages/schema/`
+- [x] **3.2** Python Pydantic models generated/mirrored from schema
+- [x] **3.3** Extension Zod schemas mirrored from schema
+- [x] **3.4** CLI vault: SQLite or JSONL source of truth + Markdown export-only
+- [x] **3.5** Extension Dexie/IndexedDB with migrations
+- [x] **3.6** Import/export round-trip tests (fixture JSON)
+- [x] **3.7** Legacy importer for old `all_tabs.md` / dated JSON (guarded)
 
 **Phase 3 gate:** CLI and extension can import the same fixture collection JSON.
 
@@ -68,16 +68,16 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 ## Phase 4 — Python CLI Rebuild
 
-- [ ] **4.1** Subcommands: `capture`, `organize`, `search`, `export`, `import`, `config`, `version`
-- [ ] **4.2** Fix search output (no bogus await; print JSON/table)
-- [ ] **4.3** Provider adapters + Mistral base_url / key handling fixed
-- [ ] **4.4** Batch AI organize with Pydantic/PydanticAI structured output
-- [ ] **4.5** Secrets via env/config-dir/prompt only (not argv)
-- [ ] **4.6** Optional CDP capture with safe disconnect; import-from-export preferred path
-- [ ] **4.7** Domain matching via proper host suffix checks
-- [ ] **4.8** Unit tests with mocks; `@pytest.mark.integration` for live keys
-- [ ] **4.9** PyQt: optional extra or remove broken entrypoint
-- [ ] **4.10** Version single-sourced from `pyproject.toml`
+- [x] **4.1** Subcommands: `capture`, `organize`, `search`, `export`, `import`, `config`, `version`
+- [x] **4.2** Fix search output (no bogus await; print JSON/table)
+- [x] **4.3** Provider adapters + Mistral base_url / key handling fixed
+- [x] **4.4** Batch AI organize with Pydantic/PydanticAI structured output
+- [x] **4.5** Secrets via env/config-dir/prompt only (not argv)
+- [x] **4.6** Optional CDP capture with safe disconnect; import-from-export preferred path
+- [x] **4.7** Domain matching via proper host suffix checks
+- [x] **4.8** Unit tests with mocks; `@pytest.mark.integration` for live keys
+- [x] **4.9** PyQt: optional extra or remove broken entrypoint
+- [x] **4.10** Version single-sourced from `pyproject.toml`
 
 **Phase 4 gate:** `uv run tabman --help` and core subcommands work offline with fixtures.
 
