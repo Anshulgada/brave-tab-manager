@@ -7,6 +7,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.6]
+
+### Added
+
+- Offline Tabman CLI with vault import/export, search, capture, and organize.
+
 ## [0.3.5]
 
 ### Added
