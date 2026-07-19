@@ -88,6 +88,8 @@ class Tab(ContractModel):
             raise ValueError("URL scheme is not allowed")
         if scheme in {"http", "https"} and not parsed.hostname:
             raise ValueError("HTTP URL must include a hostname")
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError("URL must not include credentials")
         return value
 
     @field_validator("tag_ids")

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -123,28 +122,34 @@ def import_legacy(path: Path) -> ExportDocument:
         raise LegacyImportError("legacy import accepts only .json, .md, or .markdown")
 
     captured_at = datetime.fromtimestamp(resolved.stat().st_mtime, tz=UTC)
-    grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    grouped: dict[str, tuple[str, list[dict[str, Any]]]] = {}
     seen_urls: set[str] = set()
     for index, record in enumerate(records, start=1):
         cleaned = _clean_record(record, index)
         if cleaned["url"] in seen_urls:
             continue
         seen_urls.add(cleaned["url"])
-        grouped[cleaned["category"]].append(cleaned)
+        key = cleaned["category"].casefold()
+        if key not in grouped:
+            grouped[key] = (cleaned["category"], [])
+        grouped[key][1].append(cleaned)
 
     collections: list[Collection] = []
-    for category, items in grouped.items():
+    for category_key, (category, items) in grouped.items():
         seen_tag_keys: set[str] = set()
         tag_names: list[str] = []
         for item in items:
             for name in item["tags"]:
-                key = name.casefold()
-                if key in seen_tag_keys:
+                tag_key = name.casefold()
+                if tag_key in seen_tag_keys:
                     continue
-                seen_tag_keys.add(key)
+                seen_tag_keys.add(tag_key)
                 tag_names.append(name)
         tags = tuple(
-            Tag(id=_stable_id("tag", f"{category}/{name.casefold()}"), name=name)
+            Tag(
+                id=_stable_id("tag", f"{category_key}/{name.casefold()}"),
+                name=name,
+            )
             for name in tag_names
         )
         tag_by_key = {tag.name.casefold(): tag.id for tag in tags}
@@ -166,7 +171,7 @@ def import_legacy(path: Path) -> ExportDocument:
         )
         collections.append(
             Collection(
-                id=_stable_id("collection", category.casefold()),
+                id=_stable_id("collection", category_key),
                 name=category,
                 description=f"Imported from {resolved.name}",
                 color=None,

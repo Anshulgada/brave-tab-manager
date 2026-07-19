@@ -102,6 +102,13 @@ export async function importExportDocument(
 
   await database.transaction('rw', tables, async () => {
     if (replace) {
+      const settingsRecord = await database.settings.get(SETTINGS_ID);
+      const parking = settingsRecord?.parkingCollectionIds ?? [];
+      if (parking.length > 0) {
+        throw new Error(
+          'Cannot replace the library while tabs are still being parked',
+        );
+      }
       await Promise.all(tables.map((table) => table.clear()));
     } else {
       for (const tab of tabs) {
@@ -237,6 +244,7 @@ export async function exportDatabase(
       const {
         id: _id,
         lastImportedAt: _lastImportedAt,
+        parkingCollectionIds: _parkingCollectionIds,
         ...settings
       } = settingsRecord;
 

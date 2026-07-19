@@ -107,7 +107,9 @@ def test_merge_rejects_tab_ids_owned_by_another_collection(tmp_path: Path) -> No
         }
     )
 
-    with pytest.raises(ValueError, match="already belongs to another collection"):
+    with pytest.raises(
+        ValueError, match="already belongs to another collection or session"
+    ):
         vault.import_document(collision)
 
     assert vault.export_document().collections == source.collections

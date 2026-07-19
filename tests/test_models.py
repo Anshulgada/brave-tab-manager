@@ -44,3 +44,15 @@ def test_contract_rejects_dangling_tag_reference() -> None:
 
     with pytest.raises(ValidationError, match="outside its collection"):
         ExportDocument.model_validate(source)
+
+
+def test_contract_rejects_urls_with_embedded_credentials() -> None:
+    source = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    # Credentialed URLs must be rejected so vaults never persist userinfo.
+    credentialed = (
+        "https://user:unused@developer.chrome.com/docs/"  # pragma: allowlist secret
+    )
+    source["collections"][0]["tabs"][0]["url"] = credentialed
+
+    with pytest.raises(ValidationError, match="credentials"):
+        ExportDocument.model_validate(source)

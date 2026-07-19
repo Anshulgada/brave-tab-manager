@@ -113,40 +113,48 @@ class Vault:
     def _owned_identities(
         self, connection: sqlite3.Connection
     ) -> tuple[dict[str, str], dict[str, str]]:
-        """Map existing tab/tag IDs to the collection that currently owns them."""
+        """Map existing tab/tag IDs to the collection or session that owns them."""
         tab_owners: dict[str, str] = {}
         tag_owners: dict[str, str] = {}
         for row in connection.execute("SELECT id, payload FROM collections"):
             collection = Collection.model_validate_json(row["payload"])
-            collection_id = str(collection.id)
+            collection_id = f"collection:{collection.id}"
             for tab in collection.tabs:
                 tab_owners[str(tab.id)] = collection_id
             for tag in collection.tags:
                 tag_owners[str(tag.id)] = collection_id
+        for row in connection.execute("SELECT id, payload FROM sessions"):
+            session = Session.model_validate_json(row["payload"])
+            session_id = f"session:{session.id}"
+            for tab in session.tabs:
+                tab_owners[str(tab.id)] = session_id
         return tab_owners, tag_owners
 
     def _assert_merge_identities(
         self, connection: sqlite3.Connection, document: ExportDocument
     ) -> None:
-        """Reject merges that would duplicate tab/tag IDs across collections."""
+        """Reject merges that duplicate tab/tag IDs across collections or sessions."""
         tab_owners, tag_owners = self._owned_identities(connection)
-        incoming_collections = {str(item.id) for item in document.collections}
-        for collection_id in incoming_collections:
+        incoming_collections = {
+            f"collection:{item.id}" for item in document.collections
+        }
+        incoming_sessions = {f"session:{item.id}" for item in document.sessions}
+        for owner_key in (*incoming_collections, *incoming_sessions):
             for tab_id, owner in list(tab_owners.items()):
-                if owner == collection_id:
+                if owner == owner_key:
                     del tab_owners[tab_id]
             for tag_id, owner in list(tag_owners.items()):
-                if owner == collection_id:
+                if owner == owner_key:
                     del tag_owners[tag_id]
 
         for collection in document.collections:
-            collection_id = str(collection.id)
+            collection_id = f"collection:{collection.id}"
             for tab in collection.tabs:
                 tab_id = str(tab.id)
                 owner = tab_owners.get(tab_id)
                 if owner is not None and owner != collection_id:
                     raise ValueError(
-                        f"tab {tab_id} already belongs to another collection"
+                        f"tab {tab_id} already belongs to another collection or session"
                     )
                 tab_owners[tab_id] = collection_id
             for tag in collection.tags:
@@ -157,6 +165,17 @@ class Vault:
                         f"tag {tag_id} already belongs to another collection"
                     )
                 tag_owners[tag_id] = collection_id
+
+        for session in document.sessions:
+            session_id = f"session:{session.id}"
+            for tab in session.tabs:
+                tab_id = str(tab.id)
+                owner = tab_owners.get(tab_id)
+                if owner is not None and owner != session_id:
+                    raise ValueError(
+                        f"tab {tab_id} already belongs to another collection or session"
+                    )
+                tab_owners[tab_id] = session_id
 
     def import_document(
         self,
@@ -354,7 +373,9 @@ def read_document(path: Path) -> ExportDocument:
 
 def write_document(path: Path, document: ExportDocument) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(document.to_json() + "\n", encoding="utf-8")
+    temporary = path.with_name(f"{path.name}.tmp")
+    temporary.write_text(document.to_json() + "\n", encoding="utf-8")
+    temporary.replace(path)
 
 
 def document_as_dict(document: ExportDocument) -> dict[str, Any]:

@@ -111,7 +111,13 @@ def import_command(
             replace=replace_existing,
             write_settings=not legacy,
         )
-    except (OSError, ValidationError, LegacyImportError, RuntimeError) as error:
+    except (
+        OSError,
+        ValidationError,
+        LegacyImportError,
+        RuntimeError,
+        ValueError,
+    ) as error:
         _fail(error)
     typer.echo(
         f"Imported {sum(len(item.tabs) for item in document.collections)} tabs "

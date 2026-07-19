@@ -37,6 +37,13 @@ const address = z
           code: 'custom',
           message: 'HTTP URL must include a hostname',
         });
+        return;
+      }
+      if (parsed.username || parsed.password) {
+        context.addIssue({
+          code: 'custom',
+          message: 'URL must not include credentials',
+        });
       }
     } catch {
       context.addIssue({

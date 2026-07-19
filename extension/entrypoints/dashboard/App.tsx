@@ -736,11 +736,14 @@ export function App() {
                   <h2>
                     {tagFilter
                       ? 'No tabs with this tag'
-                      : 'Collection is empty'}
+                      : query.trim()
+                        ? 'No matching tabs'
+                        : 'Collection is empty'}
                   </h2>
                   <p>
-                    Park tabs from the side panel, or import a Tabman JSON
-                    export.
+                    {query.trim() || tagFilter
+                      ? 'Try a different search or clear the tag filter.'
+                      : 'Park tabs from the side panel, or import a Tabman JSON export.'}
                   </p>
                 </div>
               ) : (

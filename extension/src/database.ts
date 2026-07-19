@@ -55,6 +55,8 @@ export interface SettingsRecord extends Settings {
   id: 'settings';
   /** Timestamp of the last imported export document. */
   lastImportedAt: string;
+  /** Collection IDs mid-park; not part of the shared export contract. */
+  parkingCollectionIds?: string[];
 }
 
 export function normalizeHostname(hostname: string): string {

@@ -147,6 +147,26 @@ describe('background switchboard service', () => {
     });
   });
 
+  it('activates using the tab live window instead of a stale snapshot id', async () => {
+    const browserMock = installBrowserMock();
+    browserMock.tabs.get.mockResolvedValue({
+      ...tab(3, 2),
+      windowId: 1,
+    });
+
+    await expect(
+      handleSwitchboardRequest({
+        type: 'switchboard/activate',
+        tabId: 3,
+        windowId: 2,
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(browserMock.windows.update).toHaveBeenCalledWith(1, {
+      focused: true,
+    });
+  });
+
   it('persists a selection before closing its browser tabs', async () => {
     const browserMock = installBrowserMock();
 

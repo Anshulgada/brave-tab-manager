@@ -137,30 +137,42 @@ async function moveTabs(
   );
 
   if (pinned.length > 0) {
-    const moved = await browser.tabs.move(pinned, { windowId, index: 0 });
-    const movedIds = new Set(
-      (Array.isArray(moved) ? moved : [moved]).flatMap((tab) =>
-        tab.id === undefined ? [] : [tab.id],
-      ),
-    );
-    for (const tabId of pinned) {
-      if (!movedIds.has(tabId)) {
+    try {
+      const moved = await browser.tabs.move(pinned, { windowId, index: 0 });
+      const movedIds = new Set(
+        (Array.isArray(moved) ? moved : [moved]).flatMap((tab) =>
+          tab.id === undefined ? [] : [tab.id],
+        ),
+      );
+      for (const tabId of pinned) {
+        if (!movedIds.has(tabId)) {
+          warnings.push(`Pinned tab ${tabId} could not be moved`);
+        }
+      }
+    } catch {
+      for (const tabId of pinned) {
         warnings.push(`Pinned tab ${tabId} could not be moved`);
       }
     }
   }
   if (unpinned.length > 0) {
-    const moved = await browser.tabs.move(unpinned, {
-      windowId,
-      index: -1,
-    });
-    const movedIds = new Set(
-      (Array.isArray(moved) ? moved : [moved]).flatMap((tab) =>
-        tab.id === undefined ? [] : [tab.id],
-      ),
-    );
-    for (const tabId of unpinned) {
-      if (!movedIds.has(tabId)) {
+    try {
+      const moved = await browser.tabs.move(unpinned, {
+        windowId,
+        index: -1,
+      });
+      const movedIds = new Set(
+        (Array.isArray(moved) ? moved : [moved]).flatMap((tab) =>
+          tab.id === undefined ? [] : [tab.id],
+        ),
+      );
+      for (const tabId of unpinned) {
+        if (!movedIds.has(tabId)) {
+          warnings.push(`Tab ${tabId} could not be moved`);
+        }
+      }
+    } catch {
+      for (const tabId of unpinned) {
         warnings.push(`Tab ${tabId} could not be moved`);
       }
     }
@@ -178,9 +190,18 @@ async function groupTabs(
   tabIds: number[],
   title: string,
 ): Promise<SwitchboardResponse> {
-  const tabs = await Promise.all(
-    requireTabIds(tabIds).map((tabId) => browser.tabs.get(tabId)),
+  const unique = requireTabIds(tabIds);
+  const results = await Promise.allSettled(
+    unique.map((tabId) => browser.tabs.get(tabId)),
   );
+  const warnings: string[] = [];
+  const tabs = results.flatMap((result, index) => {
+    if (result.status === 'rejected') {
+      warnings.push(`Tab ${unique[index] ?? 'unknown'} is no longer available`);
+      return [];
+    }
+    return [result.value];
+  });
   const byWindow = new Map<number, typeof tabs>();
   for (const tab of tabs) {
     const windowTabs = byWindow.get(tab.windowId) ?? [];
@@ -188,7 +209,6 @@ async function groupTabs(
     byWindow.set(tab.windowId, windowTabs);
   }
   let affected = 0;
-  const warnings: string[] = [];
   for (const [windowId, windowTabs] of byWindow) {
     const groupedIds = windowTabs.flatMap((tab) =>
       tab.id === undefined ? [] : [tab.id],
@@ -303,9 +323,19 @@ async function parkTabs(
       'rw',
       [database.collections, database.tabs, database.settings],
       async () => {
+        const existingSettings = await database.settings.get('settings');
+        const parkingCollectionIds = [
+          ...(existingSettings?.parkingCollectionIds ?? []),
+          collectionId,
+        ];
         await database.collections.add(collectionRecord);
         await database.tabs.bulkAdd(records);
-        if (!(await database.settings.get('settings'))) {
+        if (existingSettings) {
+          await database.settings.put({
+            ...existingSettings,
+            parkingCollectionIds,
+          });
+        } else {
           await database.settings.add({
             id: 'settings',
             lastImportedAt: now,
@@ -313,12 +343,14 @@ async function parkTabs(
             defaultView: 'list',
             includeFullUrlInAi: false,
             aiProvider: null,
+            parkingCollectionIds,
           });
         }
       },
     );
-  } finally {
+  } catch (error) {
     database.close();
+    throw error;
   }
 
   const closeResults = await Promise.allSettled(
@@ -331,6 +363,24 @@ async function parkTabs(
       );
     }
   }
+
+  try {
+    await database.transaction('rw', database.settings, async () => {
+      const existingSettings = await database.settings.get('settings');
+      if (!existingSettings?.parkingCollectionIds) {
+        return;
+      }
+      await database.settings.put({
+        ...existingSettings,
+        parkingCollectionIds: existingSettings.parkingCollectionIds.filter(
+          (id) => id !== collectionId,
+        ),
+      });
+    });
+  } finally {
+    database.close();
+  }
+
   await notifyLibraryChanged();
   await notifySwitchboardChanged();
   return {
@@ -348,10 +398,15 @@ export async function handleSwitchboardRequest(
     switch (request.type) {
       case 'switchboard/get':
         return await getSnapshot();
-      case 'switchboard/activate':
-        await browser.tabs.update(request.tabId, { active: true });
-        await browser.windows.update(request.windowId, { focused: true });
+      case 'switchboard/activate': {
+        const tab = await browser.tabs.get(request.tabId);
+        if (tab.id === undefined) {
+          throw new Error('Tab is no longer available');
+        }
+        await browser.tabs.update(tab.id, { active: true });
+        await browser.windows.update(tab.windowId, { focused: true });
         return { ok: true };
+      }
       case 'switchboard/action':
         return request.action === 'discard'
           ? await discardTabs(request.tabIds)

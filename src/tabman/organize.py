@@ -281,8 +281,15 @@ def apply_proposal(document: ExportDocument, proposal: Proposal) -> ExportDocume
         tab.id: tab for collection in document.collections for tab in collection.tabs
     }
     suggestions = {item.tab_id: item for item in proposal.items}
-    if not set(suggestions).issubset(all_tabs):
-        raise OrganizeError("proposal references tabs that are not in the vault")
+    if set(suggestions) != set(all_tabs):
+        raise OrganizeError("proposal must map every vault tab exactly once")
+
+    name_keys = [item.name.casefold() for item in document.collections]
+    if len(name_keys) != len(set(name_keys)):
+        raise OrganizeError(
+            "cannot apply when collections differ only by letter case; "
+            "rename them first"
+        )
 
     existing_by_name = {item.name.casefold(): item for item in document.collections}
     target_tabs: defaultdict[str, list[Tab]] = defaultdict(list)

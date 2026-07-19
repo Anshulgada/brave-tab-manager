@@ -160,8 +160,16 @@ export async function permanentlyDeleteCollections(
   const ids = [...new Set(collectionIds)];
   await database.transaction(
     'rw',
-    [database.collections, database.tabs, database.tags],
+    [database.collections, database.tabs, database.tags, database.settings],
     async () => {
+      const settings = await database.settings.get('settings');
+      const parking = new Set(settings?.parkingCollectionIds ?? []);
+      const blocked = ids.filter((collectionId) => parking.has(collectionId));
+      if (blocked.length > 0) {
+        throw new Error(
+          'Cannot permanently delete a collection while its tabs are still being parked',
+        );
+      }
       for (const collectionId of ids) {
         await database.tabs.where('collectionId').equals(collectionId).delete();
         await database.tags.where('collectionId').equals(collectionId).delete();
