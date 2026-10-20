@@ -1,14 +1,24 @@
-"""Run path-filtered pre-push gates for the Python and extension stacks."""
+"""Run path-filtered pre-push gates for the Python and extension stacks.
+
+The gates mirror the continuous integration jobs, so a branch is verified the
+same way it will be verified on main without spending any runner minutes.
+"""
 
 from __future__ import annotations
 
-import argparse
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+import rich_click as click
+
+from tabman.theme import CONTEXT_SETTINGS, apply_theme
 
 ROOT = Path(__file__).resolve().parents[1]
 ZERO_REF = "0" * 40
+
+apply_theme()
 
 
 def _git(*args: str) -> str:
@@ -47,13 +57,16 @@ def _run(command: list[str], cwd: Path = ROOT) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
-def main() -> int:
-    """Run only the gates affected by the outgoing paths."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--all", action="store_true", help="Run every pre-push gate")
-    args = parser.parse_args()
-
-    paths = changed_paths(args.all)
+@click.command(context_settings=CONTEXT_SETTINGS)
+@click.option(
+    "--all",
+    "check_all",
+    is_flag=True,
+    help="Run every gate instead of only the ones for the changed paths.",
+)
+def main(check_all: bool) -> None:
+    """Run the pre-push gates for the paths in the outgoing commit."""
+    paths = changed_paths(check_all)
     python_changed = _matches(
         paths,
         (
@@ -73,13 +86,12 @@ def main() -> int:
         ),
     )
 
+    local_ci = [sys.executable, str(ROOT / "scripts" / "ci_local.py")]
     if python_changed:
-        _run(["uv", "run", "pytest"])
+        _run([*local_ci, "python"])
     if extension_changed:
-        _run(["bun", "run", "build"], ROOT / "extension")
-
-    return 0
+        _run([*local_ci, "extension"])
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/rebuild]
-  pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read

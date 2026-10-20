@@ -11,7 +11,6 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import functools
 import http.server
 import shutil
@@ -19,10 +18,16 @@ import tempfile
 import threading
 from pathlib import Path
 
+import rich_click as click
+
+from tabman.theme import CONTEXT_SETTINGS, apply_theme
+
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "extension" / "output" / "chrome-mv3"
 STUB = ROOT / "scripts" / "preview_stub.js"
 PAGES = ("dashboard.html", "sidepanel.html")
+
+apply_theme()
 
 
 def build_preview(target: Path) -> Path:
@@ -59,27 +64,34 @@ def serve(directory: Path, port: int) -> http.server.ThreadingHTTPServer:
     return server
 
 
-def main() -> int:
-    """Run the preview server until interrupted."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--keep", action="store_true", help="keep the temporary copy")
-    args = parser.parse_args()
-
+@click.command(context_settings=CONTEXT_SETTINGS)
+@click.option(
+    "--port",
+    type=int,
+    default=8765,
+    show_default=True,
+    help="Port to serve the preview on.",
+)
+@click.option(
+    "--keep",
+    is_flag=True,
+    help="Keep the temporary copy of the build after stopping.",
+)
+def main(port: int, keep: bool) -> None:
+    """Serve the built extension pages for visual review."""
     workdir = Path(tempfile.mkdtemp(prefix="tabman-preview-"))
     directory = build_preview(workdir)
-    server = serve(directory, args.port)
-    print(f"dashboard: http://127.0.0.1:{args.port}/dashboard.html")
-    print(f"side panel: http://127.0.0.1:{args.port}/sidepanel.html")
-    print(f"serving from {directory} (ctrl-c to stop)")
+    server = serve(directory, port)
+    click.echo(f"dashboard: http://127.0.0.1:{port}/dashboard.html")
+    click.echo(f"side panel: http://127.0.0.1:{port}/sidepanel.html")
+    click.echo(f"serving from {directory} (ctrl-c to stop)")
     try:
         threading.Event().wait()
     except KeyboardInterrupt:
         server.shutdown()
-        if not args.keep:
+        if not keep:
             shutil.rmtree(workdir, ignore_errors=True)
-    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

@@ -262,6 +262,68 @@ Prerequisites:
 - Bun 1.4.3+ (for the extension)
 - Brave or another Chromium browser 114+
 
+### Run the checks locally
+
+The continuous integration workflow only runs when a commit lands on `main`, so every branch is verified on your machine first. One command runs exactly what the workflow runs:
+
+```powershell
+uv run python scripts\ci_local.py
+```
+
+Narrow it down when you only touched one stack, or let it work out what changed:
+
+```powershell
+uv run python scripts\ci_local.py python
+uv run python scripts\ci_local.py extension
+uv run python scripts\ci_local.py changed
+```
+
+The pre-push hook runs the same gates for the files you are about to push, so a branch cannot reach `main` unchecked. Every script in `scripts/` uses rich-click, so they all share the same look and the same options:
+
+```powershell
+uv run python scripts\ci_local.py --help
+uv run python scripts\pre_push.py --help
+uv run python scripts\preview_ui.py --help
+```
+
+```powershell
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+uv run bandit -q -r src
+cd extension
+bun run check
+bun run typecheck
+bun run test
+bun run build
+```
+
+### Run the workflow itself locally
+
+[act](https://github.com/nektos/act) (MIT) runs the real workflow file in a container, so a broken YAML or a bad action version fails before you push:
+
+```powershell
+winget install nektos.act   # Windows
+brew install act             # macOS
+sudo apt install act        # Debian and Ubuntu
+```
+
+```powershell
+uv run python scripts\ci_local.py --act
+```
+
+The same works as a subcommand: `uv run python scripts\ci_local.py act`.
+
+act needs Docker or Podman. On Windows, Podman is the free option. Two more open source tools are worth knowing:
+
+- [actionlint](https://github.com/rhysd/actionlint) checks the workflow files for mistakes without running them.
+- [zizmor](https://github.com/woodruffw/zizmor) audits the workflows for security problems such as unpinned actions and template injection.
+
+> This repository is public, so GitHub-hosted runners are free and unlimited for it. The workflow still runs only on `main` to keep the queue short and the feedback local.
+
+### Everyday commands
+
 ```powershell
 uv sync
 uv run pytest

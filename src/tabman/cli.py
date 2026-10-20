@@ -5,9 +5,7 @@ from __future__ import annotations
 import getpass
 import json
 import sqlite3
-import sys
 from collections.abc import Sequence
-from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
 
@@ -40,70 +38,29 @@ from tabman.config import (
 )
 from tabman.legacy import LegacyImportError, import_legacy
 from tabman.models import ExportDocument, ProposalStatus
+from tabman.theme import CONTEXT_SETTINGS, apply_theme, panel
 from tabman.vault import Vault, read_document, write_document
 
-CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 VaultPath = click.Path(dir_okay=False, path_type=Path)
 
 
-def _enable_utf8_output() -> None:
-    """Ask the terminal for UTF-8 so panel borders render as real box art.
-
-    Windows consoles still default to a legacy code page, and Rich falls back to
-    ASCII boxes when the stream cannot encode them.
-    """
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is None:
-            continue
-        encoding = (getattr(stream, "encoding", "") or "").casefold()
-        if encoding.startswith("utf"):
-            continue
-        with suppress(OSError, ValueError):
-            reconfigure(encoding="utf-8", errors="replace")
-
-
-_enable_utf8_output()
-
-# A colorful, boxed layout: every panel gets its own accent color, options and
-# commands read in bright cyan/magenta, and usage stays quiet.
-rich_click_config.MAX_WIDTH = 100
-rich_click_config.TEXT_MARKUP = "rich"
-rich_click_config.COMMANDS_BEFORE_OPTIONS = True
-rich_click_config.STYLE_OPTIONS_PANEL_BOX = "ROUNDED"
-rich_click_config.STYLE_COMMANDS_PANEL_BOX = "ROUNDED"
-rich_click_config.STYLE_ERRORS_PANEL_BOX = "ROUNDED"
-rich_click_config.STYLE_OPTIONS_PANEL_BORDER = "cyan"
-rich_click_config.STYLE_COMMANDS_PANEL_BORDER = "magenta"
-rich_click_config.STYLE_ERRORS_PANEL_BORDER = "red"
-rich_click_config.STYLE_OPTIONS_PANEL_TITLE_STYLE = "bold cyan"
-rich_click_config.STYLE_COMMANDS_PANEL_TITLE_STYLE = "bold magenta"
-rich_click_config.STYLE_OPTIONS_PANEL_PADDING = (0, 1)
-rich_click_config.STYLE_COMMANDS_PANEL_PADDING = (0, 1)
-rich_click_config.STYLE_USAGE = "dim"
-rich_click_config.STYLE_USAGE_COMMAND = "bold"
-rich_click_config.STYLE_COMMAND = "bold cyan"
-rich_click_config.STYLE_OPTION = "cyan"
-rich_click_config.STYLE_METAVAR = "magenta"
-rich_click_config.STYLE_HEADER_TEXT = "bold"
-rich_click_config.STYLE_EPILOG_TEXT = "dim"
-rich_click_config.ERRORS_SUGGESTION = None
-# Rich downgrades rounded boxes to square ones on legacy Windows consoles.
-# Tabman forces UTF-8 output, so keep the rounded art everywhere.
-rich_click_config.LEGACY_WINDOWS = False
+apply_theme()
 
 COMMAND_GROUPS: dict[str, list[CommandGroupDict]] = {
     "tabman": [
-        {"name": "Vault", "commands": ["import", "export", "search"]},
-        {"name": "Tabs", "commands": ["capture", "organize"]},
-        {"name": "Setup", "commands": ["config", "version"]},
+        panel("Vault", "import", "export", "search"),
+        panel("Tabs", "capture", "organize"),
+        panel("Setup", "config", "version"),
     ],
     "tabman config": [
-        {"name": "Read", "commands": ["show", "list-providers"]},
-        {
-            "name": "Write",
-            "commands": ["set", "set-key", "add-provider", "remove-provider"],
-        },
+        panel("Read", "show", "list-providers"),
+        panel(
+            "Write",
+            "set",
+            "set-key",
+            "add-provider",
+            "remove-provider",
+        ),
     ],
 }
 rich_click_config.COMMAND_GROUPS = COMMAND_GROUPS
