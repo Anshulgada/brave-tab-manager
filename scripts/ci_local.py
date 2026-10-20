@@ -36,6 +36,14 @@ PYTHON_STEPS: tuple[tuple[str, ...], ...] = (
     ("uv", "run", "ty", "check"),
     ("uv", "run", "pytest"),
     ("uv", "run", "bandit", "-q", "-r", "src"),
+    (
+        "uv",
+        "run",
+        "zizmor",
+        "--persona=regular",
+        "--min-severity=low",
+        ".github/workflows",
+    ),
 )
 
 EXTENSION_STEPS: tuple[tuple[str, ...], ...] = (
@@ -86,6 +94,20 @@ def _matches(paths: set[str], prefixes: tuple[str, ...]) -> bool:
     )
 
 
+def _run_actionlint() -> tuple[bool, str]:
+    """Run actionlint on the workflow files, when it is installed."""
+    if shutil.which("actionlint") is None:
+        print(
+            "actionlint is not installed, skipping the workflow lint.\n"
+            "  winget install rhysd.actionlint   (Windows)\n"
+            "  brew install actionlint            (macOS)\n"
+            "  go install github.com/rhysd/actionlint/cmd/actionlint@latest",
+            file=sys.stderr,
+        )
+        return True, "act (not installed, skipped)"
+    return _run(("actionlint",), ROOT)
+
+
 def _run_act() -> tuple[bool, str]:
     """Run the real workflow file locally with act, when it is installed."""
     if shutil.which("act") is None:
@@ -106,6 +128,7 @@ def _run_checks(*, python: bool, extension: bool, act: bool = False) -> int:
     if python:
         for step in PYTHON_STEPS:
             results.append(_run(step, ROOT))
+        results.append(_run_actionlint())
     if extension:
         for step in EXTENSION_STEPS:
             results.append(_run(step, EXTENSION))
