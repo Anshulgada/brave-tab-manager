@@ -74,3 +74,22 @@ def test_release_workflow_is_the_only_publisher() -> None:
     assert "tabmanextension-latest-chrome.zip" in workflow
     assert "scripts/install-extension.sh" in workflow
     assert not (ROOT / ".github" / "workflows" / "pypi-publish.yml").exists()
+
+
+def test_workflows_pin_current_action_versions() -> None:
+    deprecated = (
+        "actions/checkout@v4",
+        "actions/setup-node@v4",
+        "actions/upload-artifact@v4",
+        "actions/download-artifact@v4",
+    )
+    for workflow in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        text = read(workflow)
+        for action in deprecated:
+            assert action not in text, f"{workflow.name} still pins {action}"
+
+
+def test_workflows_use_the_visible_extension_output_directory() -> None:
+    for workflow in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        text = read(workflow)
+        assert "extension/.output" not in text
