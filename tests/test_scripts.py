@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 SCRIPTS = ROOT / "scripts"
 README = ROOT / "README.md"
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
-TESTING_BRANCH = "feat/rebuild"
+TESTING_BRANCH = "main"
 
 
 def read(path: Path) -> str:
@@ -40,15 +40,14 @@ def test_extension_installers_exist_for_every_platform() -> None:
     assert (SCRIPTS / "install-extension.sh").is_file()
 
 
-def test_readme_one_liners_point_at_the_testing_branch() -> None:
+def test_readme_one_liners_point_at_the_default_branch() -> None:
     readme = read(README)
 
     assert (
         f"raw.githubusercontent.com/Anshulgada/brave-tab-manager/{TESTING_BRANCH}"
         in readme
     )
-    assert "main/scripts/install.ps1" not in readme
-    assert "back to `/main/`" in readme
+    assert "feat/rebuild" not in readme
 
 
 def test_readme_documents_the_uv_install_paths() -> None:
