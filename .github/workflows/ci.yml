@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/rebuild]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.14.6
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Verify synchronized versions
+        run: uv run python scripts/check_versions.py
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run ty check
+
+      - name: Test
+        run: uv run pytest
+
+      - name: Security scan
+        run: uv run bandit -q -r src
+
+  extension:
+    name: Extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: extension/.node-version
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install dependencies
+        working-directory: extension
+        run: bun install --frozen-lockfile
+
+      - name: Check formatting and lint
+        working-directory: extension
+        run: bun run check
+
+      - name: Type check
+        working-directory: extension
+        run: bun run typecheck
+
+      - name: Test
+        working-directory: extension
+        run: bun run test
+
+      - name: Build
+        working-directory: extension
+        run: bun run build
+
+      - name: Create sideload archive
+        working-directory: extension
+        run: bun run zip
+
+      - name: Read package version
+        id: package-version
+        working-directory: extension
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload sideload archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: tabman-extension-${{ steps.package-version.outputs.version }}
+          path: extension/output/*.zip
+          if-no-files-found: error

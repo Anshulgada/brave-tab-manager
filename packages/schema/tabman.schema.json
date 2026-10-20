@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Anshulgada/brave-tab-manager/packages/schema/tabman.schema.json",
+  "title": "Tabman export document",
+  "description": "Versioned interchange contract shared by the Tabman CLI and extension.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "exportedAt",
+    "collections",
+    "sessions",
+    "proposals",
+    "settings"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "collections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/collection"
+      }
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/session"
+      }
+    },
+    "proposals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/proposal"
+      }
+    },
+    "settings": {
+      "$ref": "#/$defs/settings"
+    }
+  },
+  "$defs": {
+    "tag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        }
+      }
+    },
+    "tab": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "url",
+        "hostname",
+        "pinned",
+        "position",
+        "createdAt",
+        "lastAccessedAt",
+        "tagIds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 8192,
+          "pattern": "^(https?://[^@\\s]+|(chrome|chrome-extension|brave|edge|about):.*)$"
+        },
+        "hostname": {
+          "type": "string",
+          "maxLength": 253
+        },
+        "favIconUrl": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(https?://[^@\\s]+|(chrome|chrome-extension|brave|edge|about):.*)$"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastAccessedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "tagIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "color",
+        "createdAt",
+        "updatedAt",
+        "status",
+        "tags",
+        "tabs"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4096
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "trashed"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tag"
+          }
+        },
+        "tabs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tab"
+          }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "capturedAt",
+        "browser",
+        "windowCount",
+        "tabs"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "browser": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "windowCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tabs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tab"
+          }
+        }
+      }
+    },
+    "proposalItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tabId",
+        "collectionName",
+        "tags"
+      ],
+      "properties": {
+        "tabId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "collectionName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "createdAt",
+        "provider",
+        "status",
+        "items"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "status": {
+          "enum": [
+            "preview",
+            "applied",
+            "rejected"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/proposalItem"
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "theme",
+        "defaultView",
+        "includeFullUrlInAi",
+        "aiProvider"
+      ],
+      "properties": {
+        "theme": {
+          "enum": [
+            "system",
+            "light",
+            "dark"
+          ]
+        },
+        "defaultView": {
+          "enum": [
+            "list",
+            "grid"
+          ]
+        },
+        "includeFullUrlInAi": {
+          "type": "boolean"
+        },
+        "aiProvider": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

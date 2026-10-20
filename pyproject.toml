@@ -1,0 +1,124 @@
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[project]
+name = "tabman"
+version = "0.3.16"
+description = "Local-first tab collections and automation for Chromium browsers."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Anshul Gada" },
+]
+keywords = [
+    "brave",
+    "chromium",
+    "tabs",
+    "tab-manager",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "httpx>=0.28.1",
+    "jsonschema>=4.26.0",
+    "platformdirs>=4.13.5",
+    "pydantic>=2.14.1",
+    "rich>=15.0.0",
+    "rich-click>=1.9.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/Anshulgada/brave-tab-manager"
+Issues = "https://github.com/Anshulgada/brave-tab-manager/issues"
+
+[project.scripts]
+tabman = "tabman.cli:main"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "detect-secrets>=1.5.0",
+    "pip-audit>=2.10.1",
+    "pre-commit>=4.7.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.1",
+    "ty>=0.0.90",
+    "types-jsonschema>=4.26.0.20261006",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+src = [
+    "src",
+    "tests",
+]
+
+[tool.ruff.lint]
+select = [
+    "B",
+    "C4",
+    "E",
+    "F",
+    "I",
+    "PIE",
+    "RUF",
+    "SIM",
+    "UP",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = [
+    "src",
+    "tests",
+    "scripts",
+]
+
+[tool.bandit]
+exclude_dirs = [
+    ".venv",
+    "tests",
+]
+skips = ["B101"]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "-ra",
+]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require external services, browsers, or credentials",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["tabman"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 80
