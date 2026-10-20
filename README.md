@@ -345,6 +345,8 @@ brew install actionlint            # macOS
 go install github.com/rhysd/actionlint/cmd/actionlint@latest
 ```
 
+The act run needs a working container engine. If Docker reports that it cannot start on Windows, the WSL kernel modules are the usual cause, and `wsl --update` in an elevated prompt followed by a restart fixes it. The native gate above does not need a container at all.
+
 The workflows pin every action to a commit hash, keep the checkout credentials out of the workspace, and disable the caches in the release job, so a poisoned cache cannot reach a published artifact.
 
 > This repository is public, so GitHub-hosted runners are free and unlimited for it. The workflow still runs only on `main` to keep the queue short and the feedback local.

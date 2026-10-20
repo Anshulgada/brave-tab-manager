@@ -121,7 +121,16 @@ def _run_act() -> tuple[bool, str]:
             file=sys.stderr,
         )
         return False, "act"
-    return _run(("act", "-W", ".github/workflows/ci.yml"), ROOT)
+    return _run(
+        (
+            "act",
+            "-W",
+            ".github/workflows/ci.yml",
+            "-P",
+            "ubuntu-latest=catthehacker/ubuntu:act-24.04",
+        ),
+        ROOT,
+    )
 
 
 def _run_checks(*, python: bool, extension: bool, act: bool = False) -> int:
