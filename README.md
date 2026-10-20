@@ -48,7 +48,7 @@ bun install
 bun run build
 ```
 
-Load `extension/.output/chrome-mv3` with **Load unpacked**. The extension requires Chromium 114 or newer.
+Load `extension/output/chrome-mv3` with **Load unpacked**. The extension requires Chromium 114 or newer.
 
 The extension is not on the Chrome Web Store yet.
 

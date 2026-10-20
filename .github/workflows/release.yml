@@ -84,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: extension-dist
-          path: extension/.output/tabmanextension-*-chrome.zip
+          path: extension/output/tabmanextension-*-chrome.zip
           if-no-files-found: error
 
   publish-pypi:

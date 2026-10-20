@@ -30,7 +30,7 @@ dist/
 # Node, Bun, and WXT
 node_modules/
 .wxt/
-.output/
+output/
 coverage/
 *.zip
 npm-debug.log*
