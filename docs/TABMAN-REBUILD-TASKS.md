@@ -1,7 +1,7 @@
 # Tabman Rebuild — Task Checklist
 
-> **Status:** Phases **0–6** complete · product implementation underway · updated 2026-07-19
-> **Branch:** `feat/rebuild` (create from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
+> **Status:** Phases **0–6** complete · `0.4.x` interface rebuild in review · updated 2026-10-21
+> **Branch:** `feat/ui-overhaul` (from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
 > **Product:** Sideload WXT+React extension (switchboard + Raindrop-like library) + SokWatch-grade Python CLI vault
 
 Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Deferred (post-MVP)
@@ -129,6 +129,20 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 ---
 
 ## Phase 8 — Quality, Docs, Sideload Release
+
+### 0.4.x interface rebuild (in review on `feat/ui-overhaul`)
+
+- [x] Shared design system: tokens, light and dark palettes, and motion tokens
+- [x] Dashboard rebuilt as an application shell with a collection rail
+- [x] Command palette on `Ctrl`/`Cmd`+`K` for collections and commands
+- [x] Card and list views, tag filters, sorting, and a floating bulk bar
+- [x] In-app confirmation dialog and toast notifications replace `window.confirm`
+- [x] Side panel rebuilt with the same language and a docked action bar
+- [x] Library opens on a fresh install and from the toolbar button
+- [x] `scripts/preview_ui.py` serves the built pages for visual review
+- [x] Vitest coverage for the shared interface helpers
+
+### Remaining
 
 - [ ] **8.1** Vitest + Testing Library coverage for core extension flows
 - [ ] **8.2** Python unit suite green in CI without secrets
