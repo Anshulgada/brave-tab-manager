@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.2]
+
+### Fixed
+
+- The collect action was only reachable once a collection already existed. The
+  empty library home now offers it too, so a fresh install can collect the
+  open tabs as its first move.
+- Collecting asks for the collection name first, prefilled with the date, and
+  selects the collection it just created.
+
 ## [0.4.1]
 
 ### Added

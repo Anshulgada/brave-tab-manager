@@ -128,6 +128,8 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [collectOpen, setCollectOpen] = useState(false);
+  const [collectName, setCollectName] = useState('');
   const [draggingTabId, setDraggingTabId] = useState<string>();
   const [dropTargetId, setDropTargetId] = useState<string>();
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -476,15 +478,22 @@ export function App() {
     }
   }, []);
 
+  const openCollectDialog = () => {
+    setCollectName(`Collected ${new Date().toLocaleDateString()}`);
+    setCollectOpen(true);
+  };
+
   const collectAll = async () => {
     if (busyRef.current) {
       return;
     }
     busyRef.current = true;
     setBusy(true);
+    setCollectOpen(false);
     try {
       const response = await sendSwitchboardRequest({
         type: 'library/collect',
+        name: collectName.trim() || undefined,
       });
       if (!response.ok) {
         throw new Error(response.error);
@@ -493,9 +502,14 @@ export function App() {
         throw new Error('The collect action did not report a result');
       }
       pushToast(
-        `${response.affected} open tabs collected into a new collection.`,
+        `${response.affected} open tabs collected into ${
+          response.collectionName ?? 'a new collection'
+        }.`,
         'success',
       );
+      if (response.collectionId) {
+        setSelectedCollectionId(response.collectionId);
+      }
       await load();
     } catch (collectError) {
       pushToast(
@@ -958,27 +972,13 @@ export function App() {
               }
             />
           ) : !selectedCollection ? (
-            <WelcomeState onCreate={() => setCreating(true)} />
+            <WelcomeState
+              onCreate={() => setCreating(true)}
+              onCollect={openCollectDialog}
+            />
           ) : (
             <>
-              <section className="collect-bar">
-                <div>
-                  <strong>Collect every open tab</strong>
-                  <span>
-                    Save the tabs you have open right now into a new collection.
-                    They stay open in the browser.
-                  </span>
-                </div>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void collectAll()}
-                >
-                  <ZapIcon size={15} />
-                  Collect all open tabs
-                </button>
-              </section>
+              <CollectBar busy={busy} onCollect={openCollectDialog} />
 
               <section className="collection-head">
                 <div className="collection-title">
@@ -1299,6 +1299,62 @@ export function App() {
         />
       )}
 
+      {collectOpen && (
+        <div className="overlay">
+          <button
+            className="overlay-backdrop"
+            type="button"
+            aria-label="Cancel"
+            onClick={() => setCollectOpen(false)}
+          />
+          <div
+            className="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Collect the open tabs"
+          >
+            <h2>Collect every open tab</h2>
+            <p>
+              Tabman saves the tabs you have open right now into a new
+              collection. They stay open in the browser.
+            </p>
+            <label className="dialog-field">
+              Collection name
+              <input
+                className="input"
+                maxLength={120}
+                value={collectName}
+                onChange={(event) => setCollectName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void collectAll();
+                  }
+                }}
+              />
+            </label>
+            <div className="dialog-actions">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setCollectOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={busy}
+                onClick={() => void collectAll()}
+              >
+                <ZapIcon size={15} />
+                Collect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmRequest && (
         <ConfirmDialog
           request={confirmRequest}
@@ -1329,7 +1385,13 @@ function LoadingState() {
   );
 }
 
-function WelcomeState({ onCreate }: { onCreate: () => void }) {
+function WelcomeState({
+  onCreate,
+  onCollect,
+}: {
+  onCreate: () => void;
+  onCollect: () => void;
+}) {
   return (
     <section className="welcome">
       <span className="welcome-mark" aria-hidden="true">
@@ -1337,23 +1399,59 @@ function WelcomeState({ onCreate }: { onCreate: () => void }) {
       </span>
       <h2>Your tab library starts here</h2>
       <p>
-        Park tabs from the side panel, or create a collection and fill it by
-        hand. Everything stays in this browser profile.
+        Collect the tabs you have open right now, park tabs from the side panel,
+        or create a collection and fill it by hand. Everything stays in this
+        browser profile.
       </p>
+      <div className="welcome-actions">
+        <button className="btn btn-primary" type="button" onClick={onCollect}>
+          <ZapIcon size={15} />
+          Collect every open tab
+        </button>
+        <button className="btn" type="button" onClick={onCreate}>
+          <PlusIcon size={15} />
+          New collection
+        </button>
+      </div>
       <ol className="welcome-steps">
         <li>
-          <span>1</span>Create a collection
+          <span>1</span>Collect or park the open tabs
         </li>
         <li>
-          <span>2</span>Park open tabs into it
+          <span>2</span>Group them into collections
         </li>
         <li>
           <span>3</span>Restore them whenever you need them
         </li>
       </ol>
-      <button className="btn btn-primary" type="button" onClick={onCreate}>
-        <PlusIcon size={15} />
-        New collection
+    </section>
+  );
+}
+
+function CollectBar({
+  busy,
+  onCollect,
+}: {
+  busy: boolean;
+  onCollect: () => void;
+}) {
+  return (
+    <section className="collect-bar">
+      <div>
+        <strong>Collect every open tab</strong>
+        <span>
+          Save the tabs you have open right now into a new collection. They stay
+          open in the browser.
+        </span>
+      </div>
+      <button
+        className="btn btn-primary"
+        type="button"
+        disabled={busy}
+        onClick={onCollect}
+      >
+        <ZapIcon size={15} />
+        Collect all open tabs
       </button>
     </section>
   );

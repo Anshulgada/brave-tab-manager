@@ -87,7 +87,13 @@ export interface OrganizeProposal {
 
 export type SwitchboardResponse =
   | { ok: true; snapshot: SwitchboardSnapshot }
-  | { ok: true; affected: number; warnings?: string[] }
+  | {
+      ok: true;
+      affected: number;
+      collectionId?: string;
+      collectionName?: string;
+      warnings?: string[];
+    }
   | { ok: true; proposal: OrganizeProposal }
   | { ok: true; applied: { collections: number; tabs: number } }
   | { ok: true; settings: ProviderSettings; hasKey: boolean }

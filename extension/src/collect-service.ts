@@ -24,9 +24,13 @@ function cleanName(value: string | undefined, fallback: string): string {
 /**
  * Save every open tab into a new collection and leave the browser alone.
  */
-export async function collectOpenTabs(
-  name: string | undefined,
-): Promise<{ ok: true; affected: number; warnings?: string[] }> {
+export async function collectOpenTabs(name: string | undefined): Promise<{
+  ok: true;
+  affected: number;
+  collectionId: string;
+  collectionName: string;
+  warnings?: string[];
+}> {
   const browserTabs = await browser.tabs.query({});
   const now = new Date().toISOString();
   const collectionId = crypto.randomUUID();
@@ -109,6 +113,8 @@ export async function collectOpenTabs(
   return {
     ok: true,
     affected: records.length,
+    collectionId,
+    collectionName: collectionRecord.name,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

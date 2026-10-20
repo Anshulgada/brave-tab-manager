@@ -103,6 +103,34 @@ describe('the dashboard', () => {
       await screen.findByRole('heading', { name: 'Organize the open tabs' }),
     ).toBeTruthy();
   });
+
+  it('offers the collect action on the empty home', async () => {
+    render(<App />);
+
+    const collect = await screen.findAllByRole('button', {
+      name: /Collect every open tab/,
+    });
+
+    expect(collect.length).toBeGreaterThan(0);
+  });
+
+  it('asks for a collection name before collecting', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      (
+        await screen.findAllByRole('button', { name: /Collect every open tab/ })
+      )[0] ??
+        (() => {
+          throw new Error('the collect button is missing');
+        })(),
+    );
+
+    const field = await screen.findByLabelText('Collection name');
+
+    expect(field).toBeTruthy();
+  });
 });
 
 describe('the provider panel', () => {
