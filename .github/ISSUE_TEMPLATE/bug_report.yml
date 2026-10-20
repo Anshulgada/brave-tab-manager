@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in Tabman does not work the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please fill in what you can.
+
+  - type: textarea
+    id: surface
+    attributes:
+      label: Which surface
+      description: The extension, the CLI, or both
+      options:
+        - The extension
+        - The CLI
+        - Both
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you saw instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that show the problem
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: tabman 0.4.0, or the extension version
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Brave 155.1 on Windows 11
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: The exact text of any error. Please remove API keys first.

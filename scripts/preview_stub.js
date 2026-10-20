@@ -105,6 +105,51 @@
         if (message && message.type === 'switchboard/get') {
           return { ok: true, snapshot };
         }
+        if (message && message.type === 'library/organize') {
+          const groups = new Map();
+          for (const browserWindow of snapshot.windows) {
+            for (const tab of browserWindow.tabs) {
+              const label = tab.hostname.split('.').slice(-2)[0] || tab.hostname;
+              const bucket = groups.get(label) ?? [];
+              bucket.push({
+                tabId: crypto.randomUUID(),
+                title: tab.title,
+                url: tab.url,
+                hostname: tab.hostname,
+                collectionName: label,
+                tags: tab.hostname.split('.').slice(-2),
+              });
+              groups.set(label, bucket);
+            }
+          }
+          return {
+            ok: true,
+            proposal: {
+              provider: 'Local Ollama',
+              createdAt: new Date().toISOString(),
+              items: [...groups.values()].flat(),
+            },
+          };
+        }
+        if (message && message.type === 'providers/get') {
+          return {
+            ok: true,
+            settings: {
+              providers: [
+                {
+                  id: '11111111-1111-4111-8111-111111111111',
+                  name: 'Local Ollama',
+                  baseUrl: 'http://127.0.0.1:11434/v1',
+                  model: 'qwen3',
+                  apiFormat: 'openai',
+                },
+              ],
+              activeProviderId: '11111111-1111-4111-8111-111111111111',
+              rememberKey: false,
+            },
+            hasKey: true,
+          };
+        }
         return { ok: true };
       },
       onMessage: {

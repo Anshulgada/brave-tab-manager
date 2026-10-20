@@ -8,17 +8,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.4.0]
 
+### Added
+
+- The extension can organize your open tabs. Add a provider with a display name, base URL, model, and format, give it a key, and the organizer sends one batched request, shows exactly what it would create, and writes nothing until you apply it. The local rules, which group by hostname, always work offline.
+- A **Collect every open tab** action in the library and in the side panel saves the tabs you have open into a new collection without closing them.
+- The side panel lists the saved collections and restores any of them back into the browser.
+- A theme button in the top bar flips between the light and the dark theme at once, and the preferences apply the choice immediately.
+- Drag a saved tab onto a collection in the rail to move it.
+- Provider profiles, keys, and the permission prompts live in the browser only. The key stays in session storage unless you ask for it to be remembered, and a forget button removes it.
+- `PRIVACY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, an issue and a pull request template, an architecture note, and a list of the dos and don'ts.
+- React component tests for the dashboard and the side panel, and a test suite for the provider adapters, taking the extension suite to 78 tests.
+- The workflow job on main runs actionlint and zizmor, and the Python job adds a dependency audit and a secret scan.
+- The provider adapters speak the OpenAI Responses API next to the chat completions and Anthropic formats, and the extension declares the host permissions for a provider as optional.
+
 ### Changed
 
 - Rebuilt the extension interface from scratch on a shared design system: neutral surfaces with an indigo to violet accent, Space Grotesk headings, Inter body text, layered shadows, and rounded panels that read the same in light and dark mode.
-- The dashboard is now an application shell: a collection rail with live counts, a command palette on `⌘K`, a card or list view of saved tabs, tag filters, sorting, a floating bulk action bar, toasts instead of inline banners, and a confirmation dialog instead of `window.confirm`.
+- The dashboard is now an application shell: a collection rail with live counts, a command palette on `Ctrl` plus `K`, a card or list view of saved tabs, tag filters, sorting, a floating bulk action bar, toasts instead of inline banners, and a confirmation dialog instead of `window.confirm`.
 - The side panel follows the same language with a compact search field, window groups, duplicate, audio, and sleep badges, and a docked action bar for close, discard, move, park, and group.
 - The library opens automatically the first time the extension is installed, and the toolbar button opens it from anywhere.
-
-### Added
-
+- The keyboard hints read like the keyboard you have: `Ctrl` on Windows and Linux, `⌘` on a Mac.
 - `scripts/preview_ui.py` serves the built interface in a normal browser with a stubbed extension API so the UI can be reviewed and screenshotted without sideloading.
-- A Vitest suite for the shared interface helpers, taking the extension suite to 51 tests.
+
+### Fixed
+
+- Rendered rich-click panels as rounded, colored boxes on every terminal by forcing UTF-8 output instead of falling back to ASCII borders.
+- The help now measures the longest row it has to draw, so the panels stop at the width the content needs instead of filling the terminal or wrapping early.
+- Report corrupt vaults, malformed configuration values, and unsupported organize providers as concise errors instead of tracebacks.
+- Preserve valid deterministic collection names and tags for very long hostnames, and validate blank provider output.
 
 ## [0.3.16]
 

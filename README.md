@@ -137,6 +137,16 @@ tabman export backup.md --format markdown
 
 `tabman --help` uses rich-click, so the command tree is rendered with colored, rounded Rich panels, grouped commands, and readable option columns.
 
+## The extension
+
+The extension has three surfaces, and they all work without an account.
+
+**The side panel** is the switchboard. It lists every open window with its tabs, searches across all of them at once, and shows the duplicates you have open in more than one place. Select tabs to close them, discard them, move them to another window, group them, or park them into the library. The **Collect** button saves every open tab into a new collection without closing anything, and the **Saved** list restores a collection back into the browser.
+
+**The library** is a full page application. It has a collection rail with live counts, a command palette on `Ctrl` + `K`, a card or list view of the saved tabs, tag filters, sorting, a floating bar for bulk actions, and a dark theme you can flip from the top bar. Drag a saved tab onto a collection in the rail to move it. The **Collect every open tab** action at the top of the library saves what you have open right now, without closing the tabs.
+
+**The organizer** asks a provider to group your open tabs. Add a provider once with its display name, base URL, model, and format, give it a key, and the organizer sends one batched request, shows you exactly what it would create, and writes nothing until you apply it. The local rules, which group by hostname, always work offline.
+
 ### Live capture (optional)
 
 The extension is the preferred way to capture open tabs. The CLI can also read Chromium's local DevTools endpoint, but Brave must first be restarted with remote debugging enabled:
@@ -161,11 +171,11 @@ The first command stores a preview proposal. The second applies it and replaces 
 
 Tabman speaks the compatibility formats that nearly every hosted and local model gateway implements, so you are never locked into one vendor:
 
-| Format      | Endpoint                       | Notes                                                                                                                  |
-| ----------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `responses` | `POST {base}/responses`        | OpenAI's current API and the one their docs recommend. Used by the built-in `openai` provider.                            |
+| Format      | Endpoint                       | Notes                                                                                                                    |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `responses` | `POST {base}/responses`        | OpenAI's current API and the one their docs recommend. Used by the built-in `openai` provider.                           |
 | `openai`    | `POST {base}/chat/completions` | The classic OpenAI-compatible format. OpenRouter, Groq, Together, Ollama, vLLM, LM Studio, LiteLLM, Mistral and friends. |
-| `anthropic` | `POST {base}/v1/messages`      | Anthropic and Anthropic-compatible gateways.                                                                            |
+| `anthropic` | `POST {base}/v1/messages`      | Anthropic and Anthropic-compatible gateways.                                                                             |
 
 Add a provider once with a display name, a base URL, and the model name exactly as the provider expects it:
 
@@ -200,9 +210,9 @@ tabman organize --provider "My Gateway" --base-url https://gateway.example/v1 --
 
 Two providers are built in and only need a key:
 
-| Provider    | Default model      | Default base URL            | Key                |
-| ----------- | ------------------ | --------------------------- | ------------------ |
-| `openai`    | `gpt-6-luna`       | `https://api.openai.com/v1` | `OPENAI_API_KEY`   |
+| Provider    | Default model      | Default base URL            | Key                 |
+| ----------- | ------------------ | --------------------------- | ------------------- |
+| `openai`    | `gpt-6-luna`       | `https://api.openai.com/v1` | `OPENAI_API_KEY`    |
 | `anthropic` | `claude-haiku-5-5` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` |
 
 `gpt-6-luna` and `claude-haiku-5-5` are the fast, cheap members of their families, which is what bulk tab grouping needs; point a custom profile at `gpt-6-astra`, `gpt-6.1-sol`, `claude-sonnet-5-5`, or `claude-opus-5-5` when you want more reasoning for the same job.
@@ -247,8 +257,8 @@ tabman import all_tabs.md --legacy
 
 ## Screens
 
-| Library | Switchboard |
-| --- | --- |
+| Library                                                            | Switchboard                                                     |
+| ------------------------------------------------------------------ | --------------------------------------------------------------- |
 | ![The Tabman library dashboard](docs/images/dashboard-library.png) | ![The Tabman switchboard side panel](docs/images/sidepanel.png) |
 
 The dark theme, the command palette, and the bulk action bar are part of the same system.
@@ -348,6 +358,8 @@ uv run ruff check .
 uv run ruff format --check .
 uv run ty check
 uv run bandit -q -r src
+uv run pip-audit
+uv run detect-secrets-hook --baseline .secrets.baseline
 ```
 
 Extension checks:
@@ -366,6 +378,19 @@ Version sync check:
 ```powershell
 uv run python scripts/check_versions.py
 ```
+
+## Documentation
+
+| File                                                         | What it covers                                                        |
+| ------------------------------------------------------------ | --------------------------------------------------------------------- |
+| [PRIVACY.md](PRIVACY.md)                                     | What is stored, what leaves the machine, and how to remove it         |
+| [SECURITY.md](SECURITY.md)                                   | How to report a problem, and the hardening rules this project follows |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                           | The setup, the gate, and the rules for a pull request                 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)                     | How we treat each other                                               |
+| [docs/architecture.md](docs/architecture.md)                 | How the two surfaces fit together                                     |
+| [docs/dos-and-donts.md](docs/dos-and-donts.md)               | The mistakes this project has already made                            |
+| [docs/TABMAN-REBUILD-PLAN.md](docs/TABMAN-REBUILD-PLAN.md)   | The original rebuild plan                                             |
+| [docs/TABMAN-REBUILD-TASKS.md](docs/TABMAN-REBUILD-TASKS.md) | The phase checklist                                                   |
 
 ## Release process
 
