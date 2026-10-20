@@ -2,7 +2,7 @@
 # Install the Tabman CLI with uv and, optionally, the browser extension.
 #
 # Usage:
-#   curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install.sh | sh
+#   curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install.sh | sh
 #   TABMAN_VERSION=0.3.14 sh scripts/install.sh
 #
 # Environment variables:
@@ -16,7 +16,7 @@ set -eu
 
 REPOSITORY="Anshulgada/brave-tab-manager"
 # TODO: switch back to "main" once the rebuild branch is merged.
-BRANCH="feat/rebuild"
+BRANCH="main"
 MINIMUM_VERSION="0.3.0"
 VERSION="${TABMAN_VERSION:-latest}"
 

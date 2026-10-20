@@ -1,7 +1,7 @@
 # Download the latest Tabman extension release and prepare it for "Load unpacked".
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install-extension.ps1 | iex
+#   irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install-extension.ps1 | iex
 #
 # Environment variables:
 #   TABMAN_EXTENSION_ROOT  where the extension is unpacked (default: %LOCALAPPDATA%\Tabman)

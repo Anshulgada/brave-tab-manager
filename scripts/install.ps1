@@ -1,7 +1,7 @@
 # Install the Tabman CLI with uv and, optionally, the browser extension.
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install.ps1 | iex
 #   $env:TABMAN_VERSION = "0.3.14"; irm ... | iex
 #
 # Environment variables:
@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 
 $Repository = "Anshulgada/brave-tab-manager"
 # TODO: switch back to "main" once the rebuild branch is merged.
-$Branch = "feat/rebuild"
+$Branch = "main"
 $MinimumVersion = [version]"0.3.0"
 $Version = if ($env:TABMAN_VERSION) { $env:TABMAN_VERSION } else { "latest" }
 

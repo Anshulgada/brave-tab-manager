@@ -2,7 +2,7 @@
 # Download the latest Tabman extension release and prepare it for "Load unpacked".
 #
 # Usage:
-#   curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install-extension.sh | sh
+#   curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install-extension.sh | sh
 #
 # Environment variables:
 #   TABMAN_EXTENSION_ROOT  where the extension is unpacked

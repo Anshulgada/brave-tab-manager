@@ -13,8 +13,6 @@ No account, cloud service, or AI provider is required for the core workflow.
 
 The `0.3.x` rebuild is usable today. The extension switchboard, local library, schema, SQLite vault, and deterministic organizer are implemented. Optional BYOK AI organization works with any OpenAI- or Anthropic-compatible endpoint.
 
-> **Testing branch:** the one-line installers below point at the `feat/rebuild` branch so the new CLI can be tested before the merge. Change every `/feat/rebuild/` URL back to `/main/` once the branch is merged.
-
 ## Install the extension
 
 ### From a GitHub Release
@@ -22,13 +20,13 @@ The `0.3.x` rebuild is usable today. The extension switchboard, local library, s
 After a release has been published, this PowerShell command downloads the latest extension archive, extracts it, and opens the Brave extensions page (when Brave is installed in a standard location):
 
 ```powershell
-irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install-extension.ps1 | iex
+irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install-extension.ps1 | iex
 ```
 
 macOS/Linux:
 
 ```sh
-curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install-extension.sh | sh
+curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install-extension.sh | sh
 ```
 
 Then:
@@ -78,7 +76,7 @@ tabman --help
 If you are installing from Git:
 
 ```powershell
-uv tool install "git+https://github.com/Anshulgada/brave-tab-manager.git@feat/rebuild"
+uv tool install "git+https://github.com/Anshulgada/brave-tab-manager.git@main"
 ```
 
 ### One-line installer
@@ -86,13 +84,13 @@ uv tool install "git+https://github.com/Anshulgada/brave-tab-manager.git@feat/re
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install.ps1 | iex
 ```
 
 macOS/Linux:
 
 ```sh
-curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/feat/rebuild/scripts/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install.sh | sh
 ```
 
 The installer is a complete setup, not just a download:
