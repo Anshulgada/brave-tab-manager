@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0]
+
+### Changed
+
+- Rebuilt the extension interface from scratch on a shared design system: neutral surfaces with an indigo to violet accent, Space Grotesk headings, Inter body text, layered shadows, and rounded panels that read the same in light and dark mode.
+- The dashboard is now an application shell: a collection rail with live counts, a command palette on `⌘K`, a card or list view of saved tabs, tag filters, sorting, a floating bulk action bar, toasts instead of inline banners, and a confirmation dialog instead of `window.confirm`.
+- The side panel follows the same language with a compact search field, window groups, duplicate, audio, and sleep badges, and a docked action bar for close, discard, move, park, and group.
+- The library opens automatically the first time the extension is installed, and the toolbar button opens it from anywhere.
+
+### Added
+
+- `scripts/preview_ui.py` serves the built interface in a normal browser with a stubbed extension API so the UI can be reviewed and screenshotted without sideloading.
+- A Vitest suite for the shared interface helpers, taking the extension suite to 51 tests.
+
 ## [0.3.16]
 
 ### Added

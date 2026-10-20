@@ -245,6 +245,14 @@ tabman import all_tabs.md --legacy
 | `tabman config remove-provider <name>` | Remove a configured provider.                                                                        |
 | `tabman version`                       | Print the installed version.                                                                         |
 
+## Screens
+
+| Library | Switchboard |
+| --- | --- |
+| ![The Tabman library dashboard](docs/images/dashboard-library.png) | ![The Tabman switchboard side panel](docs/images/sidepanel.png) |
+
+The dark theme, the command palette, and the bulk action bar are part of the same system.
+
 ## Development
 
 Prerequisites:
