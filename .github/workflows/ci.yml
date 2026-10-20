@@ -47,6 +47,12 @@ jobs:
       - name: Security scan
         run: uv run bandit -q -r src
 
+      - name: Dependency audit
+        run: uv run pip-audit
+
+      - name: Secret scan
+        run: uv run detect-secrets-hook --baseline .secrets.baseline
+
   extension:
     name: Extension
     runs-on: ubuntu-latest

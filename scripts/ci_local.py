@@ -36,6 +36,8 @@ PYTHON_STEPS: tuple[tuple[str, ...], ...] = (
     ("uv", "run", "ty", "check"),
     ("uv", "run", "pytest"),
     ("uv", "run", "bandit", "-q", "-r", "src"),
+    ("uv", "run", "pip-audit"),
+    ("uv", "run", "detect-secrets-hook", "--baseline", ".secrets.baseline"),
     (
         "uv",
         "run",
