@@ -54,4 +54,10 @@ export default defineBackground(() => {
   browser.tabGroups.onCreated.addListener(scheduleRefresh);
   browser.tabGroups.onRemoved.addListener(scheduleRefresh);
   browser.tabGroups.onUpdated.addListener(scheduleRefresh);
+
+  browser.action.onClicked.addListener(() => {
+    void browser.tabs.create({
+      url: browser.runtime.getURL('/dashboard.html'),
+    });
+  });
 });
