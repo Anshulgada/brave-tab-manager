@@ -7,12 +7,16 @@ from uuid import UUID
 import httpx
 import pytest
 
+from tabman.config import ApiFormat, AppConfig, ProviderProfile
 from tabman.models import CollectionStatus, Proposal, ProposalItem, ProposalStatus
 from tabman.organize import (
+    AnthropicCompatibleProvider,
     DeterministicProvider,
     MistralProvider,
+    OpenAICompatibleProvider,
     OrganizeError,
     apply_proposal,
+    build_provider,
     create_proposal,
 )
 from tabman.vault import read_document
@@ -138,6 +142,115 @@ def test_provider_must_map_every_tab() -> None:
 def test_provider_rejects_insecure_remote_base_url() -> None:
     with pytest.raises(OrganizeError, match="HTTPS"):
         MistralProvider("secret", base_url="http://mistral.example/v1")
+
+
+def test_unsupported_provider_is_reported_before_secret_lookup(
+    tmp_path: Path,
+) -> None:
+    config = AppConfig(vault_path=tmp_path / "vault.sqlite3")
+
+    with pytest.raises(OrganizeError, match="unknown provider: nope"):
+        build_provider("nope", config, prompt_for_secret=False)
+
+
+def test_unknown_provider_lists_the_available_providers(tmp_path: Path) -> None:
+    config = AppConfig(vault_path=tmp_path / "vault.sqlite3")
+
+    with pytest.raises(OrganizeError) as error:
+        build_provider("nope", config, prompt_for_secret=False)
+
+    message = str(error.value)
+    assert "deterministic" in message
+    assert "openai" in message
+    assert "anthropic" in message
+
+
+def test_build_provider_uses_a_configured_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile = ProviderProfile(
+        name="Local Ollama",
+        base_url="http://127.0.0.1:11434/v1",
+        model="llama3.1",
+    )
+    config = AppConfig(vault_path=tmp_path / "vault.sqlite3", providers=(profile,))
+    monkeypatch.setenv("TABMAN_LOCAL_OLLAMA_API_KEY", "key")
+
+    provider = build_provider("local ollama", config, prompt_for_secret=False)
+
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider.model == "llama3.1"
+    assert provider.base_url == "http://127.0.0.1:11434/v1"
+    assert provider.name == "Local Ollama"
+
+
+def test_build_provider_supports_anthropic_profiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile = ProviderProfile(
+        name="Claude",
+        base_url="https://api.anthropic.com",
+        model="claude-test",
+        api_format=ApiFormat.ANTHROPIC,
+    )
+    config = AppConfig(vault_path=tmp_path / "vault.sqlite3", providers=(profile,))
+    monkeypatch.setenv("TABMAN_CLAUDE_API_KEY", "key")
+
+    provider = build_provider("Claude", config, prompt_for_secret=False)
+
+    assert isinstance(provider, AnthropicCompatibleProvider)
+    assert provider.model == "claude-test"
+
+
+def test_build_provider_accepts_a_one_off_base_url_and_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = AppConfig(vault_path=tmp_path / "vault.sqlite3")
+    monkeypatch.setenv("TABMAN_AD_HOC_API_KEY", "key")
+
+    provider = build_provider(
+        "Ad Hoc",
+        config,
+        prompt_for_secret=False,
+        base_url="https://api.example/v1",
+        model="ad-hoc-model",
+    )
+
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider.base_url == "https://api.example/v1"
+    assert provider.model == "ad-hoc-model"
+
+
+def test_build_provider_reports_a_missing_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = AppConfig(vault_path=tmp_path / "vault.sqlite3")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(OrganizeError, match="key is unavailable"):
+        build_provider("openai", config, prompt_for_secret=False)
+
+
+def test_deterministic_provider_keeps_long_hostnames_valid() -> None:
+    document = read_document(FIXTURE)
+    hostname = f"{'a' * 100}.{'b' * 100}.example"
+    tab = (
+        document.collections[0]
+        .tabs[0]
+        .model_copy(update={"url": f"https://{hostname}/", "hostname": hostname})
+    )
+    collection = document.collections[0].model_copy(update={"tabs": (tab,)})
+    document = document.model_copy(update={"collections": (collection,)})
+
+    proposal = create_proposal(
+        document,
+        DeterministicProvider(),
+        include_full_url=False,
+    )
+
+    assert len(proposal.items) == 1
+    assert len(proposal.items[0].collection_name) <= 120
+    assert all(len(tag) <= 64 for tag in proposal.items[0].tags)
 
 
 def test_apply_preserves_empty_collections() -> None:

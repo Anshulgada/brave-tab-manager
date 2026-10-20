@@ -7,7 +7,7 @@ name = "tabman"
 version = "0.3.14"
 description = "Local-first tab collections and automation for Chromium browsers."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -23,16 +23,15 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
     "httpx>=0.28.1",
     "jsonschema>=4.26.0",
-    "platformdirs>=4.10.1",
-    "pydantic>=2.13.4",
-    "typer>=0.27.0",
+    "platformdirs>=4.13.5",
+    "pydantic>=2.14.1",
+    "rich>=15.0.0",
+    "rich-click>=1.9.9",
 ]
 
 [project.urls]
@@ -44,22 +43,22 @@ tabman = "tabman.cli:main"
 
 [dependency-groups]
 dev = [
-    "bandit>=1.9.3",
+    "bandit>=1.9.4",
     "detect-secrets>=1.5.0",
-    "pip-audit>=2.10.0",
-    "pre-commit>=4.6.0",
-    "pytest>=9.0.2",
-    "pytest-cov>=7.0.0",
-    "ruff>=0.14.14",
-    "ty>=0.0.16",
-    "types-jsonschema>=4.26.0.20260518",
+    "pip-audit>=2.10.1",
+    "pre-commit>=4.7.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.1",
+    "ty>=0.0.90",
+    "types-jsonschema>=4.26.0.20261006",
 ]
 
 [tool.uv]
 default-groups = ["dev"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 88
 src = [
     "src",
@@ -88,7 +87,7 @@ indent-style = "space"
 line-ending = "lf"
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.14"
 
 [tool.ty.src]
 include = [

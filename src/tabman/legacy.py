@@ -39,7 +39,7 @@ class LegacyImportError(ValueError):
 def _read_legacy_json(path: Path) -> list[dict[str, Any]]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise LegacyImportError(f"cannot read legacy JSON: {error}") from error
     if not isinstance(value, list):
         raise LegacyImportError("legacy JSON must contain a top-level array")
@@ -51,7 +51,7 @@ def _read_legacy_json(path: Path) -> list[dict[str, Any]]:
 def _read_legacy_markdown(path: Path) -> list[dict[str, Any]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as error:
+    except (OSError, UnicodeDecodeError) as error:
         raise LegacyImportError(f"cannot read legacy Markdown: {error}") from error
     records: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None

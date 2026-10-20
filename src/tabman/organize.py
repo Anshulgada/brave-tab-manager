@@ -5,15 +5,26 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Protocol
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
 
-from tabman.config import AppConfig, resolve_secret
+from tabman.config import (
+    DETERMINISTIC_PROVIDER,
+    LEGACY_PROVIDERS,
+    ApiFormat,
+    AppConfig,
+    ProviderProfile,
+    find_profile,
+    provider_names,
+    resolve_secret,
+    validate_base_url,
+)
+from tabman.errors import OrganizeError
 from tabman.models import (
     Collection,
     CollectionStatus,
@@ -24,24 +35,37 @@ from tabman.models import (
     Tab,
     Tag,
 )
+from tabman.providers import (
+    AnthropicCompatibleProvider,
+    OpenAICompatibleProvider,
+    OpenAIResponsesProvider,
+    Suggestion,
+    SuggestionBatch,
+    build_prompt,
+    provider_for_profile,
+    validate_complete_batch,
+)
 
+__all__ = [
+    "AnthropicCompatibleProvider",
+    "DeterministicProvider",
+    "GeminiProvider",
+    "MistralProvider",
+    "OpenAICompatibleProvider",
+    "OpenAIResponsesProvider",
+    "OrganizeError",
+    "Provider",
+    "Suggestion",
+    "SuggestionBatch",
+    "apply_proposal",
+    "build_provider",
+    "create_proposal",
+    "proposal_rows",
+]
 
-class OrganizeError(RuntimeError):
-    """Raised when a provider cannot return a complete, valid batch."""
-
-
-class Suggestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    tab_id: UUID = Field(alias="tabId")
-    collection_name: str = Field(alias="collectionName", min_length=1, max_length=120)
-    tags: tuple[str, ...] = Field(default=(), max_length=12)
-
-
-class SuggestionBatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    items: tuple[Suggestion, ...]
+# Backwards compatible aliases for the private helpers used by older tests.
+_prompt = build_prompt
+_validate_complete_batch = validate_complete_batch
 
 
 class Provider(Protocol):
@@ -52,37 +76,10 @@ class Provider(Protocol):
     ) -> tuple[Suggestion, ...]: ...
 
 
-def _prompt(tabs: tuple[Tab, ...], *, include_full_url: bool) -> str:
-    inputs = [
-        {
-            "tabId": str(tab.id),
-            "title": tab.title,
-            "hostname": tab.hostname,
-            **({"url": tab.url} if include_full_url else {}),
-        }
-        for tab in tabs
-    ]
-    return (
-        "Group every input tab into one concise collection and up to 12 tags. "
-        'Return only JSON shaped {"items":[{"tabId":"uuid",'
-        '"collectionName":"name","tags":["tag"]}]}. '
-        f"Inputs: {json.dumps(inputs, separators=(',', ':'))}"
-    )
-
-
-def _validate_complete_batch(
-    payload: object, tabs: tuple[Tab, ...]
-) -> tuple[Suggestion, ...]:
-    batch = SuggestionBatch.model_validate(payload)
-    expected = {tab.id for tab in tabs}
-    actual = {item.tab_id for item in batch.items}
-    if len(actual) != len(batch.items) or actual != expected:
-        raise OrganizeError("provider response must map every input tab exactly once")
-    return batch.items
-
-
 class DeterministicProvider:
-    name = "deterministic"
+    """Group tabs by hostname without contacting any service."""
+
+    name = DETERMINISTIC_PROVIDER
 
     def suggest(
         self, tabs: tuple[Tab, ...], *, include_full_url: bool
@@ -93,7 +90,7 @@ class DeterministicProvider:
                 tabId=tab.id,
                 collectionName=_fallback_collection_name(tab),
                 tags=tuple(
-                    dict.fromkeys(part for part in tab.hostname.split(".") if part)
+                    dict.fromkeys(part[:64] for part in tab.hostname.split(".") if part)
                 )[-2:],
             )
             for tab in tabs
@@ -101,16 +98,17 @@ class DeterministicProvider:
 
 
 def _fallback_collection_name(tab: Tab) -> str:
-    if tab.hostname.strip():
-        return tab.hostname
+    hostname = tab.hostname.strip().strip(".")
+    if hostname:
+        return hostname[:120]
     scheme = urlsplit(tab.url).scheme.casefold()
     if scheme:
-        return scheme
+        return scheme[:120]
     return "Tabs"
 
 
-class MistralProvider:
-    name = "mistral"
+class MistralProvider(OpenAICompatibleProvider):
+    """Legacy Mistral helper; Mistral speaks the OpenAI compatibility format."""
 
     def __init__(
         self,
@@ -120,56 +118,18 @@ class MistralProvider:
         model: str = "mistral-small-latest",
         client: httpx.Client | None = None,
     ) -> None:
-        self.api_key = api_key
-        parsed = urlsplit(base_url)
-        is_local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-        if not parsed.hostname or (
-            parsed.scheme != "https" and not (parsed.scheme == "http" and is_local)
-        ):
-            raise OrganizeError("provider base URL must use HTTPS or local HTTP")
-        self.base_url = base_url.rstrip("/")
-        self.model = model
-        self.client = client
-
-    def suggest(
-        self, tabs: tuple[Tab, ...], *, include_full_url: bool
-    ) -> tuple[Suggestion, ...]:
-        owns_client = self.client is None
-        client = self.client or httpx.Client(timeout=30.0)
-        try:
-            response = client.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": _prompt(tabs, include_full_url=include_full_url),
-                        }
-                    ],
-                    "response_format": {"type": "json_object"},
-                },
-            )
-            response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
-            return _validate_complete_batch(json.loads(content), tabs)
-        except (
-            httpx.HTTPError,
-            KeyError,
-            IndexError,
-            TypeError,
-            json.JSONDecodeError,
-        ) as error:
-            raise OrganizeError(
-                f"Mistral returned an invalid batch: {error}"
-            ) from error
-        finally:
-            if owns_client:
-                client.close()
+        super().__init__(
+            api_key,
+            base_url=base_url,
+            model=model,
+            name="mistral",
+            client=client,
+        )
 
 
 class GeminiProvider:
+    """Legacy Gemini helper kept for accounts that still have a key."""
+
     name = "gemini"
 
     def __init__(
@@ -210,7 +170,7 @@ class GeminiProvider:
             )
             response.raise_for_status()
             content = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-            return _validate_complete_batch(json.loads(content), tabs)
+            return validate_complete_batch(json.loads(content), tabs)
         except (
             httpx.HTTPError,
             KeyError,
@@ -224,22 +184,69 @@ class GeminiProvider:
                 client.close()
 
 
+def _provider_from_profile(
+    profile: ProviderProfile, secret: str
+) -> OpenAICompatibleProvider | OpenAIResponsesProvider | AnthropicCompatibleProvider:
+    return provider_for_profile(profile, secret)
+
+
 def build_provider(
-    name: str, config: AppConfig, *, prompt_for_secret: bool
+    name: str,
+    config: AppConfig,
+    *,
+    prompt_for_secret: bool,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_format: ApiFormat | None = None,
 ) -> Provider:
+    """Return the provider adapter for ``name``.
+
+    ``deterministic`` never leaves the machine. Every other name must match a
+    built-in preset (OpenAI, Anthropic) or a profile added with
+    ``tabman config add-provider``. The base URL, model, and API format may be
+    overridden for a single run.
+    """
     normalized = name.casefold()
-    if normalized == "deterministic":
+    if normalized == DETERMINISTIC_PROVIDER:
         return DeterministicProvider()
-    secret = resolve_secret(normalized, prompt=prompt_for_secret)
+    profile = find_profile(config, normalized)
+    if profile is None and base_url and model:
+        profile = ProviderProfile(
+            name=name.strip(),
+            base_url=validate_base_url(base_url),
+            model=model.strip(),
+            api_format=api_format or ApiFormat.OPENAI,
+        )
+    if profile is None:
+        if normalized in LEGACY_PROVIDERS:
+            secret = resolve_secret(normalized, prompt=prompt_for_secret)
+            if not secret:
+                raise OrganizeError(
+                    f"{normalized} key is unavailable; use environment, "
+                    "config-dir, or prompt"
+                )
+            if normalized == "mistral":
+                return MistralProvider(secret, base_url=config.mistral_base_url)
+            return GeminiProvider(secret)
+        available = ", ".join(provider_names(config))
+        raise OrganizeError(
+            f"unknown provider: {name}. Available providers: {available}"
+        )
+    if base_url:
+        profile = replace(profile, base_url=validate_base_url(base_url))
+    if model:
+        profile = replace(profile, model=model.strip())
+    if api_format:
+        profile = replace(profile, api_format=api_format)
+    secret = resolve_secret(
+        profile.name, prompt=prompt_for_secret, env_var=profile.env_name
+    )
     if not secret:
         raise OrganizeError(
-            f"{normalized} key is unavailable; use environment, config-dir, or prompt"
+            f"{profile.name} key is unavailable; set {profile.env_name} or run "
+            f"`tabman config set-key {profile.name}`"
         )
-    if normalized == "mistral":
-        return MistralProvider(secret, base_url=config.mistral_base_url)
-    if normalized == "gemini":
-        return GeminiProvider(secret)
-    raise OrganizeError(f"unsupported provider: {name}")
+    return _provider_from_profile(profile, secret)
 
 
 def create_proposal(
@@ -252,7 +259,7 @@ def create_proposal(
     if not tabs:
         raise OrganizeError("the vault has no tabs to organize")
     suggestions = provider.suggest(tabs, include_full_url=include_full_url)
-    suggestions = _validate_complete_batch(
+    suggestions = validate_complete_batch(
         {"items": [item.model_dump(by_alias=True) for item in suggestions]}, tabs
     )
     return Proposal(

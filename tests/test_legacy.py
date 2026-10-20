@@ -82,3 +82,12 @@ def test_legacy_import_rejects_unrecognized_extensions(tmp_path: Path) -> None:
 
     with pytest.raises(LegacyImportError, match="only"):
         import_legacy(path)
+
+
+@pytest.mark.parametrize("name", ["tabs.json", "tabs.md"])
+def test_legacy_import_reports_non_utf8_files(tmp_path: Path, name: str) -> None:
+    path = tmp_path / name
+    path.write_bytes(b"\xff\xfe\x00")
+
+    with pytest.raises(LegacyImportError, match="cannot read"):
+        import_legacy(path)

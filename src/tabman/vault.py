@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,7 +35,7 @@ class Vault:
         self.path = path.expanduser().resolve()
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
+    def connect(self) -> Generator[sqlite3.Connection]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
@@ -139,13 +139,18 @@ class Vault:
             f"collection:{item.id}" for item in document.collections
         }
         incoming_sessions = {f"session:{item.id}" for item in document.sessions}
-        for owner_key in (*incoming_collections, *incoming_sessions):
-            for tab_id, owner in list(tab_owners.items()):
-                if owner == owner_key:
-                    del tab_owners[tab_id]
-            for tag_id, owner in list(tag_owners.items()):
-                if owner == owner_key:
-                    del tag_owners[tag_id]
+        incoming_owner_keys = incoming_collections | incoming_sessions
+        if incoming_owner_keys:
+            tab_owners = {
+                tab_id: owner
+                for tab_id, owner in tab_owners.items()
+                if owner not in incoming_owner_keys
+            }
+            tag_owners = {
+                tag_id: owner
+                for tag_id, owner in tag_owners.items()
+                if owner not in incoming_owner_keys
+            }
 
         for collection in document.collections:
             collection_id = f"collection:{collection.id}"
@@ -280,12 +285,7 @@ class Vault:
 
     def export_document(self) -> ExportDocument:
         with self.connect() as connection:
-            collections = tuple(
-                Collection.model_validate_json(row["payload"])
-                for row in connection.execute(
-                    "SELECT payload FROM collections ORDER BY updated_at, id"
-                )
-            )
+            collections = self._collections_from(connection)
             sessions = tuple(
                 Session.model_validate_json(row["payload"])
                 for row in connection.execute(
@@ -315,6 +315,20 @@ class Vault:
             settings=settings,
         )
 
+    @staticmethod
+    def _collections_from(connection: sqlite3.Connection) -> tuple[Collection, ...]:
+        return tuple(
+            Collection.model_validate_json(row["payload"])
+            for row in connection.execute(
+                "SELECT payload FROM collections ORDER BY updated_at, id"
+            )
+        )
+
+    def collections(self) -> tuple[Collection, ...]:
+        """Load only the collection records needed by search and Markdown export."""
+        with self.connect() as connection:
+            return self._collections_from(connection)
+
     def search_tabs(
         self, query: str = "", *, hostname: str | None = None
     ) -> list[tuple[Collection, Tab]]:
@@ -324,7 +338,7 @@ class Vault:
         if not domain:
             domain = None
         matches: list[tuple[Collection, Tab]] = []
-        for collection in self.export_document().collections:
+        for collection in self.collections():
             for tab in collection.tabs:
                 text_match = not needle or needle in (
                     f"{tab.title} {tab.url} {tab.hostname}".casefold()
@@ -339,9 +353,9 @@ class Vault:
 
     def write_markdown(self, destination: Path) -> None:
         """Render a human-readable snapshot; Markdown is never read as the vault."""
-        document = self.export_document()
+        collections = self.collections()
         lines = ["# Tabman collections", ""]
-        for collection in document.collections:
+        for collection in collections:
             lines.extend((f"## {collection.name}", ""))
             if collection.description:
                 lines.extend((collection.description, ""))
