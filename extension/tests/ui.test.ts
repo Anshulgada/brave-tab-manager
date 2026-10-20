@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  groupBy,
   hostInitial,
   hostLabel,
   pluralize,
@@ -63,21 +62,5 @@ describe('tab labels', () => {
     expect(hostInitial('example.com', 'https://example.com')).toBe('E');
     expect(hostInitial('', 'https://example.com')).toBe('E');
     expect(hostInitial('', '')).toBe('#');
-  });
-});
-
-describe('groupBy', () => {
-  it('keeps the original order inside each group', () => {
-    const grouped = groupBy(
-      [
-        { id: 'a', kind: 'x' },
-        { id: 'b', kind: 'y' },
-        { id: 'c', kind: 'x' },
-      ],
-      (item) => item.kind,
-    );
-
-    expect([...grouped.keys()]).toEqual(['x', 'y']);
-    expect(grouped.get('x')?.map((item) => item.id)).toEqual(['a', 'c']);
   });
 });

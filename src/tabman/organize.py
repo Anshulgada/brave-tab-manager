@@ -63,10 +63,6 @@ __all__ = [
     "proposal_rows",
 ]
 
-# Backwards compatible aliases for the private helpers used by older tests.
-_prompt = build_prompt
-_validate_complete_batch = validate_complete_batch
-
 
 class Provider(Protocol):
     name: str
@@ -158,7 +154,7 @@ class GeminiProvider:
                         {
                             "parts": [
                                 {
-                                    "text": _prompt(
+                                    "text": build_prompt(
                                         tabs, include_full_url=include_full_url
                                     )
                                 }

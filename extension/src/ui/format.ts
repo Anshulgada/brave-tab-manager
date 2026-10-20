@@ -62,21 +62,3 @@ export function pluralize(
 ): string {
   return count === 1 ? singular : (plural ?? `${singular}s`);
 }
-
-/** Group items by a key, preserving the original order inside each group. */
-export function groupBy<T>(
-  items: T[],
-  key: (item: T) => string,
-): Map<string, T[]> {
-  const groups = new Map<string, T[]>();
-  for (const item of items) {
-    const groupKey = key(item);
-    const bucket = groups.get(groupKey);
-    if (bucket) {
-      bucket.push(item);
-    } else {
-      groups.set(groupKey, [item]);
-    }
-  }
-  return groups;
-}

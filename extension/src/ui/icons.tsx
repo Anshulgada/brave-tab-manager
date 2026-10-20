@@ -70,19 +70,6 @@ export function RestoreIcon(props: IconProps) {
   );
 }
 
-export function ExternalIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M14 4h6v6" {...stroke} />
-      <path d="M20 4 11 13" {...stroke} />
-      <path
-        d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"
-        {...stroke}
-      />
-    </Icon>
-  );
-}
-
 export function DownloadIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -228,15 +215,6 @@ export function ShieldIcon(props: IconProps) {
         {...stroke}
       />
       <path d="m9 12 2 2 4-4" {...stroke} />
-    </Icon>
-  );
-}
-
-export function KeyboardIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <rect x="3" y="6" width="18" height="12" rx="2" {...stroke} />
-      <path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8" {...stroke} />
     </Icon>
   );
 }
