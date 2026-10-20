@@ -143,34 +143,37 @@ export async function importExportDocument(
         }
       }
       const existingTags = await database.tags.toArray();
+      const tagsById = new Map(
+        existingTags.map((tag) => [tag.id, tag] as const),
+      );
+      const tagByName = new Map<string, TagRecord>();
+      const tagKey = (collectionId: string, name: string): string =>
+        `${collectionId}\u0000${name.toLocaleLowerCase()}`;
+      for (const tag of existingTags) {
+        tagByName.set(tagKey(tag.collectionId, tag.name), tag);
+      }
       for (const tag of tags) {
-        const existing = existingTags.find(
-          (candidate) => candidate.id === tag.id,
-        );
+        const existing = tagsById.get(tag.id);
         if (existing && existing.collectionId !== tag.collectionId) {
           throw new Error(
             `Tag ${tag.id} already belongs to another collection`,
           );
         }
-        const sameName = existingTags.find(
-          (candidate) =>
-            candidate.collectionId === tag.collectionId &&
-            candidate.id !== tag.id &&
-            candidate.name.toLocaleLowerCase() === tag.name.toLocaleLowerCase(),
-        );
-        if (sameName) {
+        const nameKey = tagKey(tag.collectionId, tag.name);
+        const sameName = tagByName.get(nameKey);
+        if (sameName && sameName.id !== tag.id) {
           throw new Error(
             `Tag name "${tag.name}" already exists in this collection`,
           );
         }
-        const existingIndex = existingTags.findIndex(
-          (candidate) => candidate.id === tag.id,
-        );
-        if (existingIndex >= 0) {
-          existingTags[existingIndex] = tag;
-        } else {
-          existingTags.push(tag);
+        if (existing) {
+          const oldNameKey = tagKey(existing.collectionId, existing.name);
+          if (oldNameKey !== nameKey) {
+            tagByName.delete(oldNameKey);
+          }
         }
+        tagsById.set(tag.id, tag);
+        tagByName.set(nameKey, tag);
       }
     }
     await database.collections.bulkPut(collections);
@@ -245,6 +248,18 @@ export async function exportDatabase(
         throw new Error('Cannot export database with orphaned tabs or tags');
       }
 
+      const tagsByCollection = new Map<string, TagRecord[]>();
+      for (const tag of tagRecords) {
+        const collectionTags = tagsByCollection.get(tag.collectionId) ?? [];
+        collectionTags.push(tag);
+        tagsByCollection.set(tag.collectionId, collectionTags);
+      }
+      const tabsByCollection = new Map<string, TabRecord[]>();
+      for (const tab of tabRecords) {
+        const collectionTabs = tabsByCollection.get(tab.collectionId) ?? [];
+        collectionTabs.push(tab);
+        tabsByCollection.set(tab.collectionId, collectionTabs);
+      }
       const collections = collectionRecords
         .sort(
           (left, right) =>
@@ -253,16 +268,14 @@ export async function exportDatabase(
         )
         .map((record) => {
           const { sortOrder: _sortOrder, ...collection } = record;
-          const tags = tagRecords
-            .filter((tag) => tag.collectionId === record.id)
+          const tags = (tagsByCollection.get(record.id) ?? [])
             .sort(
               (left, right) =>
                 (left.sortOrder ?? 0) - (right.sortOrder ?? 0) ||
                 left.id.localeCompare(right.id),
             )
             .map(withoutRecordFieldsFromTag);
-          const tabs = tabRecords
-            .filter((tab) => tab.collectionId === record.id)
+          const tabs = (tabsByCollection.get(record.id) ?? [])
             .sort(
               (left, right) =>
                 left.position - right.position ||

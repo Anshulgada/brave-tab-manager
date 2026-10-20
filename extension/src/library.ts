@@ -66,6 +66,18 @@ export async function loadLibrary(
         throw new Error('Library settings are unavailable');
       }
       const parking = new Set(settings.parkingCollectionIds ?? []);
+      const tabsByCollection = new Map<string, TabRecord[]>();
+      for (const tab of tabs) {
+        const collectionTabs = tabsByCollection.get(tab.collectionId) ?? [];
+        collectionTabs.push(tab);
+        tabsByCollection.set(tab.collectionId, collectionTabs);
+      }
+      const tagsByCollection = new Map<string, TagRecord[]>();
+      for (const tag of tags) {
+        const collectionTags = tagsByCollection.get(tag.collectionId) ?? [];
+        collectionTags.push(tag);
+        tagsByCollection.set(tag.collectionId, collectionTags);
+      }
       return {
         collections: collections
           .filter((collection) => !parking.has(collection.id))
@@ -76,20 +88,16 @@ export async function loadLibrary(
           )
           .map((collection) => ({
             ...collection,
-            tabs: tabs
-              .filter((tab) => tab.collectionId === collection.id)
-              .sort(
-                (left, right) =>
-                  left.position - right.position ||
-                  left.id.localeCompare(right.id),
-              ),
-            tags: tags
-              .filter((tag) => tag.collectionId === collection.id)
-              .sort(
-                (left, right) =>
-                  (left.sortOrder ?? 0) - (right.sortOrder ?? 0) ||
-                  left.name.localeCompare(right.name),
-              ),
+            tabs: (tabsByCollection.get(collection.id) ?? []).sort(
+              (left, right) =>
+                left.position - right.position ||
+                left.id.localeCompare(right.id),
+            ),
+            tags: (tagsByCollection.get(collection.id) ?? []).sort(
+              (left, right) =>
+                (left.sortOrder ?? 0) - (right.sortOrder ?? 0) ||
+                left.name.localeCompare(right.name),
+            ),
           })),
         settings,
       };
