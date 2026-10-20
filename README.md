@@ -64,7 +64,7 @@ uvx tabman --help
 
 `uvx` runs the published package in an isolated, temporary environment.
 
-> The `tabman` name already exists on PyPI at `0.2.0`. This rebuild is `0.3.x`; until a `0.3.x` release is published, the one-line installers fall back to the Git branch automatically. After publishing, `uvx tabman` uses the new version.
+> The `tabman` name on PyPI now points at this rebuild. `uvx tabman` and `uv tool install tabman` install the current release, and the one-line installers fall back to the Git branch when a release is newer than the published package.
 
 ### Install persistently with uv
 
@@ -106,7 +106,7 @@ Environment variables:
 
 | Variable                  | Effect                                      |
 | ------------------------- | ------------------------------------------- |
-| `TABMAN_VERSION`          | Pin a version, for example `0.3.14`.        |
+| `TABMAN_VERSION`          | Pin a version, for example `0.3.15`.        |
 | `TABMAN_ASSUME_YES=1`     | Accept the extension prompt without asking. |
 | `TABMAN_SKIP_EXTENSION=1` | Skip the extension download entirely.       |
 | `TABMAN_EXTENSION_ROOT`   | Where the extension is unpacked.            |
@@ -289,8 +289,8 @@ uv run python scripts/check_versions.py
 3. Commit and tag the release:
 
    ```powershell
-   git tag v0.3.15
-   git push origin v0.3.15
+   git tag v0.3.16
+   git push origin v0.3.16
    ```
 
 4. `.github/workflows/release.yml` builds the wheel/sdist and extension zip, publishes to PyPI, and creates a GitHub Release with the install scripts.
@@ -299,14 +299,14 @@ The old `pypi-publish.yml` workflow was removed: it published on every push to `
 
 ### One-time PyPI setup
 
-The workflow uses PyPI trusted publishing, so no password or API token is stored in GitHub. On PyPI, open the `tabman` project's **Publishing** settings and add a trusted publisher:
+The workflow uses PyPI trusted publishing, so no password or API token is stored in GitHub. The `tabman` project already has a trusted publisher; on PyPI, open the project's **Publishing** settings and check that it reads:
 
 - Owner: `Anshulgada`
 - Repository: `brave-tab-manager`
 - Workflow: `release.yml`
 - Environment: `pypi`
 
-Create the matching `pypi` environment in the GitHub repository settings. If the PyPI name is not owned by this project, use a unique distribution name and update the workflow URL and the install commands here.
+The matching `pypi` environment lives in the GitHub repository settings. If the PyPI name is not owned by this project, use a unique distribution name and update the workflow URL and the install commands here.
 
 ## License
 

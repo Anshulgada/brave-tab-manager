@@ -4,6 +4,21 @@ All notable changes to Tabman will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.15]
+
+### Changed
+
+- The extension builds into `extension/output` instead of the hidden `.output` directory, so the GitHub artifact upload finds the sideload archive and the CI extension job passes.
+- The workflows pin the Node 24 action releases: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/upload-artifact@v7`, `actions/download-artifact@v8`, and `softprops/action-gh-release@v3`.
+- The PyPI publish step skips files that are already on PyPI, so re-running a release no longer fails on a duplicate upload.
+- The README points at the published package and the visible extension output directory.
+
+### Fixed
+
+- Declare `@types/node` in the extension so a clean install has the node types the test fixtures read with, and the CI type check passes.
+
 ## [0.3.14]
 
 ### Added
