@@ -1,9 +1,22 @@
+import { collectOpenTabs } from './collect-service';
 import { normalizeHostname, TabmanDatabase, type TabRecord } from './database';
 import {
   errorResponse,
   parseSwitchboardRequest,
   type SwitchboardResponse,
 } from './messages';
+import { notifyLibraryChanged, notifySwitchboardChanged } from './notify';
+import {
+  activateProvider,
+  applyProposal,
+  buildProposal,
+  forgetStoredKey,
+  readProviderSettings,
+  removeProvider,
+  restoreCollection,
+  setApiKey,
+  upsertProvider,
+} from './organize-service';
 import { collectionSchema, tabSchema } from './schema';
 import { buildSwitchboardSnapshot } from './switchboard';
 
@@ -57,22 +70,6 @@ function parkableAddress(value: string | undefined): string | undefined {
     return protocol === 'http:' || protocol === 'https:' ? value : undefined;
   } catch {
     return undefined;
-  }
-}
-
-export async function notifySwitchboardChanged(): Promise<void> {
-  try {
-    await browser.runtime.sendMessage({ type: 'switchboard/changed' });
-  } catch {
-    // No switchboard surface is currently listening.
-  }
-}
-
-async function notifyLibraryChanged(): Promise<void> {
-  try {
-    await browser.runtime.sendMessage({ type: 'library/changed' });
-  } catch {
-    // No library surface is currently listening.
   }
 }
 
@@ -451,7 +448,47 @@ export async function handleSwitchboardRequest(
           url: browser.runtime.getURL('/dashboard.html'),
         });
         return { ok: true };
+      case 'library/restore':
+        return await restoreCollection(request.collectionId);
+      case 'library/collect':
+        return await collectOpenTabs(request.name);
+      case 'library/organize': {
+        const proposal = await buildProposal(request.mode);
+        return { ok: true, proposal };
+      }
+      case 'library/organize/apply': {
+        const applied = await applyProposal(request.proposal as never);
+        await notifyLibraryChanged();
+        return { ok: true, applied };
+      }
+      case 'providers/get': {
+        const { settings, hasKey } = await readProviderSettings();
+        return { ok: true, settings, hasKey };
+      }
+      case 'providers/save': {
+        const settings = await upsertProvider(request.profile);
+        return { ok: true, settings };
+      }
+      case 'providers/remove': {
+        const settings = await removeProvider(request.id);
+        return { ok: true, settings };
+      }
+      case 'providers/activate': {
+        const settings = await activateProvider(request.id);
+        return { ok: true, settings };
+      }
+      case 'providers/set-key': {
+        await setApiKey(request.key, request.remember);
+        return { ok: true };
+      }
+      case 'providers/forget-key': {
+        await forgetStoredKey();
+        return { ok: true };
+      }
+      case 'providers/grant':
+        return { ok: true };
     }
+    return { ok: true };
   } catch (error) {
     return errorResponse(error);
   }

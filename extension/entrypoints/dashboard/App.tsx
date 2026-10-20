@@ -28,6 +28,7 @@ import {
 } from '../../src/library';
 import type { LibraryChangedMessage } from '../../src/messages';
 import { PRODUCT_NAME } from '../../src/product';
+import { sendSwitchboardRequest } from '../../src/runtime';
 import type { Settings } from '../../src/schema';
 import {
   hostInitial,
@@ -47,6 +48,7 @@ import {
   LayersIcon,
   LibraryIcon,
   ListIcon,
+  MoonIcon,
   MoreIcon,
   PlusIcon,
   RestoreIcon,
@@ -60,11 +62,13 @@ import {
   UploadIcon,
   ZapIcon,
 } from '../../src/ui/icons';
+import { shortcut } from '../../src/ui/platform';
+import { OrganizePanel, ProvidersPanel } from './panels';
 
 const database = new TabmanDatabase();
 const VIEW_STORAGE_KEY = 'tabman.library-view';
 
-type Section = 'library' | 'trash' | 'settings';
+type Section = 'library' | 'organize' | 'providers' | 'trash' | 'settings';
 type View = 'grid' | 'list';
 type SortOrder = 'recent' | 'name' | 'tabs';
 
@@ -124,6 +128,8 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [draggingTabId, setDraggingTabId] = useState<string>();
+  const [dropTargetId, setDropTargetId] = useState<string>();
   const [paletteQuery, setPaletteQuery] = useState('');
 
   const pushToast = useCallback(
@@ -204,14 +210,29 @@ export function App() {
   }, [load]);
 
   const settings = snapshot?.settings;
+  const [currentTheme, setCurrentTheme] = useState<string>('system');
+
+  const applyTheme = useCallback((theme: string) => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme =
+      theme === 'system' ? 'light dark' : theme;
+    setCurrentTheme(theme);
+  }, []);
+
   useEffect(() => {
+    if (settings) {
+      applyTheme(settings.theme);
+    }
+  }, [applyTheme, settings]);
+
+  const toggleTheme = async () => {
     if (!settings) {
       return;
     }
-    document.documentElement.dataset.theme = settings.theme;
-    document.documentElement.style.colorScheme =
-      settings.theme === 'system' ? 'light dark' : settings.theme;
-  }, [settings]);
+    const next = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    await saveSettings({ ...settings, theme: next });
+  };
 
   const defaultView = settings?.defaultView;
   useEffect(() => {
@@ -455,6 +476,40 @@ export function App() {
     }
   }, []);
 
+  const collectAll = async () => {
+    if (busyRef.current) {
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const response = await sendSwitchboardRequest({
+        type: 'library/collect',
+      });
+      if (!response.ok) {
+        throw new Error(response.error);
+      }
+      if (!('affected' in response)) {
+        throw new Error('The collect action did not report a result');
+      }
+      pushToast(
+        `${response.affected} open tabs collected into a new collection.`,
+        'success',
+      );
+      await load();
+    } catch (collectError) {
+      pushToast(
+        collectError instanceof Error
+          ? collectError.message
+          : 'The open tabs could not be collected',
+        'danger',
+      );
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
   const requestConfirm = (request: ConfirmRequest) => {
     setConfirmRequest(request);
   };
@@ -602,7 +657,7 @@ export function App() {
         >
           <SearchIcon size={15} />
           <span>Search collections and commands</span>
-          <span className="kbd">⌘K</span>
+          <span className="kbd">{shortcut('K')}</span>
         </button>
 
         <div className="topbar-actions">
@@ -623,6 +678,23 @@ export function App() {
             onClick={() => void downloadExport()}
           >
             <DownloadIcon />
+          </button>
+          <button
+            className="btn btn-ghost btn-icon"
+            type="button"
+            title={
+              currentTheme === 'dark'
+                ? 'Switch to the light theme'
+                : 'Switch to the dark theme'
+            }
+            aria-label={
+              currentTheme === 'dark'
+                ? 'Switch to the light theme'
+                : 'Switch to the dark theme'
+            }
+            onClick={() => void toggleTheme()}
+          >
+            {currentTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </button>
           <button
             className="btn btn-ghost btn-icon"
@@ -658,6 +730,26 @@ export function App() {
               <LayersIcon />
               <span>Library</span>
               <span className="rail-count">{activeCollections.length}</span>
+            </button>
+            <button
+              className={
+                section === 'organize' ? 'rail-link active' : 'rail-link'
+              }
+              type="button"
+              onClick={() => setSection('organize')}
+            >
+              <SparkIcon />
+              <span>Organize</span>
+            </button>
+            <button
+              className={
+                section === 'providers' ? 'rail-link active' : 'rail-link'
+              }
+              type="button"
+              onClick={() => setSection('providers')}
+            >
+              <ZapIcon />
+              <span>Providers</span>
             </button>
             <button
               className={section === 'trash' ? 'rail-link active' : 'rail-link'}
@@ -744,11 +836,13 @@ export function App() {
               ) : (
                 filteredCollections.map((collection) => (
                   <button
-                    className={
-                      collection.id === selectedCollectionId
-                        ? 'rail-item selected'
-                        : 'rail-item'
-                    }
+                    className={[
+                      'rail-item',
+                      collection.id === selectedCollectionId ? 'selected' : '',
+                      collection.id === dropTargetId ? 'drop-target' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                     type="button"
                     key={collection.id}
                     onClick={() => {
@@ -756,6 +850,32 @@ export function App() {
                       setTagFilter('');
                       setSelectedTabs(new Set());
                       setSection('library');
+                    }}
+                    onDragOver={(event) => {
+                      if (!draggingTabId) {
+                        return;
+                      }
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                      setDropTargetId(collection.id);
+                    }}
+                    onDragLeave={() =>
+                      setDropTargetId((current) =>
+                        current === collection.id ? undefined : current,
+                      )
+                    }
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setDropTargetId(undefined);
+                      const tabId = draggingTabId;
+                      setDraggingTabId(undefined);
+                      if (!tabId) {
+                        return;
+                      }
+                      void runMutation(
+                        () => moveTabs(database, [tabId], collection.id),
+                        `Moved to ${collection.name}.`,
+                      );
                     }}
                   >
                     <span
@@ -805,8 +925,13 @@ export function App() {
             <SettingsPanel
               settings={settings}
               busy={busy}
+              onApplyTheme={applyTheme}
               onSave={(next) => void saveSettings(next)}
             />
+          ) : section === 'providers' ? (
+            <ProvidersPanel onNotify={pushToast} />
+          ) : section === 'organize' ? (
+            <OrganizePanel onNotify={pushToast} onApplied={() => void load()} />
           ) : section === 'trash' ? (
             <TrashPanel
               collections={trashedCollections}
@@ -836,6 +961,25 @@ export function App() {
             <WelcomeState onCreate={() => setCreating(true)} />
           ) : (
             <>
+              <section className="collect-bar">
+                <div>
+                  <strong>Collect every open tab</strong>
+                  <span>
+                    Save the tabs you have open right now into a new collection.
+                    They stay open in the browser.
+                  </span>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void collectAll()}
+                >
+                  <ZapIcon size={15} />
+                  Collect all open tabs
+                </button>
+              </section>
+
               <section className="collection-head">
                 <div className="collection-title">
                   {renaming ? (
@@ -1055,6 +1199,8 @@ export function App() {
                             ),
                         })
                       }
+                      onDragStart={() => setDraggingTabId(tab.id)}
+                      onDragEnd={() => setDraggingTabId(undefined)}
                     />
                   ))}
                 </div>
@@ -1090,6 +1236,8 @@ export function App() {
                             ),
                         })
                       }
+                      onDragStart={() => setDraggingTabId(tab.id)}
+                      onDragEnd={() => setDraggingTabId(undefined)}
                     />
                   ))}
                 </div>
@@ -1247,6 +1395,8 @@ interface TabCardProps {
   onToggle: () => void;
   onRestore: () => void;
   onDelete: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
 }
 
 function TabCard({
@@ -1256,11 +1406,22 @@ function TabCard({
   onToggle,
   onRestore,
   onDelete,
+  onDragStart,
+  onDragEnd,
 }: TabCardProps) {
   const title = tabLabel(tab.title, tab.hostname, tab.url);
   const host = hostLabel(tab.hostname, tab.url);
   return (
-    <article className={selected ? 'tab-card selected' : 'tab-card'}>
+    <article
+      className={selected ? 'tab-card selected' : 'tab-card'}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', tab.id);
+        onDragStart();
+      }}
+      onDragEnd={onDragEnd}
+    >
       <div className="tab-card-top">
         <input
           className="checkbox"
@@ -1334,11 +1495,22 @@ function TabRow({
   onToggle,
   onRestore,
   onDelete,
+  onDragStart,
+  onDragEnd,
 }: TabCardProps) {
   const title = tabLabel(tab.title, tab.hostname, tab.url);
   const host = hostLabel(tab.hostname, tab.url);
   return (
-    <article className={selected ? 'tab-row selected' : 'tab-row'}>
+    <article
+      className={selected ? 'tab-row selected' : 'tab-row'}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', tab.id);
+        onDragStart();
+      }}
+      onDragEnd={onDragEnd}
+    >
       <input
         className="checkbox"
         type="checkbox"
@@ -1513,10 +1685,12 @@ function BulkBar({
 function SettingsPanel({
   settings,
   busy,
+  onApplyTheme,
   onSave,
 }: {
   settings: Settings;
   busy: boolean;
+  onApplyTheme: (theme: string) => void;
   onSave: (settings: Settings) => void;
 }) {
   const [draft, setDraft] = useState<Settings>(settings);
@@ -1557,7 +1731,10 @@ function SettingsPanel({
                 type="button"
                 key={theme}
                 aria-pressed={draft.theme === theme}
-                onClick={() => setDraft({ ...draft, theme })}
+                onClick={() => {
+                  setDraft({ ...draft, theme });
+                  onApplyTheme(theme);
+                }}
               >
                 {theme === 'system'
                   ? 'System'
@@ -1655,7 +1832,8 @@ function SettingsPanel({
           </div>
           <ul className="shortcut-list">
             <li>
-              <span className="kbd">⌘K</span>Open the command palette
+              <span className="kbd">{shortcut('K')}</span>Open the command
+              palette
             </li>
             <li>
               <span className="kbd">/</span>Focus the search field

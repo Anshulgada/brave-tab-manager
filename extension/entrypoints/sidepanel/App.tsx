@@ -7,6 +7,8 @@ import {
   useState,
 } from 'react';
 
+import { TabmanDatabase } from '../../src/database';
+import { type LibrarySnapshot, loadLibrary } from '../../src/library';
 import type { SwitchboardChangedMessage } from '../../src/messages';
 import { PRODUCT_NAME } from '../../src/product';
 import { sendSwitchboardRequest } from '../../src/runtime';
@@ -27,6 +29,7 @@ import {
   LayersIcon,
   LibraryIcon,
   MoonIcon,
+  RestoreIcon,
   SearchIcon,
   SparkIcon,
   TagIcon,
@@ -83,6 +86,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>();
+  const [library, setLibrary] = useState<LibrarySnapshot>();
 
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -124,16 +128,29 @@ export function App() {
     }
   }, []);
 
+  const loadLibrarySnapshot = useCallback(async () => {
+    const database = new TabmanDatabase();
+    try {
+      setLibrary(await loadLibrary(database));
+    } catch {
+      // The library is optional in the panel; the switchboard still works.
+    } finally {
+      database.close();
+    }
+  }, []);
+
   useEffect(() => {
     void load();
+    void loadLibrarySnapshot();
     const listener = (message: SwitchboardChangedMessage) => {
       if (message.type === 'switchboard/changed') {
         void load();
+        void loadLibrarySnapshot();
       }
     };
     browser.runtime.onMessage.addListener(listener);
     return () => browser.runtime.onMessage.removeListener(listener);
-  }, [load]);
+  }, [load, loadLibrarySnapshot]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -195,6 +212,17 @@ export function App() {
       }
     },
     [load, push],
+  );
+
+  const restoreCollection = useCallback(
+    (collectionId: string, name: string) => {
+      void runMutation(
+        { type: 'library/restore', collectionId },
+        `${name} restored.`,
+        () => void loadLibrarySnapshot(),
+      );
+    },
+    [loadLibrarySnapshot, runMutation],
   );
 
   const activate = useCallback(
@@ -273,6 +301,10 @@ export function App() {
     }
   };
 
+  const savedCollections = (library?.collections ?? []).filter(
+    (collection) =>
+      collection.status === 'active' && collection.tabs.length > 0,
+  );
   const selectedIds = [...selected];
   const targetWindows =
     snapshot?.windows.filter((window) =>
@@ -291,18 +323,35 @@ export function App() {
             <span>Switchboard</span>
           </div>
         </div>
-        <button
-          className="btn btn-ghost btn-icon"
-          type="button"
-          title="Open the library"
-          aria-label="Open the library"
-          disabled={busy}
-          onClick={() =>
-            void runMutation({ type: 'dashboard/open' }, 'Library opened.')
-          }
-        >
-          <LibraryIcon />
-        </button>
+        <div className="panel-head-actions">
+          <button
+            className="btn btn-ghost btn-icon"
+            type="button"
+            title="Collect every open tab into the library"
+            aria-label="Collect every open tab into the library"
+            disabled={busy}
+            onClick={() =>
+              void runMutation(
+                { type: 'library/collect' },
+                'The open tabs were collected.',
+              )
+            }
+          >
+            <ZapIcon />
+          </button>
+          <button
+            className="btn btn-ghost btn-icon"
+            type="button"
+            title="Open the library"
+            aria-label="Open the library"
+            disabled={busy}
+            onClick={() =>
+              void runMutation({ type: 'dashboard/open' }, 'Library opened.')
+            }
+          >
+            <LibraryIcon />
+          </button>
+        </div>
       </header>
 
       <div className="panel-search">
@@ -523,6 +572,35 @@ export function App() {
             </section>
           ))}
         </div>
+      )}
+
+      {savedCollections.length > 0 && (
+        <section className="panel-library" aria-label="Saved collections">
+          <header>
+            <LibraryIcon size={13} />
+            <span>Saved</span>
+          </header>
+          {savedCollections.map((collection) => (
+            <div className="panel-library-item" key={collection.id}>
+              <span className="panel-library-name">{collection.name}</span>
+              <span className="panel-library-count">
+                {collection.tabs.length}
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                disabled={busy}
+                title={`Restore ${collection.tabs.length} tabs`}
+                onClick={() =>
+                  restoreCollection(collection.id, collection.name)
+                }
+              >
+                <RestoreIcon size={13} />
+                Restore
+              </button>
+            </div>
+          ))}
+        </section>
       )}
 
       {selected.size > 0 && (

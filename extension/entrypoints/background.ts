@@ -1,9 +1,9 @@
 import {
   clearStaleParkingLocks,
   handleSwitchboardRequest,
-  notifySwitchboardChanged,
 } from '../src/background-service';
 import type { SwitchboardRequest } from '../src/messages';
+import { notifySwitchboardChanged } from '../src/notify';
 
 const REQUEST_TYPES = new Set<SwitchboardRequest['type']>([
   'switchboard/get',
