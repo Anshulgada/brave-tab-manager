@@ -320,6 +320,23 @@ act needs Docker or Podman. On Windows, Podman is the free option. Two more open
 - [actionlint](https://github.com/rhysd/actionlint) checks the workflow files for mistakes without running them.
 - [zizmor](https://github.com/woodruffw/zizmor) audits the workflows for security problems such as unpinned actions and template injection.
 
+Both are part of the local gate, and the workflow job on `main` runs them again:
+
+```powershell
+uv run zizmor --persona=regular --min-severity=low .github/workflows
+actionlint
+```
+
+zizmor is already a development dependency, so `uv run zizmor` works out of the box. actionlint is a single binary:
+
+```powershell
+winget install rhysd.actionlint   # Windows
+brew install actionlint            # macOS
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
+```
+
+The workflows pin every action to a commit hash, keep the checkout credentials out of the workspace, and disable the caches in the release job, so a poisoned cache cannot reach a published artifact.
+
 > This repository is public, so GitHub-hosted runners are free and unlimited for it. The workflow still runs only on `main` to keep the queue short and the feedback local.
 
 ### Everyday commands
