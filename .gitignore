@@ -43,3 +43,6 @@ vault/
 *.sqlite
 *.sqlite3
 *.db
+# Tooling output that should never be committed
+.playwright-mcp/
+artifacts/
