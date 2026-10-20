@@ -5,6 +5,7 @@ import '@fontsource/space-grotesk/700.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 
+import '../../src/ui/base.css';
 import { App } from './App';
 import './style.css';
 

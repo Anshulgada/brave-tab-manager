@@ -60,4 +60,12 @@ export default defineBackground(() => {
       url: browser.runtime.getURL('/dashboard.html'),
     });
   });
+
+  browser.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'install') {
+      void browser.tabs.create({
+        url: browser.runtime.getURL('/dashboard.html'),
+      });
+    }
+  });
 });
