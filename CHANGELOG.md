@@ -2,10 +2,36 @@
 
 All notable changes to Tabman will be documented in this file.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.14]
+
+### Added
+
+- OpenAI- and Anthropic-compatible providers: `tabman config add-provider`, `config list-providers`, and `config remove-provider` manage provider profiles with a display name, base URL, model, and API format. `tabman organize` also accepts `--base-url`, `--model`, and `--api-format` for one-off runs.
+- Support for OpenAI's current Responses API (`--format responses`), which is what the built-in `openai` provider uses and what OpenAI recommends for new integrations.
+- The one-line installers now install the CLI, offer to download the browser extension, and print the next steps. `scripts/install-extension.sh` was added for macOS and Linux.
+- A stable `tabmanextension-latest-chrome.zip` release asset lets the installers fetch the extension without the GitHub API.
+
+### Changed
+
+- Migrated the CLI from Typer to rich-click.
+- Redesigned help with grouped, colored rich-click panels and added readable Rich tables for search results (TSV remains available with `--format tsv`).
+- Raised the Python requirement to 3.14 and refreshed the locked dependencies.
+- Updated the extension to WXT 0.21, React 19.3, Vitest 5, and Biome 2.5.
+- Added a tag-driven release workflow, PyPI trusted publishing, and CLI and extension install scripts.
+- Reduced CLI startup work by loading capture/organize dependencies only when needed; search and Markdown export now read only collection records.
+- Grouped extension library reads/exports by collection, replacing repeated full-table scans with linear passes.
+- Removed the legacy `pypi-publish.yml` workflow; `release.yml` is now the only path that publishes to PyPI.
+- README one-line installers point at the `feat/rebuild` branch until the rebuild is merged.
+- The built-in providers now default to current models: `gpt-6-luna` for OpenAI and `claude-haiku-5-5` for Anthropic.
+
+### Fixed
+
+- Rendered rich-click panels as rounded, colored boxes on every terminal by forcing UTF-8 output instead of falling back to ASCII borders.
+- Report corrupt vaults, malformed config values, and unsupported organize providers as concise CLI errors instead of tracebacks.
+- Preserve valid deterministic collection names and tags for very long hostnames, and validate blank provider output.
+- The provider table now uses the full terminal width and wraps long values instead of cutting the base URL off.
 
 ## [0.3.6]
 
