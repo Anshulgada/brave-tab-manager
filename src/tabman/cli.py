@@ -38,7 +38,13 @@ from tabman.config import (
 )
 from tabman.legacy import LegacyImportError, import_legacy
 from tabman.models import ExportDocument, ProposalStatus
-from tabman.theme import CONTEXT_SETTINGS, apply_theme, panel
+from tabman.theme import (
+    CONTEXT_SETTINGS,
+    AutoWidthCommand,
+    AutoWidthGroup,
+    apply_theme,
+    panel,
+)
 from tabman.vault import Vault, read_document, write_document
 
 VaultPath = click.Path(dir_okay=False, path_type=Path)
@@ -133,6 +139,7 @@ def _provider_table(rows: list[dict[str, object]], title: str) -> Table:
 
 
 @click.group(
+    cls=AutoWidthGroup,
     name="tabman",
     help=(
         "Manage a local vault of Chromium tabs and collections.\n"
@@ -150,13 +157,13 @@ def app() -> None:
     """Manage a local vault of Chromium tabs and collections."""
 
 
-@app.command("version")
+@app.command(cls=AutoWidthCommand, name="version")
 def version_command() -> None:
     """Print the version sourced from installed package metadata."""
     click.echo(__version__)
 
 
-@app.command("import")
+@app.command(cls=AutoWidthCommand, name="import")
 @click.argument(
     "source",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -203,7 +210,7 @@ def import_command(
     )
 
 
-@app.command("export")
+@app.command(cls=AutoWidthCommand, name="export")
 @click.argument("destination", type=click.Path(dir_okay=False, path_type=Path))
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
@@ -227,7 +234,7 @@ def export_command(destination: Path, vault: Path | None, format_: str) -> None:
     console.print(f"[green]Exported[/] vault to [cyan]{escape(str(destination))}[/].")
 
 
-@app.command("search")
+@app.command(cls=AutoWidthCommand, name="search")
 @click.argument("query", required=False, default="")
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
@@ -305,7 +312,7 @@ def search_command(
     console.print(table)
 
 
-@app.command("capture")
+@app.command(cls=AutoWidthCommand, name="capture")
 @click.option("--name", required=True, help="Name for the captured collection.")
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
@@ -332,7 +339,7 @@ def capture_command(name: str, vault: Path | None, endpoint: str) -> None:
     )
 
 
-@app.command("organize")
+@app.command(cls=AutoWidthCommand, name="organize")
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
 )
@@ -459,6 +466,7 @@ def organize_command(
 
 @click.group(
     "config",
+    cls=AutoWidthGroup,
     help="Inspect or update non-secret local configuration.",
     context_settings=CONTEXT_SETTINGS,
 )
@@ -466,7 +474,7 @@ def config_app() -> None:
     """Inspect or update non-secret local configuration."""
 
 
-@config_app.command("show")
+@config_app.command(cls=AutoWidthCommand, name="show")
 def config_show() -> None:
     """Print non-secret settings and only the names of available keys."""
     try:
@@ -475,7 +483,7 @@ def config_show() -> None:
         _fail(error)
 
 
-@config_app.command("list-providers")
+@config_app.command(cls=AutoWidthCommand, name="list-providers")
 @click.option(
     "--format",
     "format_",
@@ -521,7 +529,7 @@ def config_list_providers(format_: str) -> None:
     )
 
 
-@config_app.command("add-provider")
+@config_app.command(cls=AutoWidthCommand, name="add-provider")
 @click.argument("name")
 @click.option(
     "--base-url",
@@ -593,7 +601,7 @@ def config_add_provider(
     )
 
 
-@config_app.command("remove-provider")
+@config_app.command(cls=AutoWidthCommand, name="remove-provider")
 @click.argument("name")
 def config_remove_provider(name: str) -> None:
     """Remove a configured provider profile."""
@@ -612,7 +620,7 @@ def config_remove_provider(name: str) -> None:
     console.print(f"[green]Provider removed[/] [cyan]{escape(name)}[/].")
 
 
-@config_app.command("set")
+@config_app.command(cls=AutoWidthCommand, name="set")
 @click.option("--vault", type=VaultPath, help="Default SQLite vault path.")
 @click.option("--provider", help="Default organize provider.")
 @click.option("--mistral-base-url", help="Mistral-compatible API base URL.")
@@ -654,7 +662,7 @@ def config_set(
     console.print("[green]Configuration updated.[/]")
 
 
-@config_app.command("set-key")
+@config_app.command(cls=AutoWidthCommand, name="set-key")
 @click.argument("provider")
 def config_set_key(provider: str) -> None:
     """Prompt securely and store a provider key in the user config directory."""
