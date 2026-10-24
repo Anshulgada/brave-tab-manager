@@ -128,8 +128,6 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [collectOpen, setCollectOpen] = useState(false);
-  const [collectName, setCollectName] = useState('');
   const [draggingTabId, setDraggingTabId] = useState<string>();
   const [dropTargetId, setDropTargetId] = useState<string>();
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -478,30 +476,21 @@ export function App() {
     }
   }, []);
 
-  const openCollectDialog = () => {
-    const selected = selectedCollection;
-    const empty = !selected || selected.tabs.length === 0;
-    setCollectName(
-      empty && selected
-        ? selected.name
-        : `Collected ${new Date().toLocaleDateString()}`,
-    );
-    setCollectOpen(true);
-  };
-
   const collectAll = async () => {
     if (busyRef.current) {
       return;
     }
     const selected = selectedCollection;
     const reuse = Boolean(selected && selected.tabs.length === 0);
+    const name = reuse
+      ? selected?.name
+      : `Collected ${new Date().toLocaleDateString()}`;
     busyRef.current = true;
     setBusy(true);
-    setCollectOpen(false);
     try {
       const response = await sendSwitchboardRequest({
         type: 'library/collect',
-        name: collectName.trim() || undefined,
+        name,
         collectionId: reuse ? selected?.id : undefined,
       });
       if (!response.ok) {
@@ -983,11 +972,11 @@ export function App() {
           ) : !selectedCollection ? (
             <WelcomeState
               onCreate={() => setCreating(true)}
-              onCollect={openCollectDialog}
+              onCollect={() => void collectAll()}
             />
           ) : (
             <>
-              <CollectBar busy={busy} onCollect={openCollectDialog} />
+              <CollectBar busy={busy} onCollect={() => void collectAll()} />
 
               <section className="collection-head">
                 <div className="collection-title">
@@ -1306,62 +1295,6 @@ export function App() {
           onQueryChange={setPaletteQuery}
           onClose={() => setPaletteOpen(false)}
         />
-      )}
-
-      {collectOpen && (
-        <div className="overlay">
-          <button
-            className="overlay-backdrop"
-            type="button"
-            aria-label="Cancel"
-            onClick={() => setCollectOpen(false)}
-          />
-          <div
-            className="dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Collect the open tabs"
-          >
-            <h2>Collect every open tab</h2>
-            <p>
-              Tabman saves the tabs you have open right now into a new
-              collection. They stay open in the browser.
-            </p>
-            <label className="dialog-field">
-              Collection name
-              <input
-                className="input"
-                maxLength={120}
-                value={collectName}
-                onChange={(event) => setCollectName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void collectAll();
-                  }
-                }}
-              />
-            </label>
-            <div className="dialog-actions">
-              <button
-                className="btn"
-                type="button"
-                onClick={() => setCollectOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={busy}
-                onClick={() => void collectAll()}
-              >
-                <ZapIcon size={15} />
-                Collect
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {confirmRequest && (

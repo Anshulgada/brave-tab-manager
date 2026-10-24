@@ -114,7 +114,15 @@ describe('the dashboard', () => {
     expect(collect.length).toBeGreaterThan(0);
   });
 
-  it('asks for a collection name before collecting', async () => {
+  it('collects without asking for a name', async () => {
+    installBrowserMock({
+      'library/collect': {
+        ok: true,
+        affected: 3,
+        collectionId: 'col-1',
+        collectionName: 'Collected 10/21/2026',
+      },
+    });
     const user = userEvent.setup();
     render(<App />);
 
@@ -127,9 +135,7 @@ describe('the dashboard', () => {
         })(),
     );
 
-    const field = await screen.findByLabelText('Collection name');
-
-    expect(field).toBeTruthy();
+    expect(await screen.findByText(/3 open tabs collected/)).toBeTruthy();
   });
 });
 
