@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.3]
+
+### Fixed
+
+- Collecting the open tabs no longer fails with "The extension background service did not respond": the service worker always answers, the sender retries once while the worker wakes up, and the dead `providers/grant` case is gone.
+- The collect button now works on the empty library home as well as on a populated one, asks for the collection name first, and selects the collection it just created.
+- The side panel's collect button reports how many tabs were collected.
+
 ## [0.4.2]
 
 ### Fixed

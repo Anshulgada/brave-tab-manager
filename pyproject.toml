@@ -1,10 +1,6 @@
-[build-system]
-requires = ["uv_build>=0.11.29,<0.12.0"]
-build-backend = "uv_build"
-
 [project]
 name = "tabman"
-version = "0.4.2"
+version = "0.4.3"
 description = "Local-first tab collections and automation for Chromium browsers."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -40,6 +36,10 @@ Issues = "https://github.com/Anshulgada/brave-tab-manager/issues"
 
 [project.scripts]
 tabman = "tabman.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [

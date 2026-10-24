@@ -105,6 +105,14 @@
         if (message && message.type === 'switchboard/get') {
           return { ok: true, snapshot };
         }
+        if (message && message.type === 'library/collect') {
+          return {
+            ok: true,
+            affected: snapshot.tabCount,
+            collectionId: 'preview-collection',
+            collectionName: message.name || 'Collected ' + new Date().toLocaleDateString(),
+          };
+        }
         if (message && message.type === 'library/organize') {
           const groups = new Map();
           for (const browserWindow of snapshot.windows) {
