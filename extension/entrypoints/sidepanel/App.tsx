@@ -225,6 +225,43 @@ export function App() {
     [loadLibrarySnapshot, runMutation],
   );
 
+  const collectAll = useCallback(async () => {
+    if (busyRef.current) {
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const response = await sendSwitchboardRequest({
+        type: 'library/collect',
+      });
+      if (!response.ok) {
+        throw new Error(response.error);
+      }
+      if (!('affected' in response)) {
+        throw new Error('The collect action did not report a result');
+      }
+      push(
+        `${response.affected} open tabs collected into ${
+          response.collectionName ?? 'a new collection'
+        }.`,
+        'success',
+      );
+      await load();
+      await loadLibrarySnapshot();
+    } catch (collectError) {
+      push(
+        collectError instanceof Error
+          ? collectError.message
+          : 'The open tabs could not be collected',
+        'danger',
+      );
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [load, loadLibrarySnapshot, push]);
+
   const activate = useCallback(
     async (tab: SwitchboardTab) => {
       if (busyRef.current) {
@@ -330,12 +367,7 @@ export function App() {
             title="Collect every open tab into the library"
             aria-label="Collect every open tab into the library"
             disabled={busy}
-            onClick={() =>
-              void runMutation(
-                { type: 'library/collect' },
-                'The open tabs were collected.',
-              )
-            }
+            onClick={() => void collectAll()}
           >
             <ZapIcon />
           </button>

@@ -485,8 +485,6 @@ export async function handleSwitchboardRequest(
         await forgetStoredKey();
         return { ok: true };
       }
-      case 'providers/grant':
-        return { ok: true };
     }
     return { ok: true };
   } catch (error) {

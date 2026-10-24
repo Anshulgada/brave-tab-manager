@@ -23,8 +23,15 @@ function cleanName(value: string | undefined, fallback: string): string {
 
 /**
  * Save every open tab into a new collection and leave the browser alone.
+ *
+ * When a collection id is given and that collection is empty, the tabs are
+ * appended to it instead of creating a second collection. That keeps the
+ * common flow simple: make a collection, then collect into it.
  */
-export async function collectOpenTabs(name: string | undefined): Promise<{
+export async function collectOpenTabs(
+  name: string | undefined,
+  collectionId?: string,
+): Promise<{
   ok: true;
   affected: number;
   collectionId: string;
@@ -33,7 +40,6 @@ export async function collectOpenTabs(name: string | undefined): Promise<{
 }> {
   const browserTabs = await browser.tabs.query({});
   const now = new Date().toISOString();
-  const collectionId = crypto.randomUUID();
   const warnings: string[] = [];
   const records: TabRecord[] = [];
 
@@ -65,7 +71,7 @@ export async function collectOpenTabs(name: string | undefined): Promise<{
       });
       records.push({
         ...tab,
-        collectionId,
+        collectionId: collectionId ?? crypto.randomUUID(),
         normalizedHostname: tab.hostname.toLocaleLowerCase(),
       });
     } catch {
@@ -77,33 +83,70 @@ export async function collectOpenTabs(name: string | undefined): Promise<{
     throw new CollectError('There are no open tabs to collect');
   }
 
-  const collection = collectionSchema.parse({
-    id: collectionId,
-    name: cleanName(name, `Collected ${new Date().toLocaleDateString()}`),
-    description: 'Every tab that was open when this collection was made.',
-    color: null,
-    createdAt: now,
-    updatedAt: now,
-    status: 'active',
-    tags: [],
-    tabs: records.map(
-      ({
-        collectionId: _collectionId,
-        normalizedHostname: _hostname,
-        ...tab
-      }) => tab,
-    ),
-  });
-  const { tabs: _tabs, tags: _tags, ...collectionRecord } = collection;
-
   const database = new TabmanDatabase();
+  let targetCollectionId!: string;
+  let collectionName!: string;
   try {
     await database.transaction(
       'rw',
       [database.collections, database.tabs],
       async () => {
+        const existing = collectionId
+          ? await database.collections.get(collectionId)
+          : undefined;
+        if (existing && existing.status === 'active') {
+          const existingTabs = await database.tabs
+            .where('collectionId')
+            .equals(existing.id)
+            .toArray();
+          if (existingTabs.length === 0) {
+            const taggedRecords = records.map((record, index) => ({
+              ...record,
+              collectionId: existing.id,
+              position: index,
+            }));
+            await database.collections.put({
+              ...existing,
+              name: cleanName(name, existing.name),
+              updatedAt: now,
+            });
+            await database.tabs.bulkAdd(taggedRecords);
+            targetCollectionId = existing.id;
+            collectionName = cleanName(name, existing.name);
+            return;
+          }
+        }
+
+        targetCollectionId = collectionId ?? crypto.randomUUID();
+        collectionName = cleanName(
+          name,
+          `Collected ${new Date().toLocaleDateString()}`,
+        );
+        const collection = collectionSchema.parse({
+          id: targetCollectionId,
+          name: collectionName,
+          description: 'Every tab that was open when this collection was made.',
+          color: null,
+          createdAt: now,
+          updatedAt: now,
+          status: 'active',
+          tags: [],
+          tabs: records.map(
+            ({
+              collectionId: _collectionId,
+              normalizedHostname: _hostname,
+              ...tab
+            }) => tab,
+          ),
+        });
+        const { tabs: _tabs, tags: _tags, ...collectionRecord } = collection;
+        const taggedRecords = records.map((record, index) => ({
+          ...record,
+          collectionId: targetCollectionId,
+          position: index,
+        }));
         await database.collections.add(collectionRecord);
-        await database.tabs.bulkAdd(records);
+        await database.tabs.bulkAdd(taggedRecords);
       },
     );
   } finally {
@@ -113,8 +156,8 @@ export async function collectOpenTabs(name: string | undefined): Promise<{
   return {
     ok: true,
     affected: records.length,
-    collectionId,
-    collectionName: collectionRecord.name,
+    collectionId: targetCollectionId,
+    collectionName,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

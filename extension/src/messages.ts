@@ -39,6 +39,7 @@ export const switchboardRequestSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('library/collect'),
     name: z.string().max(120).optional(),
+    collectionId: z.uuid().optional(),
   }),
   z.strictObject({
     type: z.literal('library/restore'),

@@ -479,7 +479,13 @@ export function App() {
   }, []);
 
   const openCollectDialog = () => {
-    setCollectName(`Collected ${new Date().toLocaleDateString()}`);
+    const selected = selectedCollection;
+    const empty = !selected || selected.tabs.length === 0;
+    setCollectName(
+      empty && selected
+        ? selected.name
+        : `Collected ${new Date().toLocaleDateString()}`,
+    );
     setCollectOpen(true);
   };
 
@@ -487,6 +493,8 @@ export function App() {
     if (busyRef.current) {
       return;
     }
+    const selected = selectedCollection;
+    const reuse = Boolean(selected && selected.tabs.length === 0);
     busyRef.current = true;
     setBusy(true);
     setCollectOpen(false);
@@ -494,6 +502,7 @@ export function App() {
       const response = await sendSwitchboardRequest({
         type: 'library/collect',
         name: collectName.trim() || undefined,
+        collectionId: reuse ? selected?.id : undefined,
       });
       if (!response.ok) {
         throw new Error(response.error);
