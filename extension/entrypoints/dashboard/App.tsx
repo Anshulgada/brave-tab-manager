@@ -231,6 +231,11 @@ export function App() {
     }
     const next = currentTheme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
+    setSnapshot((current) =>
+      current
+        ? { ...current, settings: { ...current.settings, theme: next } }
+        : current,
+    );
     await saveSettings({ ...settings, theme: next });
   };
 
@@ -706,7 +711,7 @@ export function App() {
             }
             onClick={() => void toggleTheme()}
           >
-            {currentTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
+            {currentTheme === 'dark' ? <MoonIcon /> : <SunIcon />}
           </button>
           <button
             className="btn btn-ghost btn-icon"

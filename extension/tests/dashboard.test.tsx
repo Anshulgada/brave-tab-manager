@@ -84,6 +84,19 @@ describe('the dashboard', () => {
     ).toBeTruthy();
   });
 
+  it('flips the theme from the top bar', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      await screen.findByRole('button', { name: /Switch to the dark theme/ }),
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe('dark');
+    });
+  });
+
   it('opens the provider panel from the rail', async () => {
     const user = userEvent.setup();
     render(<App />);
