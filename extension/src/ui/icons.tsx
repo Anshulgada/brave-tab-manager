@@ -163,10 +163,41 @@ export function MoonIcon(props: IconProps) {
   );
 }
 
+export function PencilIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M17 3 21 7 8 20H4v-4Z" {...stroke} />
+      <path d="M15 5 19 9" {...stroke} />
+    </Icon>
+  );
+}
+
+export function ZapIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13 3 5 13h6l-1 8 8-10h-6Z" {...stroke} />
+    </Icon>
+  );
+}
+
+export function PinIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <g transform="rotate(45 12 12)">
+        <line x1="12" y1="15" x2="12" y2="22" {...stroke} strokeWidth={2} />
+        <path
+          d="M6 15h12v-2a2 2 0 0 0-.8-1.6L15.5 10V5h1a1.5 1.5 0 0 0 0-3h-9a1.5 1.5 0 0 0 0 3h1v5L6.8 11.4A2 2 0 0 0 6 13Z"
+          {...stroke}
+        />
+      </g>
+    </Icon>
+  );
+}
+
 export function CloseIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="m6 6 12 12M18 6 6 18" {...stroke} />
+      <path d="m6 6 12 12M18 6 6 18" {...stroke} strokeWidth={2.25} />
     </Icon>
   );
 }
@@ -183,6 +214,14 @@ export function ChevronIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="m9 6 6 6-6 6" {...stroke} />
+    </Icon>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m6 9 6 6 6-6" {...stroke} />
     </Icon>
   );
 }
@@ -222,9 +261,9 @@ export function ShieldIcon(props: IconProps) {
 export function MoreIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <circle cx="6" cy="12" r="1.2" fill="currentColor" />
-      <circle cx="12" cy="12" r="1.2" fill="currentColor" />
-      <circle cx="18" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="12" cy="6" r="2.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+      <circle cx="12" cy="18" r="2.5" fill="currentColor" />
     </Icon>
   );
 }
@@ -256,10 +295,63 @@ export function LayersIcon(props: IconProps) {
   );
 }
 
-export function ZapIcon(props: IconProps) {
+export function PinSlashIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M13 3 5 13h6l-1 8 8-10h-6Z" {...stroke} />
+      <g transform="rotate(45 12 12)">
+        <line x1="12" y1="15" x2="12" y2="22" {...stroke} strokeWidth={2} />
+        <path
+          d="M6 15h12v-2a2 2 0 0 0-.8-1.6L15.5 10V5h1a1.5 1.5 0 0 0 0-3h-9a1.5 1.5 0 0 0 0 3h1v5L6.8 11.4A2 2 0 0 0 6 13Z"
+          {...stroke}
+        />
+      </g>
+      <line x1="4" y1="4" x2="20" y2="20" {...stroke} strokeWidth={2} />
+    </Icon>
+  );
+}
+
+export function HomeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" {...stroke} />
+      <polyline points="9 22 9 12 15 12 15 22" {...stroke} />
+    </Icon>
+  );
+}
+
+export function EditIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+        {...stroke}
+      />
+      <path
+        d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+        {...stroke}
+      />
+    </Icon>
+  );
+}
+
+export function RenameIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"
+        {...stroke}
+      />
+      <polyline points="14 2 14 8 20 8" {...stroke} />
+    </Icon>
+  );
+}
+
+export function HelpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" {...stroke} />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" {...stroke} />
+      <path d="M12 17h.01" {...stroke} />
     </Icon>
   );
 }
