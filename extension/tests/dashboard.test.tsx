@@ -69,11 +69,13 @@ function installBrowserMock(responses: Record<string, unknown> = {}) {
 
 describe('the dashboard', () => {
   beforeEach(() => {
+    window.location.hash = '';
     installBrowserMock();
   });
 
   afterEach(() => {
     cleanup();
+    window.location.hash = '';
   });
 
   it('shows the welcome state for an empty library', async () => {
@@ -192,6 +194,28 @@ describe('the dashboard', () => {
     await user.click(trashLink);
 
     expect(await screen.findByText('Trash is empty')).toBeTruthy();
+  });
+
+  it('restores route from initial hash on page load', async () => {
+    window.location.hash = '#/windows';
+    render(<App />);
+
+    expect(await screen.findByText('Open Windows & Tabs')).toBeTruthy();
+  });
+
+  it('updates location hash when user navigates', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const rulesLink = await screen.findByRole('button', {
+      name: /Rules/,
+    });
+    await user.click(rulesLink);
+
+    expect(window.location.hash).toBe('#/rules');
+    expect(
+      await screen.findByRole('heading', { name: 'Local rules' }),
+    ).toBeTruthy();
   });
 });
 
