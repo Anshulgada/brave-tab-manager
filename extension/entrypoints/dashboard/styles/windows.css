@@ -1,0 +1,152 @@
+/* Windows / Switchboard Section */
+.windows-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+}
+
+.windows-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.windows-filter {
+  display: flex;
+  gap: 8px;
+  max-width: 480px;
+}
+
+.windows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.window-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.window-card-head {
+  align-items: center;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.window-card-title {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.window-card-title h2 {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.window-tab-count {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.window-card-tabs {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+}
+
+.window-tab-item {
+  align-items: center;
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 10px;
+  padding: 6px 8px;
+  transition: background var(--fast);
+}
+
+.window-tab-item:hover {
+  background: var(--surface-hover);
+}
+
+.window-tab-btn {
+  align-items: flex-start;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.window-tab-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.window-tab-host {
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.window-tab-meta {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.chip-xs {
+  font-size: 10.5px;
+  padding: 2px 6px;
+}
+
+.current-window-badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--success, #10b981) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success, #10b981) 30%, transparent);
+  border-radius: 9999px;
+  color: var(--success, #10b981);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 5px;
+  line-height: 1;
+  padding: 3px 8px;
+}
+
+.current-window-dot {
+  background: var(--success, #10b981);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--success, #10b981);
+  display: inline-block;
+  height: 6px;
+  width: 6px;
+}
+
+.live-dot {
+  background: var(--success, #10b981);
+  border-radius: 50%;
+  display: inline-block;
+  height: 7px;
+  width: 7px;
+}
