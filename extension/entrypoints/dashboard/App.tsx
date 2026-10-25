@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   type ChangeEvent,
   type KeyboardEvent,
@@ -8,11 +9,13 @@ import {
   useRef,
   useState,
 } from 'react';
-
-import { TabmanDatabase } from '../../src/database';
+import { DEFAULT_PREBUILT_RULES_JSONL } from '../../src/ai';
+import { TabmanDatabase, type TabRecord } from '../../src/database';
 import {
   createCollection,
+  createTag,
   deleteTabs,
+  deleteTag,
   exportLibrary,
   importLibrary,
   type LibraryCollection,
@@ -24,12 +27,16 @@ import {
   restoreTabs,
   setCollectionStatus,
   tagTabs,
+  updateCollection,
   updateSettings,
+  updateTab,
+  updateTag,
 } from '../../src/library';
 import type { LibraryChangedMessage } from '../../src/messages';
 import { PRODUCT_NAME } from '../../src/product';
 import { sendSwitchboardRequest } from '../../src/runtime';
 import type { Settings } from '../../src/schema';
+import { CustomSelect } from '../../src/ui/CustomSelect';
 import {
   hostInitial,
   hostLabel,
@@ -43,14 +50,21 @@ import {
   ChevronIcon,
   CloseIcon,
   DownloadIcon,
+  EditIcon,
   FolderIcon,
   GridIcon,
+  HelpIcon,
+  HomeIcon,
   LayersIcon,
   LibraryIcon,
   ListIcon,
   MoonIcon,
   MoreIcon,
+  PencilIcon,
+  PinIcon,
+  PinSlashIcon,
   PlusIcon,
+  RenameIcon,
   RestoreIcon,
   SearchIcon,
   SettingsIcon,
@@ -60,17 +74,27 @@ import {
   TagIcon,
   TrashIcon,
   UploadIcon,
+  WindowIcon,
   ZapIcon,
 } from '../../src/ui/icons';
 import { shortcut } from '../../src/ui/platform';
-import { OrganizePanel, ProvidersPanel } from './panels';
+import { OrganizePanel, ProvidersPanel, WindowsPanel } from './panels';
 
 const database = new TabmanDatabase();
 const VIEW_STORAGE_KEY = 'tabman.library-view';
 
-type Section = 'library' | 'organize' | 'providers' | 'trash' | 'settings';
+type Section =
+  | 'home'
+  | 'windows'
+  | 'library'
+  | 'organize'
+  | 'providers'
+  | 'rules'
+  | 'trash'
+  | 'settings'
+  | 'collection';
 type View = 'grid' | 'list';
-type SortOrder = 'recent' | 'name' | 'tabs';
+type SortOrder = 'recent' | 'name' | 'domain' | 'tabs';
 
 type Toast = {
   id: number;
@@ -103,16 +127,58 @@ function readStoredView(fallback: View): View {
   }
 }
 
+function rootDomainSortKey(hostname: string): string {
+  if (!hostname) return '';
+  const clean = hostname.toLowerCase().trim();
+  const withoutPort = clean.split(':')[0] || '';
+  const stripped = withoutPort.replace(/^(www\d*|m)\./, '');
+  const parts = stripped.split('.');
+  if (parts.length > 1) {
+    return parts[0] || stripped;
+  }
+  return stripped;
+}
+
 export function App() {
   const importInput = useRef<HTMLInputElement>(null);
+  const createFormRef = useRef<HTMLFormElement>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const loadGeneration = useRef(0);
   const busyRef = useRef(false);
   const toastId = useRef(0);
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>();
-  const [section, setSection] = useState<Section>('library');
+  const [section, setSection] = useState<Section>('home');
+  const [rules, setRules] = useState(DEFAULT_PREBUILT_RULES_JSONL);
+
+  const navigateTo = useCallback((next: Section) => {
+    setSection(next);
+    setSelectedTabs(new Set());
+    setQuery('');
+    setMenuFor(undefined);
+    if (next !== 'collection') {
+      setSelectedCollectionId(undefined);
+    }
+  }, []);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
+  const [menuFor, setMenuFor] = useState<string>();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [collectDialogOpen, setCollectDialogOpen] = useState(false);
+  const [collectName, setCollectName] = useState('');
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('');
+  const [renamingTagId, setRenamingTagId] = useState<string>();
+  const [renamingTagName, setRenamingTagName] = useState('');
+  const [renamingTagColor, setRenamingTagColor] = useState('');
+  const [collectionEditorOpen, setCollectionEditorOpen] = useState(false);
+  const [editCollectionName, setEditCollectionName] = useState('');
+  const [editCollectionDescription, setEditCollectionDescription] =
+    useState('');
+  const [editCollectionColor, setEditCollectionColor] = useState('');
+  const [editingTab, setEditingTab] = useState<TabRecord>();
+  const [editTitle, setEditTitle] = useState('');
+  const [editUrl, setEditUrl] = useState('');
   const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
@@ -190,6 +256,15 @@ export function App() {
   }, [pushToast]);
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem('tabman-local-rules');
+      setRules(stored?.trim() ? stored : DEFAULT_PREBUILT_RULES_JSONL);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
     void load();
     const messageListener = (message: LibraryChangedMessage) => {
       if (message.type === 'library/changed') {
@@ -209,26 +284,58 @@ export function App() {
     };
   }, [load]);
 
+  useEffect(() => {
+    if (!menuFor) {
+      return;
+    }
+    const handler = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.rail-menu-popover, .rail-menu')) {
+        return;
+      }
+      setMenuFor(undefined);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuFor]);
+
   const settings = snapshot?.settings;
   const [currentTheme, setCurrentTheme] = useState<string>('system');
 
   const applyTheme = useCallback((theme: string) => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme =
-      theme === 'system' ? 'light dark' : theme;
-    setCurrentTheme(theme);
+    const updateTheme = () => {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme =
+        theme === 'system' ? 'light dark' : theme;
+      setCurrentTheme(theme);
+    };
+
+    if (
+      typeof document !== 'undefined' &&
+      'startViewTransition' in document &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      document.startViewTransition(() => {
+        updateTheme();
+      });
+    } else {
+      updateTheme();
+    }
   }, []);
 
   useEffect(() => {
-    if (settings) {
+    if (settings?.theme) {
       applyTheme(settings.theme);
     }
-  }, [applyTheme, settings]);
+  }, [applyTheme, settings?.theme]);
 
   const toggleTheme = async () => {
-    if (!settings) {
-      return;
-    }
+    const baseSettings = settings ?? {
+      theme: 'system',
+      defaultView: 'grid',
+      includeFullUrlInAi: false,
+      aiProvider: null,
+    };
     const next = currentTheme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
     setSnapshot((current) =>
@@ -236,7 +343,7 @@ export function App() {
         ? { ...current, settings: { ...current.settings, theme: next } }
         : current,
     );
-    await saveSettings({ ...settings, theme: next });
+    await saveSettings({ ...baseSettings, theme: next });
   };
 
   const defaultView = settings?.defaultView;
@@ -292,13 +399,27 @@ export function App() {
           )),
     );
     return [...filtered].sort((left, right) => {
+      if (left.pinned !== right.pinned) {
+        return left.pinned ? -1 : 1;
+      }
       if (sortOrder === 'name') {
         return tabLabel(left.title, left.hostname, left.url).localeCompare(
           tabLabel(right.title, right.hostname, right.url),
         );
       }
+      if (sortOrder === 'domain') {
+        const leftDomain = rootDomainSortKey(left.hostname);
+        const rightDomain = rootDomainSortKey(right.hostname);
+        const cmp = leftDomain.localeCompare(rightDomain);
+        if (cmp !== 0) {
+          return cmp;
+        }
+        return tabLabel(left.title, left.hostname, left.url).localeCompare(
+          tabLabel(right.title, right.hostname, right.url),
+        );
+      }
       if (sortOrder === 'tabs') {
-        return right.position - left.position;
+        return left.position - right.position;
       }
       return (
         Date.parse(right.lastAccessedAt ?? right.createdAt) -
@@ -376,14 +497,18 @@ export function App() {
   };
 
   const restore = useCallback(
-    async (tabs: LibraryCollection['tabs'], label: string) => {
+    async (
+      tabs: LibraryCollection['tabs'],
+      label: string,
+      inNewWindow = false,
+    ) => {
       if (busyRef.current) {
         return;
       }
       busyRef.current = true;
       setBusy(true);
       try {
-        const result = await restoreTabs(tabs);
+        const result = await restoreTabs(tabs, inNewWindow);
         const failureMessage =
           result.failures.length > 0
             ? ` ${result.failures.length} failed: ${result.failures.join(', ')}.`
@@ -486,17 +611,26 @@ export function App() {
       return;
     }
     const selected = selectedCollection;
-    const reuse = Boolean(selected && selected.tabs.length === 0);
-    const name = reuse
-      ? selected?.name
-      : `Collected ${new Date().toLocaleDateString()}`;
+    if (section === 'collection' && selected) {
+      await performCollect(selected.name, selected.id);
+      return;
+    }
+    setCollectName(`Collected ${new Date().toLocaleDateString()}`);
+    setCollectDialogOpen(true);
+  };
+
+  const performCollect = async (name: string, collectionId?: string) => {
+    if (busyRef.current) {
+      return;
+    }
     busyRef.current = true;
     setBusy(true);
+    setCollectDialogOpen(false);
     try {
       const response = await sendSwitchboardRequest({
         type: 'library/collect',
         name,
-        collectionId: reuse ? selected?.id : undefined,
+        collectionId,
       });
       if (!response.ok) {
         throw new Error(response.error);
@@ -504,16 +638,20 @@ export function App() {
       if (!('affected' in response)) {
         throw new Error('The collect action did not report a result');
       }
-      pushToast(
-        `${response.affected} open tabs collected into ${
-          response.collectionName ?? 'a new collection'
-        }.`,
-        'success',
-      );
+      const count = response.affected;
+      const collName = response.collectionName ?? 'the collection';
+      if (count === 0) {
+        pushToast(`All open tabs are already in ${collName}.`, 'info');
+      } else {
+        pushToast(
+          `${count} open ${pluralize(count, 'tab')} collected into ${collName}.`,
+          'success',
+        );
+      }
+      await load();
       if (response.collectionId) {
         setSelectedCollectionId(response.collectionId);
       }
-      await load();
     } catch (collectError) {
       pushToast(
         collectError instanceof Error
@@ -532,9 +670,23 @@ export function App() {
   };
 
   useEffect(() => {
-    if (creating) {
-      createInputRef.current?.focus();
-    }
+    if (!creating) return;
+    createInputRef.current?.focus();
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        createFormRef.current &&
+        !createFormRef.current.contains(e.target as Node)
+      ) {
+        setCreating(false);
+        setNewCollectionName('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [creating]);
 
   useEffect(() => {
@@ -551,7 +703,7 @@ export function App() {
         hint: 'Create an empty collection',
         icon: <PlusIcon />,
         run: () => {
-          setSection('library');
+          navigateTo('home');
           setCreating(true);
         },
       },
@@ -579,13 +731,13 @@ export function App() {
         id: 'trash',
         label: 'Open trash',
         icon: <TrashIcon />,
-        run: () => setSection('trash'),
+        run: () => navigateTo('trash'),
       },
       {
         id: 'settings',
         label: 'Open preferences',
         icon: <SettingsIcon />,
-        run: () => setSection('settings'),
+        run: () => navigateTo('settings'),
       },
     ];
     if (selectedCollection) {
@@ -615,6 +767,7 @@ export function App() {
     activeCollections,
     applyView,
     downloadExport,
+    navigateTo,
     restore,
     selectedCollection,
     view,
@@ -716,6 +869,15 @@ export function App() {
           <button
             className="btn btn-ghost btn-icon"
             type="button"
+            title="Help & Concepts Guide"
+            aria-label="Help & Concepts Guide"
+            onClick={() => setHelpOpen(true)}
+          >
+            <HelpIcon />
+          </button>
+          <button
+            className="btn btn-ghost btn-icon"
+            type="button"
             title="Preferences"
             aria-label="Preferences"
             onClick={() => setSection('settings')}
@@ -738,24 +900,31 @@ export function App() {
         <aside className="rail">
           <nav className="rail-nav" aria-label="Library sections">
             <button
+              className={section === 'home' ? 'rail-link active' : 'rail-link'}
+              type="button"
+              onClick={() => navigateTo('home')}
+            >
+              <HomeIcon />
+              <span>Home</span>
+            </button>
+            <button
               className={
-                section === 'library' ? 'rail-link active' : 'rail-link'
+                section === 'windows' ? 'rail-link active' : 'rail-link'
               }
               type="button"
-              onClick={() => setSection('library')}
+              onClick={() => navigateTo('windows')}
             >
-              <LayersIcon />
-              <span>Library</span>
-              <span className="rail-count">{activeCollections.length}</span>
+              <WindowIcon />
+              <span>Windows</span>
             </button>
             <button
               className={
                 section === 'organize' ? 'rail-link active' : 'rail-link'
               }
               type="button"
-              onClick={() => setSection('organize')}
+              onClick={() => navigateTo('organize')}
             >
-              <SparkIcon />
+              <LayersIcon />
               <span>Organize</span>
             </button>
             <button
@@ -763,15 +932,23 @@ export function App() {
                 section === 'providers' ? 'rail-link active' : 'rail-link'
               }
               type="button"
-              onClick={() => setSection('providers')}
+              onClick={() => navigateTo('providers')}
             >
               <ZapIcon />
               <span>Providers</span>
             </button>
             <button
+              className={section === 'rules' ? 'rail-link active' : 'rail-link'}
+              type="button"
+              onClick={() => navigateTo('rules')}
+            >
+              <LayersIcon />
+              <span>Rules</span>
+            </button>
+            <button
               className={section === 'trash' ? 'rail-link active' : 'rail-link'}
               type="button"
-              onClick={() => setSection('trash')}
+              onClick={() => navigateTo('trash')}
             >
               <TrashIcon />
               <span>Trash</span>
@@ -782,7 +959,7 @@ export function App() {
                 section === 'settings' ? 'rail-link active' : 'rail-link'
               }
               type="button"
-              onClick={() => setSection('settings')}
+              onClick={() => navigateTo('settings')}
             >
               <SettingsIcon />
               <span>Preferences</span>
@@ -793,7 +970,7 @@ export function App() {
             <div className="rail-heading">
               <span>Collections</span>
               <button
-                className="btn btn-ghost btn-icon btn-sm"
+                className="rail-add-collection-btn"
                 type="button"
                 title="New collection"
                 aria-label="New collection"
@@ -805,6 +982,7 @@ export function App() {
 
             {creating && (
               <form
+                ref={createFormRef}
                 className="rail-create"
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -852,66 +1030,143 @@ export function App() {
                 </p>
               ) : (
                 filteredCollections.map((collection) => (
-                  <button
+                  <div
                     className={[
-                      'rail-item',
+                      'rail-item-row',
                       collection.id === selectedCollectionId ? 'selected' : '',
                       collection.id === dropTargetId ? 'drop-target' : '',
                     ]
                       .filter(Boolean)
                       .join(' ')}
-                    type="button"
                     key={collection.id}
-                    onClick={() => {
-                      setSelectedCollectionId(collection.id);
-                      setTagFilter('');
-                      setSelectedTabs(new Set());
-                      setSection('library');
-                    }}
-                    onDragOver={(event) => {
-                      if (!draggingTabId) {
-                        return;
-                      }
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = 'move';
-                      setDropTargetId(collection.id);
-                    }}
-                    onDragLeave={() =>
-                      setDropTargetId((current) =>
-                        current === collection.id ? undefined : current,
-                      )
-                    }
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      setDropTargetId(undefined);
-                      const tabId = draggingTabId;
-                      setDraggingTabId(undefined);
-                      if (!tabId) {
-                        return;
-                      }
-                      void runMutation(
-                        () => moveTabs(database, [tabId], collection.id),
-                        `Moved to ${collection.name}.`,
-                      );
-                    }}
                   >
-                    <span
-                      className="rail-dot"
-                      style={
-                        collection.color
-                          ? { background: collection.color }
-                          : undefined
+                    <button
+                      className="rail-item"
+                      type="button"
+                      onClick={() => {
+                        setSelectedCollectionId(collection.id);
+                        setTagFilter('');
+                        setSelectedTabs(new Set());
+                        setSection('collection');
+                      }}
+                      onDragOver={(event) => {
+                        if (!draggingTabId) {
+                          return;
+                        }
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                        setDropTargetId(collection.id);
+                      }}
+                      onDragLeave={() =>
+                        setDropTargetId((current) =>
+                          current === collection.id ? undefined : current,
+                        )
                       }
-                      aria-hidden="true"
-                    />
-                    <span className="rail-item-copy">
-                      <strong>{collection.name}</strong>
-                      <small>
-                        {collection.tabs.length}{' '}
-                        {pluralize(collection.tabs.length, 'tab')}
-                      </small>
-                    </span>
-                  </button>
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        setDropTargetId(undefined);
+                        const tabId = draggingTabId;
+                        setDraggingTabId(undefined);
+                        if (!tabId) {
+                          return;
+                        }
+                        void runMutation(
+                          () => moveTabs(database, [tabId], collection.id),
+                          `Moved to ${collection.name}.`,
+                        );
+                      }}
+                    >
+                      <span
+                        className="rail-dot"
+                        style={
+                          collection.color
+                            ? { background: collection.color }
+                            : undefined
+                        }
+                        aria-hidden="true"
+                      />
+                      <span className="rail-item-copy">
+                        <strong>{collection.name}</strong>
+                        <small>
+                          {collection.tabs.length}{' '}
+                          {pluralize(collection.tabs.length, 'tab')}
+                        </small>
+                      </span>
+                    </button>
+                    <button
+                      className="rail-menu"
+                      type="button"
+                      title="Collection actions"
+                      aria-label={`Actions for ${collection.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setMenuFor((current) =>
+                          current === collection.id ? undefined : collection.id,
+                        );
+                      }}
+                    >
+                      <MoreIcon size={18} />
+                    </button>
+                    {menuFor === collection.id && (
+                      <div className="rail-menu-popover" role="menu">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuFor(undefined);
+                            setSelectedCollectionId(collection.id);
+                            setCollectionEditorOpen(true);
+                            setEditCollectionName(collection.name);
+                            setEditCollectionDescription(
+                              collection.description ?? '',
+                            );
+                            setEditCollectionColor(collection.color ?? '');
+                          }}
+                        >
+                          <EditIcon size={13} />
+                          Edit details
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuFor(undefined);
+                            setSelectedCollectionId(collection.id);
+                            setRenaming(true);
+                          }}
+                        >
+                          <RenameIcon size={13} />
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="danger"
+                          onClick={() => {
+                            setMenuFor(undefined);
+                            if (
+                              window.confirm(
+                                `Move "${collection.name}" to the trash?`,
+                              )
+                            ) {
+                              void runMutation(
+                                () =>
+                                  setCollectionStatus(
+                                    database,
+                                    [collection.id],
+                                    'trashed',
+                                  ),
+                                'Collection moved to trash.',
+                              );
+                            }
+                          }}
+                        >
+                          <TrashIcon size={13} />
+                          Move to trash
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
             </div>
@@ -938,9 +1193,44 @@ export function App() {
         <main className="content">
           {loading ? (
             <LoadingState />
-          ) : section === 'settings' && settings ? (
+          ) : section === 'home' || section === 'library' ? (
+            <HomePanel
+              collections={activeCollections}
+              savedTabCount={savedTabCount}
+              tagCount={tagCount}
+              onCollect={() => void collectAll()}
+              onCreate={() => setCreating(true)}
+              onSelectCollection={(id) => {
+                setSelectedCollectionId(id);
+                setTagFilter('');
+                setSelectedTabs(new Set());
+                setSection('collection');
+              }}
+              onDeleteCollections={(ids) => {
+                if (
+                  window.confirm(
+                    `Move ${ids.length} ${pluralize(ids.length, 'collection')} to the trash?`,
+                  )
+                ) {
+                  void runMutation(
+                    () => setCollectionStatus(database, ids, 'trashed'),
+                    `${pluralize(ids.length, 'collection')} moved to trash.`,
+                  );
+                }
+              }}
+            />
+          ) : section === 'windows' ? (
+            <WindowsPanel onNotify={pushToast} />
+          ) : section === 'settings' ? (
             <SettingsPanel
-              settings={settings}
+              settings={
+                settings ??
+                ({
+                  theme: 'system',
+                  defaultView: 'grid',
+                  includeFullUrlInAi: false,
+                } as Settings)
+              }
               busy={busy}
               onApplyTheme={applyTheme}
               onSave={(next) => void saveSettings(next)}
@@ -948,7 +1238,16 @@ export function App() {
           ) : section === 'providers' ? (
             <ProvidersPanel onNotify={pushToast} />
           ) : section === 'organize' ? (
-            <OrganizePanel onNotify={pushToast} onApplied={() => void load()} />
+            <OrganizePanel
+              rules={rules}
+              onNotify={pushToast}
+              onApplied={() => {
+                void load();
+                setSection('home');
+              }}
+            />
+          ) : section === 'rules' ? (
+            <RulesPanel rules={rules} onChange={setRules} />
           ) : section === 'trash' ? (
             <TrashPanel
               collections={trashedCollections}
@@ -973,325 +1272,502 @@ export function App() {
                     ),
                 })
               }
+              onClearAll={() =>
+                requestConfirm({
+                  title: 'Empty trash permanently?',
+                  body: `All ${trashedCollections.length} trashed ${pluralize(
+                    trashedCollections.length,
+                    'collection',
+                  )} and every saved tab inside them will be erased from this browser profile. This cannot be undone.`,
+                  confirmLabel: 'Empty trash',
+                  tone: 'danger',
+                  onConfirm: () =>
+                    void runMutation(
+                      () =>
+                        permanentlyDeleteCollections(
+                          database,
+                          trashedCollections.map((c) => c.id),
+                        ),
+                      'Trash emptied.',
+                    ),
+                })
+              }
             />
-          ) : !selectedCollection ? (
-            <WelcomeState
-              onCreate={() => setCreating(true)}
-              onCollect={() => void collectAll()}
-            />
-          ) : (
-            <>
-              <CollectBar busy={busy} onCollect={() => void collectAll()} />
+          ) : section === 'collection' ? (
+            selectedCollection ? (
+              <>
+                <CollectBar busy={busy} onCollect={() => void collectAll()} />
 
-              <section className="collection-head">
-                <div className="collection-title">
-                  {renaming ? (
-                    <form
-                      className="collection-rename"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void runMutation(
-                          () =>
-                            renameCollection(
-                              database,
-                              selectedCollection.id,
-                              renameValue,
-                            ),
-                          'Collection renamed.',
-                          false,
-                        ).then(() => setRenaming(false));
-                      }}
-                    >
-                      <input
-                        ref={renameInputRef}
-                        className="input collection-rename-input"
-                        aria-label="Collection name"
-                        value={renameValue}
-                        maxLength={120}
-                        onChange={(event) => setRenameValue(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Escape') {
-                            setRenaming(false);
-                            setRenameValue(selectedCollection.name);
-                          }
-                        }}
-                      />
-                      <button className="btn btn-primary btn-sm" type="submit">
-                        Save
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        type="button"
-                        onClick={() => {
-                          setRenaming(false);
-                          setRenameValue(selectedCollection.name);
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </form>
-                  ) : (
-                    <button
-                      className="collection-name"
-                      type="button"
-                      title="Rename collection"
-                      onClick={() => setRenaming(true)}
-                    >
-                      <h1>{selectedCollection.name}</h1>
-                      <MoreIcon size={16} />
-                    </button>
-                  )}
-                  <div className="collection-meta">
-                    <span className="chip">
-                      <LibraryIcon size={13} />
-                      {selectedCollection.tabs.length}{' '}
-                      {pluralize(selectedCollection.tabs.length, 'saved tab')}
-                    </span>
-                    <span className="chip">
-                      <TagIcon size={13} />
-                      {selectedCollection.tags.length}{' '}
-                      {pluralize(selectedCollection.tags.length, 'tag')}
-                    </span>
-                    <span className="chip chip-subtle">
-                      Updated {relativeTime(selectedCollection.updatedAt)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="collection-actions">
-                  <button
-                    className="btn"
-                    type="button"
-                    disabled={busy || selectedCollection.tabs.length === 0}
-                    onClick={() =>
-                      void restore(selectedCollection.tabs, 'saved tabs')
-                    }
-                  >
-                    <RestoreIcon size={15} />
-                    Restore all
-                  </button>
-                  <button
-                    className="btn btn-danger"
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      requestConfirm({
-                        title: 'Move to trash?',
-                        body: 'The collection stays recoverable in Trash until you delete it forever.',
-                        confirmLabel: 'Move to trash',
-                        tone: 'brand',
-                        onConfirm: () =>
+                <section className="collection-head">
+                  <div className="collection-title">
+                    {renaming ? (
+                      <form
+                        className="collection-rename"
+                        onSubmit={(event) => {
+                          event.preventDefault();
                           void runMutation(
                             () =>
-                              setCollectionStatus(
+                              renameCollection(
                                 database,
-                                [selectedCollection.id],
-                                'trashed',
+                                selectedCollection.id,
+                                renameValue,
                               ),
-                            'Collection moved to trash.',
-                          ),
-                      })
-                    }
-                  >
-                    <TrashIcon size={15} />
-                    Trash
-                  </button>
-                </div>
-              </section>
+                            'Collection renamed.',
+                            false,
+                          ).then(() => setRenaming(false));
+                        }}
+                      >
+                        <input
+                          ref={renameInputRef}
+                          className="input collection-rename-input"
+                          aria-label="Collection name"
+                          value={renameValue}
+                          maxLength={120}
+                          onChange={(event) =>
+                            setRenameValue(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              setRenaming(false);
+                              setRenameValue(selectedCollection.name);
+                            }
+                          }}
+                        />
+                        <button
+                          className="btn btn-primary btn-sm"
+                          type="submit"
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          type="button"
+                          onClick={() => {
+                            setRenaming(false);
+                            setRenameValue(selectedCollection.name);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        className="collection-name"
+                        type="button"
+                        title="Rename collection"
+                        onClick={() => setRenaming(true)}
+                      >
+                        <h1>{selectedCollection.name}</h1>
+                        <PencilIcon size={15} />
+                      </button>
+                    )}
+                    <div className="collection-meta">
+                      <span className="chip">
+                        <LibraryIcon size={13} />
+                        {selectedCollection.tabs.length}{' '}
+                        {pluralize(selectedCollection.tabs.length, 'saved tab')}
+                      </span>
+                      <span className="chip">
+                        <TagIcon size={13} />
+                        {selectedCollection.tags.length}{' '}
+                        {pluralize(selectedCollection.tags.length, 'tag')}
+                      </span>
+                      <span className="chip chip-subtle">
+                        Updated {relativeTime(selectedCollection.updatedAt)}
+                      </span>
+                    </div>
+                  </div>
 
-              <section className="toolbar">
-                <fieldset className="tag-pills">
-                  <legend className="visually-hidden">Filter by tag</legend>
-                  <button
-                    className="chip chip-button"
-                    type="button"
-                    aria-pressed={!tagFilter}
-                    onClick={() => setTagFilter('')}
-                  >
-                    All
-                  </button>
-                  {selectedCollection.tags.map((tag) => (
+                  <div className="collection-actions">
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={busy || selectedCollection.tabs.length === 0}
+                      onClick={() =>
+                        void restore(
+                          selectedCollection.tabs,
+                          'saved tabs',
+                          true,
+                        )
+                      }
+                    >
+                      <RestoreIcon size={15} />
+                      Restore in new window
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        requestConfirm({
+                          title: 'Move to trash?',
+                          body: 'The collection stays recoverable in Trash until you delete it forever.',
+                          confirmLabel: 'Move to trash',
+                          tone: 'brand',
+                          onConfirm: () =>
+                            void runMutation(
+                              () =>
+                                setCollectionStatus(
+                                  database,
+                                  [selectedCollection.id],
+                                  'trashed',
+                                ),
+                              'Collection moved to trash.',
+                            ),
+                        })
+                      }
+                    >
+                      <TrashIcon size={15} />
+                      Trash
+                    </button>
+                  </div>
+                </section>
+
+                <section className="collection-toolbar-redesigned">
+                  <div className="collection-toolbar-main">
+                    <div className="collection-toolbar-left">
+                      <div className="collection-search-wrap">
+                        <SearchIcon size={14} />
+                        <input
+                          type="search"
+                          className="collection-search-input"
+                          placeholder={`Search ${selectedCollection.tabs.length} tabs...`}
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                          aria-label="Search tabs in this collection"
+                        />
+                        {query && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-icon btn-sm"
+                            onClick={() => setQuery('')}
+                            aria-label="Clear search"
+                          >
+                            <CloseIcon size={12} />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          if (
+                            selectedTabs.size === visibleTabs.length &&
+                            visibleTabs.length > 0
+                          ) {
+                            setSelectedTabs(new Set());
+                          } else {
+                            setSelectedTabs(
+                              new Set(visibleTabs.map((t) => t.id)),
+                            );
+                          }
+                        }}
+                        title={
+                          selectedTabs.size === visibleTabs.length &&
+                          visibleTabs.length > 0
+                            ? 'Deselect all'
+                            : 'Select all visible tabs'
+                        }
+                      >
+                        {selectedTabs.size === visibleTabs.length &&
+                        visibleTabs.length > 0
+                          ? 'Deselect all'
+                          : 'Select all'}
+                      </button>
+                    </div>
+
+                    <div className="collection-toolbar-right">
+                      <span className="collection-tab-count-pill">
+                        {visibleTabs.length} of {selectedCollection.tabs.length}{' '}
+                        tabs
+                      </span>
+                      <CustomSelect<SortOrder>
+                        value={sortOrder}
+                        options={[
+                          { value: 'recent', label: 'Most recent' },
+                          { value: 'name', label: 'Title (A–Z)' },
+                          { value: 'domain', label: 'Domain (A–Z)' },
+                          { value: 'tabs', label: 'Park order' },
+                        ]}
+                        onChange={(val) => setSortOrder(val)}
+                        ariaLabel="Sort saved tabs"
+                      />
+                      <div className="segmented-pill-track">
+                        <button
+                          type="button"
+                          className={`segmented-pill-btn ${
+                            view === 'grid' ? 'active' : ''
+                          }`}
+                          aria-pressed={view === 'grid'}
+                          aria-label="Grid view"
+                          onClick={() => applyView('grid')}
+                        >
+                          {view === 'grid' && (
+                            <motion.div
+                              layoutId="viewPill"
+                              className="segmented-pill-slider"
+                              transition={{
+                                type: 'spring',
+                                stiffness: 500,
+                                damping: 35,
+                              }}
+                            />
+                          )}
+                          <span className="segmented-pill-text">
+                            <GridIcon size={14} />
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`segmented-pill-btn ${
+                            view === 'list' ? 'active' : ''
+                          }`}
+                          aria-pressed={view === 'list'}
+                          aria-label="List view"
+                          onClick={() => applyView('list')}
+                        >
+                          {view === 'list' && (
+                            <motion.div
+                              layoutId="viewPill"
+                              className="segmented-pill-slider"
+                              transition={{
+                                type: 'spring',
+                                stiffness: 500,
+                                damping: 35,
+                              }}
+                            />
+                          )}
+                          <span className="segmented-pill-text">
+                            <ListIcon size={14} />
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="collection-tags-bar">
                     <button
                       className="chip chip-button"
                       type="button"
-                      key={tag.id}
-                      aria-pressed={tagFilter === tag.id}
-                      onClick={() =>
-                        setTagFilter(tagFilter === tag.id ? '' : tag.id)
-                      }
+                      title="Manage the collection tags"
+                      onClick={() => setTagManagerOpen(true)}
                     >
-                      {tag.name}
-                    </button>
-                  ))}
-                </fieldset>
-
-                <div className="toolbar-right">
-                  <span className="toolbar-count">
-                    {visibleTabs.length} of {selectedCollection.tabs.length}
-                  </span>
-                  <select
-                    className="select select-compact"
-                    aria-label="Sort saved tabs"
-                    value={sortOrder}
-                    onChange={(event) =>
-                      setSortOrder(event.target.value as SortOrder)
-                    }
-                  >
-                    <option value="recent">Most recent</option>
-                    <option value="name">Title</option>
-                    <option value="tabs">Position</option>
-                  </select>
-                  <div className="segmented">
-                    <button
-                      type="button"
-                      aria-pressed={view === 'grid'}
-                      aria-label="Grid view"
-                      onClick={() => applyView('grid')}
-                    >
-                      <GridIcon size={14} />
+                      <TagIcon size={13} />
+                      Manage tags
                     </button>
                     <button
+                      className="chip chip-button"
                       type="button"
-                      aria-pressed={view === 'list'}
-                      aria-label="List view"
-                      onClick={() => applyView('list')}
+                      aria-pressed={!tagFilter}
+                      onClick={() => setTagFilter('')}
                     >
-                      <ListIcon size={14} />
+                      All
                     </button>
+                    {selectedCollection.tags.map((tag) => (
+                      <button
+                        className="chip chip-button"
+                        type="button"
+                        key={tag.id}
+                        aria-pressed={tagFilter === tag.id}
+                        onClick={() =>
+                          setTagFilter(tagFilter === tag.id ? '' : tag.id)
+                        }
+                      >
+                        {tag.color && (
+                          <span
+                            className="tag-color-dot"
+                            style={{ background: tag.color }}
+                            aria-hidden="true"
+                          />
+                        )}
+                        {tag.name}
+                      </button>
+                    ))}
                   </div>
-                </div>
-              </section>
+                </section>
 
-              {visibleTabs.length === 0 ? (
-                <EmptyCollection
-                  filtered={Boolean(query.trim() || tagFilter)}
-                  onClear={() => {
-                    setQuery('');
-                    setTagFilter('');
-                  }}
-                />
-              ) : view === 'grid' ? (
-                <div className="card-grid">
-                  {visibleTabs.map((tab) => (
-                    <TabCard
-                      key={tab.id}
-                      tab={tab}
-                      tags={selectedCollection.tags.filter((tag) =>
-                        tab.tagIds.includes(tag.id),
-                      )}
-                      selected={selectedTabs.has(tab.id)}
-                      onToggle={() => toggleTab(tab.id)}
-                      onRestore={() =>
-                        void restore(
-                          selectedCollection.tabs.filter(
-                            (candidate) => candidate.id === tab.id,
-                          ),
-                          'tab',
-                        )
-                      }
-                      onDelete={() =>
-                        requestConfirm({
-                          title: 'Delete saved tab?',
-                          body: 'The tab is removed from this collection. The page itself is not touched.',
-                          confirmLabel: 'Delete tab',
-                          tone: 'danger',
-                          onConfirm: () =>
-                            void runMutation(
-                              () => deleteTabs(database, [tab.id]),
-                              'Saved tab deleted.',
-                            ),
-                        })
-                      }
-                      onDragStart={() => setDraggingTabId(tab.id)}
-                      onDragEnd={() => setDraggingTabId(undefined)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="card-list">
-                  {visibleTabs.map((tab) => (
-                    <TabRow
-                      key={tab.id}
-                      tab={tab}
-                      tags={selectedCollection.tags.filter((tag) =>
-                        tab.tagIds.includes(tag.id),
-                      )}
-                      selected={selectedTabs.has(tab.id)}
-                      onToggle={() => toggleTab(tab.id)}
-                      onRestore={() =>
-                        void restore(
-                          selectedCollection.tabs.filter(
-                            (candidate) => candidate.id === tab.id,
-                          ),
-                          'tab',
-                        )
-                      }
-                      onDelete={() =>
-                        requestConfirm({
-                          title: 'Delete saved tab?',
-                          body: 'The tab is removed from this collection. The page itself is not touched.',
-                          confirmLabel: 'Delete tab',
-                          tone: 'danger',
-                          onConfirm: () =>
-                            void runMutation(
-                              () => deleteTabs(database, [tab.id]),
-                              'Saved tab deleted.',
-                            ),
-                        })
-                      }
-                      onDragStart={() => setDraggingTabId(tab.id)}
-                      onDragEnd={() => setDraggingTabId(undefined)}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+                {visibleTabs.length === 0 ? (
+                  <EmptyCollection
+                    filtered={Boolean(query.trim() || tagFilter)}
+                    onClear={() => {
+                      setQuery('');
+                      setTagFilter('');
+                    }}
+                  />
+                ) : (
+                  <AnimatePresence mode="wait">
+                    {view === 'grid' ? (
+                      <motion.div
+                        key="grid"
+                        className="card-grid"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                      >
+                        {visibleTabs.map((tab) => (
+                          <TabCard
+                            key={tab.id}
+                            tab={tab}
+                            tags={selectedCollection.tags.filter((tag) =>
+                              tab.tagIds.includes(tag.id),
+                            )}
+                            selected={selectedTabs.has(tab.id)}
+                            onToggle={() => toggleTab(tab.id)}
+                            onRestore={() =>
+                              void restore(
+                                selectedCollection.tabs.filter(
+                                  (candidate) => candidate.id === tab.id,
+                                ),
+                                'tab',
+                              )
+                            }
+                            onDelete={() =>
+                              requestConfirm({
+                                title: 'Delete saved tab?',
+                                body: 'The tab is removed from this collection. The page itself is not touched.',
+                                confirmLabel: 'Delete tab',
+                                tone: 'danger',
+                                onConfirm: () =>
+                                  void runMutation(
+                                    () => deleteTabs(database, [tab.id]),
+                                    'Saved tab deleted.',
+                                  ),
+                              })
+                            }
+                            onEdit={() => {
+                              setEditingTab(tab);
+                              setEditTitle(tab.title);
+                              setEditUrl(tab.url);
+                            }}
+                            onPin={() =>
+                              void runMutation(
+                                () =>
+                                  updateTab(database, tab.id, {
+                                    pinned: !tab.pinned,
+                                  }),
+                                tab.pinned ? 'Tab unpinned.' : 'Tab pinned.',
+                                false,
+                              )
+                            }
+                            onDragStart={() => setDraggingTabId(tab.id)}
+                            onDragEnd={() => setDraggingTabId(undefined)}
+                          />
+                        ))}
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="list"
+                        className="card-list"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                      >
+                        {visibleTabs.map((tab) => (
+                          <TabRow
+                            key={tab.id}
+                            tab={tab}
+                            tags={selectedCollection.tags.filter((tag) =>
+                              tab.tagIds.includes(tag.id),
+                            )}
+                            selected={selectedTabs.has(tab.id)}
+                            onToggle={() => toggleTab(tab.id)}
+                            onRestore={() =>
+                              void restore(
+                                selectedCollection.tabs.filter(
+                                  (candidate) => candidate.id === tab.id,
+                                ),
+                                'tab',
+                              )
+                            }
+                            onDelete={() =>
+                              requestConfirm({
+                                title: 'Delete saved tab?',
+                                body: 'The tab is removed from this collection. The page itself is not touched.',
+                                confirmLabel: 'Delete tab',
+                                tone: 'danger',
+                                onConfirm: () =>
+                                  void runMutation(
+                                    () => deleteTabs(database, [tab.id]),
+                                    'Saved tab deleted.',
+                                  ),
+                              })
+                            }
+                            onEdit={() => {
+                              setEditingTab(tab);
+                              setEditTitle(tab.title);
+                              setEditUrl(tab.url);
+                            }}
+                            onPin={() =>
+                              void runMutation(
+                                () =>
+                                  updateTab(database, tab.id, {
+                                    pinned: !tab.pinned,
+                                  }),
+                                tab.pinned ? 'Tab unpinned.' : 'Tab pinned.',
+                                false,
+                              )
+                            }
+                            onDragStart={() => setDraggingTabId(tab.id)}
+                            onDragEnd={() => setDraggingTabId(undefined)}
+                          />
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
+              </>
+            ) : null
+          ) : null}
         </main>
       </div>
 
-      {selectedTabs.size > 0 && selectedCollection && (
-        <BulkBar
-          count={selectedTabs.size}
-          busy={busy}
-          collections={activeCollections.filter(
-            (collection) => collection.id !== selectedCollection.id,
-          )}
-          tagName={tagName}
-          onTagNameChange={setTagName}
-          onTag={() =>
-            void runMutation(
-              async () => {
-                await tagTabs(database, [...selectedTabs], tagName);
-                setTagName('');
-              },
-              'Tag applied to the selected tabs.',
-              false,
-            )
-          }
-          onMove={(targetId) =>
-            void runMutation(
-              () => moveTabs(database, [...selectedTabs], targetId),
-              'Selected tabs moved.',
-            )
-          }
-          onRestore={() => void restore(selectedTabRecords, 'selected tabs')}
-          onDelete={() =>
-            requestConfirm({
-              title: `Delete ${selectedTabs.size} ${pluralize(selectedTabs.size, 'tab')}?`,
-              body: 'The saved copies are removed from the library. The open browser tabs are not touched.',
-              confirmLabel: 'Delete tabs',
-              tone: 'danger',
-              onConfirm: () =>
-                void runMutation(
-                  () => deleteTabs(database, [...selectedTabs]),
-                  'Selected tabs deleted.',
-                ),
-            })
-          }
-          onClear={() => setSelectedTabs(new Set())}
-        />
-      )}
+      {selectedTabs.size > 0 &&
+        selectedCollection &&
+        (section === 'collection' || section === 'library') && (
+          <BulkBar
+            count={selectedTabs.size}
+            busy={busy}
+            collections={activeCollections.filter(
+              (collection) => collection.id !== selectedCollection.id,
+            )}
+            tags={selectedCollection.tags}
+            tagName={tagName}
+            onTagNameChange={setTagName}
+            onTag={() =>
+              void runMutation(
+                async () => {
+                  await tagTabs(database, [...selectedTabs], tagName);
+                  setTagName('');
+                },
+                'Tag applied to the selected tabs.',
+                false,
+              )
+            }
+            onMove={(targetId) =>
+              void runMutation(
+                () => moveTabs(database, [...selectedTabs], targetId),
+                'Selected tabs moved.',
+              )
+            }
+            onRestore={() => void restore(selectedTabRecords, 'selected tabs')}
+            onDelete={() =>
+              requestConfirm({
+                title: `Delete ${selectedTabs.size} ${pluralize(selectedTabs.size, 'tab')}?`,
+                body: 'The saved copies are removed from the library. The open browser tabs are not touched.',
+                confirmLabel: 'Delete tabs',
+                tone: 'danger',
+                onConfirm: () =>
+                  void runMutation(
+                    () => deleteTabs(database, [...selectedTabs]),
+                    'Selected tabs deleted.',
+                  ),
+              })
+            }
+            onClear={() => setSelectedTabs(new Set())}
+          />
+        )}
 
       {paletteOpen && (
         <CommandPalette
@@ -1300,6 +1776,460 @@ export function App() {
           onQueryChange={setPaletteQuery}
           onClose={() => setPaletteOpen(false)}
         />
+      )}
+
+      {tagManagerOpen && selectedCollection && (
+        <div className="overlay">
+          <button
+            className="overlay-backdrop"
+            type="button"
+            aria-label="Close"
+            onClick={() => setTagManagerOpen(false)}
+          />
+          <div
+            className="dialog dialog-wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Manage tags"
+          >
+            <h2>Tags in {selectedCollection.name}</h2>
+            <p className="settings-intro">
+              Tags are scoped to this collection. Names are case insensitive.
+            </p>
+            <ul className="tag-manager-list">
+              {selectedCollection.tags.map((tag) => (
+                <li key={tag.id}>
+                  {renamingTagId === tag.id ? (
+                    <>
+                      <input
+                        className="input"
+                        maxLength={64}
+                        value={renamingTagName}
+                        onChange={(event) =>
+                          setRenamingTagName(event.target.value)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            setRenamingTagId(undefined);
+                          }
+                        }}
+                      />
+                      <div className="color-swatches color-swatches-sm">
+                        {[
+                          '',
+                          '#ef4444',
+                          '#f97316',
+                          '#eab308',
+                          '#22c55e',
+                          '#06b6d4',
+                          '#3b82f6',
+                          '#8b5cf6',
+                          '#ec4899',
+                        ]
+                          .filter((color) => {
+                            if (!color) return true;
+                            const usedByOther = selectedCollection.tags.some(
+                              (t) => t.id !== tag.id && t.color === color,
+                            );
+                            return !usedByOther;
+                          })
+                          .map((color) => (
+                            <button
+                              key={color || 'none'}
+                              type="button"
+                              className={
+                                renamingTagColor === color
+                                  ? 'color-swatch selected'
+                                  : 'color-swatch'
+                              }
+                              style={color ? { background: color } : undefined}
+                              aria-label={color || 'No color'}
+                              onClick={() => setRenamingTagColor(color)}
+                            />
+                          ))}
+                      </div>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        type="button"
+                        disabled={!renamingTagName.trim()}
+                        onClick={() =>
+                          void runMutation(
+                            async () => {
+                              await updateTag(database, tag.id, {
+                                name: renamingTagName,
+                                color: renamingTagColor || null,
+                              });
+                            },
+                            'Tag updated.',
+                            false,
+                          ).then(() => setRenamingTagId(undefined))
+                        }
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        type="button"
+                        onClick={() => setRenamingTagId(undefined)}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="tag-info">
+                        {tag.color && (
+                          <span
+                            className="tag-color-dot"
+                            style={{ background: tag.color }}
+                            aria-hidden="true"
+                          />
+                        )}
+                        <span className="chip">{tag.name}</span>
+                      </div>
+                      <div className="tag-actions">
+                        <button
+                          className="btn btn-ghost btn-icon btn-sm"
+                          type="button"
+                          title="Rename tag"
+                          aria-label={`Rename ${tag.name}`}
+                          onClick={() => {
+                            setRenamingTagId(tag.id);
+                            setRenamingTagName(tag.name);
+                            setRenamingTagColor(tag.color ?? '');
+                          }}
+                        >
+                          <PencilIcon size={13} />
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-icon btn-sm"
+                          type="button"
+                          title="Delete tag"
+                          aria-label={`Delete ${tag.name}`}
+                          onClick={() =>
+                            void runMutation(
+                              () => deleteTag(database, tag.id),
+                              'Tag deleted.',
+                              false,
+                            )
+                          }
+                        >
+                          <TrashIcon size={13} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <form
+              className="tag-manager-new"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void runMutation(
+                  async () => {
+                    await createTag(
+                      database,
+                      selectedCollection.id,
+                      newTagName,
+                      newTagColor || null,
+                    );
+                    setNewTagName('');
+                    setNewTagColor('');
+                  },
+                  'Tag added.',
+                  false,
+                );
+              }}
+            >
+              <input
+                className="input"
+                aria-label="New tag name"
+                maxLength={64}
+                placeholder="New tag name"
+                value={newTagName}
+                onChange={(event) => setNewTagName(event.target.value)}
+              />
+              <div className="color-swatches color-swatches-sm">
+                {[
+                  '',
+                  '#ef4444',
+                  '#f97316',
+                  '#eab308',
+                  '#22c55e',
+                  '#06b6d4',
+                  '#3b82f6',
+                  '#8b5cf6',
+                  '#ec4899',
+                ]
+                  .filter((color) => {
+                    if (!color) return true;
+                    const used = selectedCollection.tags.some(
+                      (t) => t.color === color,
+                    );
+                    return !used;
+                  })
+                  .map((color) => (
+                    <button
+                      key={color || 'none'}
+                      type="button"
+                      className={
+                        newTagColor === color
+                          ? 'color-swatch selected'
+                          : 'color-swatch'
+                      }
+                      style={color ? { background: color } : undefined}
+                      aria-label={color || 'No color'}
+                      onClick={() => setNewTagColor(color)}
+                    />
+                  ))}
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                type="submit"
+                disabled={!newTagName.trim()}
+              >
+                <PlusIcon size={14} />
+                Add tag
+              </button>
+            </form>
+            <div className="dialog-actions">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setTagManagerOpen(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {collectDialogOpen && (
+        <div className="overlay">
+          <button
+            className="overlay-backdrop"
+            type="button"
+            aria-label="Close"
+            onClick={() => setCollectDialogOpen(false)}
+          />
+          <div
+            className="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Collect open tabs"
+          >
+            <h2>Collect open tabs</h2>
+            <p className="settings-intro">
+              Name the new collection for these tabs.
+            </p>
+            <label className="field">
+              <span>Collection name</span>
+              <input
+                className="input"
+                maxLength={120}
+                value={collectName}
+                onChange={(event) => setCollectName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void performCollect(
+                      collectName.trim() ||
+                        `Collected ${new Date().toLocaleDateString()}`,
+                    );
+                  }
+                }}
+              />
+            </label>
+            <div className="dialog-actions">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setCollectDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void performCollect(
+                    collectName.trim() ||
+                      `Collected ${new Date().toLocaleDateString()}`,
+                  )
+                }
+              >
+                Collect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingTab && (
+        <div className="overlay">
+          <button
+            className="overlay-backdrop"
+            type="button"
+            aria-label="Close"
+            onClick={() => setEditingTab(undefined)}
+          />
+          <div
+            className="dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit tab"
+          >
+            <h2>Edit tab</h2>
+            <label className="field">
+              <span>Title</span>
+              <input
+                className="input"
+                maxLength={240}
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>URL</span>
+              <input
+                className="input"
+                value={editUrl}
+                onChange={(event) => setEditUrl(event.target.value)}
+              />
+            </label>
+            <div className="dialog-actions">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setEditingTab(undefined)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={!editTitle.trim() || !editUrl.trim()}
+                onClick={() =>
+                  void runMutation(
+                    async () => {
+                      await updateTab(database, editingTab.id, {
+                        title: editTitle,
+                        url: editUrl,
+                      });
+                      setEditingTab(undefined);
+                    },
+                    'Tab updated.',
+                    false,
+                  )
+                }
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {collectionEditorOpen && selectedCollection && (
+        <div className="overlay">
+          <button
+            className="overlay-backdrop"
+            type="button"
+            aria-label="Close"
+            onClick={() => setCollectionEditorOpen(false)}
+          />
+          <div
+            className="dialog dialog-wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit collection"
+          >
+            <h2>Edit collection</h2>
+            <label className="field">
+              <span>Name</span>
+              <input
+                className="input"
+                maxLength={120}
+                value={editCollectionName}
+                onChange={(event) => setEditCollectionName(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Description</span>
+              <textarea
+                className="input"
+                rows={3}
+                maxLength={500}
+                value={editCollectionDescription}
+                onChange={(event) =>
+                  setEditCollectionDescription(event.target.value)
+                }
+              />
+            </label>
+            <div className="field">
+              <span>Color</span>
+              <div className="color-swatches">
+                {[
+                  '',
+                  '#ef4444',
+                  '#f97316',
+                  '#eab308',
+                  '#22c55e',
+                  '#06b6d4',
+                  '#3b82f6',
+                  '#8b5cf6',
+                  '#ec4899',
+                ].map((color) => (
+                  <button
+                    key={color || 'none'}
+                    type="button"
+                    className={
+                      editCollectionColor === color
+                        ? 'color-swatch selected'
+                        : 'color-swatch'
+                    }
+                    style={color ? { background: color } : undefined}
+                    aria-label={color || 'No color'}
+                    onClick={() => setEditCollectionColor(color)}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="dialog-actions">
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setCollectionEditorOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={!editCollectionName.trim()}
+                onClick={() =>
+                  void runMutation(
+                    async () => {
+                      await updateCollection(database, selectedCollection.id, {
+                        name: editCollectionName,
+                        description: editCollectionDescription,
+                        color: editCollectionColor || null,
+                      });
+                      setCollectionEditorOpen(false);
+                    },
+                    'Collection updated.',
+                    false,
+                  )
+                }
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmRequest && (
@@ -1312,6 +2242,8 @@ export function App() {
           }}
         />
       )}
+
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
@@ -1433,12 +2365,721 @@ function EmptyCollection({
   );
 }
 
+function HomePanel({
+  collections,
+  savedTabCount,
+  tagCount,
+  onCollect,
+  onCreate,
+  onSelectCollection,
+  onDeleteCollections,
+}: {
+  collections: LibraryCollection[];
+  savedTabCount: number;
+  tagCount: number;
+  onCollect: () => void;
+  onCreate: () => void;
+  onSelectCollection: (id: string) => void;
+  onDeleteCollections: (ids: string[]) => void;
+}) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((curr) => {
+      const next = new Set(curr);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === collections.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(collections.map((c) => c.id)));
+    }
+  };
+
+  return (
+    <section className="home">
+      <header className="home-header">
+        <h1>Tabman</h1>
+        <p className="home-subtitle">
+          Your tab library — organized, searchable, local.
+        </p>
+      </header>
+
+      <section className="home-stats" aria-label="Library statistics">
+        <motion.article
+          className="stat-card"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <span className="stat-icon">
+            <FolderIcon size={20} />
+          </span>
+          <div>
+            <strong>{collections.length}</strong>
+            <span>Collections</span>
+          </div>
+        </motion.article>
+        <motion.article
+          className="stat-card"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.05 }}
+        >
+          <span className="stat-icon">
+            <WindowIcon size={20} />
+          </span>
+          <div>
+            <strong>{savedTabCount}</strong>
+            <span>Saved tabs</span>
+          </div>
+        </motion.article>
+        <motion.article
+          className="stat-card"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.1 }}
+        >
+          <span className="stat-icon">
+            <TagIcon size={20} />
+          </span>
+          <div>
+            <strong>{tagCount}</strong>
+            <span>Tags</span>
+          </div>
+        </motion.article>
+      </section>
+
+      <section className="home-actions" aria-label="Quick actions">
+        <button className="btn btn-primary" type="button" onClick={onCollect}>
+          <ZapIcon size={16} />
+          Collect every open tab
+        </button>
+        <button className="btn" type="button" onClick={onCreate}>
+          <PlusIcon size={16} />
+          New collection
+        </button>
+      </section>
+
+      {collections.length > 0 && (
+        <section className="home-collections" aria-label="Your collections">
+          <header className="home-section-header">
+            <h2>Collections</h2>
+            <div className="home-section-actions">
+              {selectedIds.size > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear selection
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={selectAll}
+                >
+                  Select all
+                </button>
+              )}
+            </div>
+          </header>
+
+          <AnimatePresence>
+            {selectedIds.size > 0 && (
+              <motion.div
+                className="floating-bulk-island"
+                role="toolbar"
+                aria-label="Bulk collection actions"
+                initial={{ opacity: 0, y: 24, x: '-50%' }}
+                animate={{ opacity: 1, y: 0, x: '-50%' }}
+                exit={{ opacity: 0, y: 24, x: '-50%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              >
+                <div
+                  className="home-bulk-info"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <span className="bulk-count">
+                    <CheckIcon size={14} />
+                    {selectedIds.size} of {collections.length} selected
+                  </span>
+                </div>
+                <div
+                  className="home-bulk-actions"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={selectAll}
+                  >
+                    {selectedIds.size === collections.length
+                      ? 'Deselect all'
+                      : 'Select all'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={() => {
+                      onDeleteCollections(Array.from(selectedIds));
+                      setSelectedIds(new Set());
+                    }}
+                  >
+                    <TrashIcon size={14} />
+                    Move to trash
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-icon btn-sm"
+                    title="Cancel selection"
+                    aria-label="Cancel selection"
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    <CloseIcon size={14} />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="collections-grid">
+            {collections.map((collection, index) => {
+              const isSelected = selectedIds.has(collection.id);
+              return (
+                <motion.div
+                  key={collection.id}
+                  className={`collection-card ${isSelected ? 'selected' : ''}`}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{
+                    duration: 0.15,
+                    delay: Math.min(index * 0.02, 0.3),
+                  }}
+                >
+                  <span
+                    className="collection-card-checkbox"
+                    title={
+                      isSelected ? 'Deselect collection' : 'Select collection'
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggleSelect(collection.id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Select ${collection.name}`}
+                    />
+                  </span>
+                  <button
+                    type="button"
+                    className="collection-card-body"
+                    onClick={() => {
+                      if (selectedIds.size > 0) {
+                        toggleSelect(collection.id);
+                      } else {
+                        onSelectCollection(collection.id);
+                      }
+                    }}
+                  >
+                    <div className="collection-card-header">
+                      <span
+                        className="collection-color"
+                        style={{
+                          background: collection.color || 'var(--brand)',
+                        }}
+                        aria-hidden="true"
+                      />
+                      <h3>{collection.name}</h3>
+                    </div>
+                    <div className="collection-card-meta">
+                      <span>
+                        {collection.tabs.length} tab
+                        {collection.tabs.length !== 1 ? 's' : ''}
+                      </span>
+                      <span>
+                        {collection.tags.length} tag
+                        {collection.tags.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {collection.description && (
+                      <p className="collection-card-desc">
+                        {collection.description}
+                      </p>
+                    )}
+                  </button>
+                </motion.div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {collections.length === 0 && (
+        <WelcomeState onCreate={onCreate} onCollect={onCollect} />
+      )}
+    </section>
+  );
+}
+
+type RuleItem = { id: string; name: string; patterns: string[] };
+
+function parseRulesToItems(rulesText: string): RuleItem[] {
+  if (!rulesText.trim()) return [];
+  const lines = rulesText.trim().split('\n');
+  const items: RuleItem[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]?.trim();
+    if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+    try {
+      const obj = JSON.parse(line) as Record<string, unknown>;
+      const name = String(
+        obj.name || obj.group || obj.collectionName || `Rule ${i + 1}`,
+      ).trim();
+      const rawPatterns = Array.isArray(obj.patterns || obj.match)
+        ? ((obj.patterns || obj.match) as string[])
+        : [];
+      items.push({
+        id: `rule-${i}-${name}`,
+        name: name || `Group ${i + 1}`,
+        patterns: rawPatterns
+          .map(String)
+          .map((p) => p.trim())
+          .filter(Boolean),
+      });
+    } catch {
+      if (line.includes('->')) {
+        const [pat, dest] = line.split('->').map((s) => s.trim());
+        if (pat && dest) {
+          items.push({ id: `rule-${i}-${dest}`, name: dest, patterns: [pat] });
+        }
+      } else if (line.includes(':')) {
+        const [col, pats] = line.split(':').map((s) => s.trim());
+        if (col && pats) {
+          items.push({
+            id: `rule-${i}-${col}`,
+            name: col,
+            patterns: pats
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean),
+          });
+        }
+      } else {
+        items.push({
+          id: `rule-${i}-gen`,
+          name: 'General',
+          patterns: [line],
+        });
+      }
+    }
+  }
+  return items;
+}
+
+function serializeRulesToJSONL(rulesList: RuleItem[]): string {
+  return rulesList
+    .map((item) =>
+      JSON.stringify({
+        name: item.name.trim(),
+        patterns: item.patterns.filter(Boolean),
+      }),
+    )
+    .join('\n');
+}
+
+function RulesPanel({
+  rules,
+  onChange,
+}: {
+  rules: string;
+  onChange: (v: string) => void;
+}) {
+  const [mode, setMode] = useState<'visual' | 'code'>('visual');
+  const [items, setItems] = useState<RuleItem[]>(() =>
+    parseRulesToItems(rules),
+  );
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newPatterns, setNewPatterns] = useState<Record<string, string>>({});
+  const [savedToast, setSavedToast] = useState(false);
+
+  useEffect(() => {
+    setItems(parseRulesToItems(rules));
+  }, [rules]);
+
+  const saveToStorage = (updatedRules: string) => {
+    try {
+      localStorage.setItem('tabman-local-rules', updatedRules);
+      setSavedToast(true);
+      setTimeout(() => setSavedToast(false), 2000);
+    } catch {}
+  };
+
+  const updateItems = (nextItems: RuleItem[]) => {
+    setItems(nextItems);
+    const serialized = serializeRulesToJSONL(nextItems);
+    onChange(serialized);
+    saveToStorage(serialized);
+  };
+
+  const removeGroup = (groupId: string) => {
+    updateItems(items.filter((item) => item.id !== groupId));
+  };
+
+  const removePattern = (groupId: string, patternIndex: number) => {
+    updateItems(
+      items.map((item) => {
+        if (item.id !== groupId) return item;
+        const nextPatterns = item.patterns.filter(
+          (_, idx) => idx !== patternIndex,
+        );
+        return { ...item, patterns: nextPatterns };
+      }),
+    );
+  };
+
+  const addPattern = (groupId: string) => {
+    const pat = (newPatterns[groupId] || '').trim();
+    if (!pat) return;
+    updateItems(
+      items.map((item) => {
+        if (item.id !== groupId) return item;
+        return { ...item, patterns: [...item.patterns, pat] };
+      }),
+    );
+    setNewPatterns((curr) => ({ ...curr, [groupId]: '' }));
+  };
+
+  const addGroup = () => {
+    const name = newGroupName.trim();
+    if (!name) return;
+    const newGroup: RuleItem = {
+      id: `rule-${Date.now()}-${name}`,
+      name,
+      patterns: [],
+    };
+    updateItems([...items, newGroup]);
+    setNewGroupName('');
+  };
+
+  const formatJSONL = () => {
+    const parsed = parseRulesToItems(rules);
+    const formatted = serializeRulesToJSONL(parsed);
+    onChange(formatted);
+    saveToStorage(formatted);
+  };
+
+  const resetToDefaults = () => {
+    if (window.confirm('Reset all rules to the prebuilt default rules?')) {
+      onChange(DEFAULT_PREBUILT_RULES_JSONL);
+      saveToStorage(DEFAULT_PREBUILT_RULES_JSONL);
+    }
+  };
+
+  const exportRules = () => {
+    try {
+      const blob = new Blob([rules], {
+        type: 'application/x-jsonlines;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tabman-rules.jsonl';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {}
+  };
+
+  const importRules = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.jsonl,.json,.txt';
+    input.onchange = (event) => {
+      const target = event.target as HTMLInputElement | null;
+      const file = target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const content = String(reader.result ?? '');
+          onChange(content);
+          saveToStorage(content);
+        } catch {}
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  return (
+    <section className="settings">
+      <header className="settings-head">
+        <p className="eyebrow">Organization</p>
+        <h1>Local rules</h1>
+        <p className="settings-intro">
+          Match tabs into collections automatically using domain and URL
+          patterns. Prebuilt with common services (AI, Media, Dev, Social).
+        </p>
+      </header>
+
+      <div className="rules-toolbar">
+        <div className="rules-toolbar-left">
+          <div className="segmented-pill-track">
+            <button
+              type="button"
+              className={`segmented-pill-btn ${
+                mode === 'visual' ? 'active' : ''
+              }`}
+              aria-pressed={mode === 'visual'}
+              onClick={() => setMode('visual')}
+            >
+              {mode === 'visual' && (
+                <motion.div
+                  layoutId="rulesModePill"
+                  className="segmented-pill-slider"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className="segmented-pill-text">Visual cards</span>
+            </button>
+            <button
+              type="button"
+              className={`segmented-pill-btn ${mode === 'code' ? 'active' : ''}`}
+              aria-pressed={mode === 'code'}
+              onClick={() => setMode('code')}
+            >
+              {mode === 'code' && (
+                <motion.div
+                  layoutId="rulesModePill"
+                  className="segmented-pill-slider"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className="segmented-pill-text">JSONL code</span>
+            </button>
+          </div>
+          {savedToast && (
+            <span
+              style={{
+                fontSize: '12px',
+                color: 'var(--success, #22c55e)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <CheckIcon size={13} /> Rules saved
+            </span>
+          )}
+        </div>
+
+        <div className="rules-toolbar-right">
+          {mode === 'code' && (
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              onClick={formatJSONL}
+            >
+              Format JSONL
+            </button>
+          )}
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={resetToDefaults}
+          >
+            Reset to defaults
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={exportRules}
+          >
+            <DownloadIcon size={13} />
+            Export
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={importRules}
+          >
+            <UploadIcon size={13} />
+            Import
+          </button>
+        </div>
+      </div>
+
+      {mode === 'visual' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="rules-visual-grid">
+            {items.map((item) => (
+              <div className="rule-group-card" key={item.id}>
+                <div className="rule-group-card-head">
+                  <div className="rule-group-card-title">
+                    <FolderIcon size={15} />
+                    <span>{item.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="rule-group-delete-btn"
+                    title={`Delete rule group "${item.name}"`}
+                    aria-label={`Delete rule group ${item.name}`}
+                    onClick={() => removeGroup(item.id)}
+                  >
+                    <CloseIcon size={14} />
+                  </button>
+                </div>
+
+                <div className="rule-patterns-wrap">
+                  {item.patterns.length === 0 ? (
+                    <span
+                      style={{ fontSize: '12px', color: 'var(--text-muted)' }}
+                    >
+                      No patterns yet. Add one below.
+                    </span>
+                  ) : (
+                    item.patterns.map((pat, pIdx) => (
+                      <span
+                        className="rule-pattern-chip"
+                        key={`${item.id}-${pat}`}
+                      >
+                        <span>{pat}</span>
+                        <button
+                          type="button"
+                          className="rule-pattern-remove"
+                          title={`Remove ${pat}`}
+                          aria-label={`Remove pattern ${pat}`}
+                          onClick={() => removePattern(item.id, pIdx)}
+                        >
+                          <CloseIcon size={11} />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+
+                <form
+                  className="rule-pattern-add-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addPattern(item.id);
+                  }}
+                >
+                  <input
+                    className="input input-compact"
+                    placeholder="e.g. *domain.com*"
+                    value={newPatterns[item.id] || ''}
+                    onChange={(e) =>
+                      setNewPatterns({
+                        ...newPatterns,
+                        [item.id]: e.target.value,
+                      })
+                    }
+                  />
+                  <button
+                    type="submit"
+                    className="btn btn-sm"
+                    disabled={!(newPatterns[item.id] || '').trim()}
+                  >
+                    <PlusIcon size={12} />
+                    Add
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px dashed var(--border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+            }}
+          >
+            <input
+              className="input"
+              placeholder="New rule group name (e.g. Shopping, Finance)..."
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addGroup();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={!newGroupName.trim()}
+              onClick={addGroup}
+            >
+              <PlusIcon size={14} />
+              Add group
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="rules-code-editor">
+          <textarea
+            className="input"
+            rows={12}
+            placeholder='{"name": "AI", "patterns": ["*chatgpt.com*", "*claude.ai*"]}'
+            value={rules}
+            onChange={(e) => {
+              onChange(e.target.value);
+              saveToStorage(e.target.value);
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Format: One JSON object per line with <code>name</code> and{' '}
+              <code>patterns</code> array.
+            </span>
+            <button
+              className="btn btn-primary btn-sm"
+              type="button"
+              onClick={() => saveToStorage(rules)}
+            >
+              Save rules
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 interface TabCardProps {
   tab: LibraryCollection['tabs'][number];
-  tags: { id: string; name: string }[];
+  tags: { id: string; name: string; color?: string | null }[];
   selected: boolean;
   onToggle: () => void;
   onRestore: () => void;
+  onEdit: () => void;
+  onPin: () => void;
   onDelete: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -1450,15 +3091,29 @@ function TabCard({
   selected,
   onToggle,
   onRestore,
+  onEdit,
+  onPin,
   onDelete,
   onDragStart,
   onDragEnd,
 }: TabCardProps) {
   const title = tabLabel(tab.title, tab.hostname, tab.url);
   const host = hostLabel(tab.hostname, tab.url);
+  const tagColor = tags.find((t) => Boolean(t.color))?.color;
+
   return (
     <article
-      className={selected ? 'tab-card selected' : 'tab-card'}
+      className={[
+        'tab-card',
+        selected ? 'selected' : '',
+        tab.pinned ? 'pinned' : '',
+        tagColor ? 'has-tag-color' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      style={{
+        borderLeft: tagColor ? `4px solid ${tagColor}` : undefined,
+      }}
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -1467,63 +3122,111 @@ function TabCard({
       }}
       onDragEnd={onDragEnd}
     >
-      <div className="tab-card-top">
-        <input
-          className="checkbox"
-          type="checkbox"
-          aria-label={`Select ${title}`}
-          checked={selected}
-          onChange={onToggle}
-        />
-        {tab.favIconUrl ? (
-          <img
-            className="tab-favicon"
-            src={tab.favIconUrl}
-            alt=""
-            onError={(event) => {
-              event.currentTarget.hidden = true;
-            }}
-          />
-        ) : (
-          <span className="tab-favicon fallback" aria-hidden="true">
-            {hostInitial(tab.hostname, tab.url)}
+      <div className="tab-card-header">
+        <div className="tab-card-source">
+          <span className="tab-card-check-wrap">
+            <input
+              className="checkbox"
+              type="checkbox"
+              aria-label={`Select ${title}`}
+              checked={selected}
+              onChange={onToggle}
+            />
           </span>
-        )}
-        <a
-          className="tab-title"
-          href={tab.url}
-          target="_blank"
-          rel="noreferrer"
-          title={tab.url}
-        >
-          {title}
-        </a>
+          {tab.favIconUrl ? (
+            <img
+              className="tab-favicon"
+              src={tab.favIconUrl}
+              alt=""
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
+          ) : (
+            <span className="tab-favicon fallback" aria-hidden="true">
+              {hostInitial(tab.hostname, tab.url)}
+            </span>
+          )}
+          <span className="tab-host" title={tab.hostname}>
+            {host}
+          </span>
+          {tab.pinned && (
+            <span className="tab-pinned-pill" title="Pinned tab">
+              <PinIcon size={10} />
+              <span>Pinned</span>
+            </span>
+          )}
+        </div>
+
         <div className="tab-card-actions">
-          <button
-            className="btn btn-ghost btn-icon btn-sm"
+          <motion.button
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.85 }}
+            className="tab-action-btn"
             type="button"
-            title="Restore this tab"
-            aria-label="Restore this tab"
+            title="Open in new window"
+            aria-label="Open tab in new window"
             onClick={onRestore}
           >
-            <ArrowUpRightIcon size={15} />
-          </button>
-          <button
-            className="btn btn-ghost btn-icon btn-sm"
+            <ArrowUpRightIcon size={14} />
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.85 }}
+            className={`tab-action-btn ${tab.pinned ? 'is-pinned' : ''}`}
+            type="button"
+            title={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
+            aria-label={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
+            onClick={onPin}
+          >
+            {tab.pinned ? <PinSlashIcon size={14} /> : <PinIcon size={14} />}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.85 }}
+            className="tab-action-btn"
+            type="button"
+            title="Edit this tab"
+            aria-label="Edit this tab"
+            onClick={onEdit}
+          >
+            <PencilIcon size={14} />
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.85 }}
+            className="tab-action-btn tab-action-delete"
             type="button"
             title="Delete this tab"
             aria-label="Delete this tab"
             onClick={onDelete}
           >
-            <CloseIcon size={15} />
-          </button>
+            <CloseIcon size={14} />
+          </motion.button>
         </div>
       </div>
-      <span className="tab-host">{host}</span>
+
+      <a
+        className="tab-title"
+        href={tab.url}
+        target="_blank"
+        rel="noreferrer"
+        title={tab.url}
+      >
+        {title}
+      </a>
+
       {tags.length > 0 && (
         <div className="tab-tags">
           {tags.map((tag) => (
             <span className="chip" key={tag.id}>
+              {tag.color && (
+                <span
+                  className="tag-color-dot"
+                  style={{ background: tag.color }}
+                  aria-hidden="true"
+                />
+              )}
               {tag.name}
             </span>
           ))}
@@ -1539,15 +3242,29 @@ function TabRow({
   selected,
   onToggle,
   onRestore,
+  onEdit,
+  onPin,
   onDelete,
   onDragStart,
   onDragEnd,
 }: TabCardProps) {
   const title = tabLabel(tab.title, tab.hostname, tab.url);
   const host = hostLabel(tab.hostname, tab.url);
+  const tagColor = tags.find((t) => Boolean(t.color))?.color;
+
   return (
     <article
-      className={selected ? 'tab-row selected' : 'tab-row'}
+      className={[
+        'tab-row',
+        selected ? 'selected' : '',
+        tab.pinned ? 'pinned' : '',
+        tagColor ? 'has-tag-color' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      style={{
+        borderLeft: tagColor ? `4px solid ${tagColor}` : undefined,
+      }}
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -1590,12 +3307,26 @@ function TabRow({
       <div className="tab-row-tags">
         {tags.map((tag) => (
           <span className="chip" key={tag.id}>
+            {tag.color && (
+              <span
+                className="tag-color-dot"
+                style={{ background: tag.color }}
+                aria-hidden="true"
+              />
+            )}
             {tag.name}
           </span>
         ))}
+        {tab.pinned && (
+          <span className="tab-pinned-pill" title="Pinned tab">
+            <PinIcon size={10} />
+          </span>
+        )}
       </div>
       <div className="tab-row-actions">
-        <button
+        <motion.button
+          whileHover={{ scale: 1.15 }}
+          whileTap={{ scale: 0.85 }}
           className="btn btn-ghost btn-icon btn-sm"
           type="button"
           title="Restore this tab"
@@ -1603,8 +3334,32 @@ function TabRow({
           onClick={onRestore}
         >
           <ArrowUpRightIcon size={15} />
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.15 }}
+          whileTap={{ scale: 0.85 }}
+          className={`btn btn-ghost btn-icon btn-sm ${tab.pinned ? 'is-pinned' : ''}`}
+          type="button"
+          title={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
+          aria-label={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
+          onClick={onPin}
+        >
+          {tab.pinned ? <PinSlashIcon size={15} /> : <PinIcon size={15} />}
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.15 }}
+          whileTap={{ scale: 0.85 }}
+          className="btn btn-ghost btn-icon btn-sm"
+          type="button"
+          title="Edit this tab"
+          aria-label="Edit this tab"
+          onClick={onEdit}
+        >
+          <PencilIcon size={15} />
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.15 }}
+          whileTap={{ scale: 0.85 }}
           className="btn btn-ghost btn-icon btn-sm"
           type="button"
           title="Delete this tab"
@@ -1612,7 +3367,7 @@ function TabRow({
           onClick={onDelete}
         >
           <CloseIcon size={15} />
-        </button>
+        </motion.button>
       </div>
     </article>
   );
@@ -1622,6 +3377,7 @@ interface BulkBarProps {
   count: number;
   busy: boolean;
   collections: LibraryCollection[];
+  tags: { id: string; name: string }[];
   tagName: string;
   onTagNameChange: (value: string) => void;
   onTag: () => void;
@@ -1635,6 +3391,7 @@ function BulkBar({
   count,
   busy,
   collections,
+  tags,
   tagName,
   onTagNameChange,
   onTag,
@@ -1643,58 +3400,83 @@ function BulkBar({
   onDelete,
   onClear,
 }: BulkBarProps) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestions = tags.filter((tag) =>
+    tag.name.toLowerCase().includes(tagName.trim().toLowerCase()),
+  );
   return (
     <section className="bulk-bar" aria-label="Selected tab actions">
       <span className="bulk-count">
         <CheckIcon size={14} />
         {count} selected
       </span>
-      <form
-        className="bulk-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onTag();
-        }}
-      >
-        <input
-          className="input"
-          aria-label="Tag the selected tabs"
-          placeholder="Add a tag"
-          maxLength={64}
-          value={tagName}
-          onChange={(event) => onTagNameChange(event.target.value)}
-        />
-        <button
-          className="btn btn-sm"
-          type="submit"
-          disabled={busy || !tagName.trim()}
+      <div className="bulk-tag-wrap">
+        <form
+          className="bulk-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onTag();
+            setShowSuggestions(false);
+          }}
         >
-          <TagIcon size={14} />
-          Tag
-        </button>
-      </form>
+          <input
+            className="input"
+            aria-label="Tag the selected tabs"
+            placeholder="Add a tag"
+            maxLength={64}
+            value={tagName}
+            onChange={(event) => onTagNameChange(event.target.value)}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+          />
+          <button
+            className="btn btn-sm"
+            type="submit"
+            disabled={busy || !tagName.trim()}
+          >
+            <TagIcon size={14} />
+            Tag
+          </button>
+        </form>
+        {showSuggestions && suggestions.length > 0 && (
+          <ul className="tag-suggestions">
+            {suggestions.map((tag) => (
+              <li key={tag.id}>
+                <button
+                  type="button"
+                  role="option"
+                  onClick={() => {
+                    onTagNameChange(tag.name);
+                    setShowSuggestions(false);
+                  }}
+                >
+                  {tag.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {collections.length > 0 && (
-        <select
-          className="select select-compact"
-          aria-label="Move the selected tabs"
-          defaultValue=""
-          onChange={(event) => {
-            const target = event.target.value;
+        <CustomSelect
+          value=""
+          size="sm"
+          direction="up"
+          ariaLabel="Move the selected tabs"
+          options={[
+            { value: '', label: 'Move to…' },
+            ...collections.map((c) => ({
+              value: c.id,
+              label: c.name,
+              icon: <FolderIcon size={13} />,
+            })),
+          ]}
+          onChange={(target) => {
             if (target) {
               onMove(target);
             }
-            event.target.value = '';
           }}
-        >
-          <option value="" disabled>
-            Move to…
-          </option>
-          {collections.map((collection) => (
-            <option value={collection.id} key={collection.id}>
-              {collection.name}
-            </option>
-          ))}
-        </select>
+        />
       )}
       <button
         className="btn btn-sm"
@@ -1739,6 +3521,19 @@ function SettingsPanel({
   onSave: (settings: Settings) => void;
 }) {
   const [draft, setDraft] = useState<Settings>(settings);
+  const [organizeMode, setOrganizeMode] = useState<'multiple' | 'single'>(
+    () => {
+      try {
+        return (
+          (localStorage.getItem('tabman-organize-mode') as
+            | 'multiple'
+            | 'single') || 'multiple'
+        );
+      } catch {
+        return 'multiple';
+      }
+    },
+  );
 
   useEffect(() => setDraft(settings), [settings]);
 
@@ -1770,22 +3565,38 @@ function SettingsPanel({
               <p>Match the browser or pick a side.</p>
             </div>
           </div>
-          <div className="segmented segmented-wide">
+          <div className="segmented-pill-track">
             {(['system', 'light', 'dark'] as const).map((theme) => (
               <button
                 type="button"
                 key={theme}
+                className={`segmented-pill-btn ${
+                  draft.theme === theme ? 'active' : ''
+                }`}
                 aria-pressed={draft.theme === theme}
                 onClick={() => {
                   setDraft({ ...draft, theme });
                   onApplyTheme(theme);
                 }}
               >
-                {theme === 'system'
-                  ? 'System'
-                  : theme === 'light'
-                    ? 'Light'
-                    : 'Dark'}
+                {draft.theme === theme && (
+                  <motion.div
+                    layoutId="settingsThemePill"
+                    className="segmented-pill-slider"
+                    transition={{
+                      type: 'spring',
+                      stiffness: 500,
+                      damping: 35,
+                    }}
+                  />
+                )}
+                <span className="segmented-pill-text">
+                  {theme === 'system'
+                    ? 'System'
+                    : theme === 'light'
+                      ? 'Light'
+                      : 'Dark'}
+                </span>
               </button>
             ))}
           </div>
@@ -1810,15 +3621,31 @@ function SettingsPanel({
               <p>How saved collections open.</p>
             </div>
           </div>
-          <div className="segmented segmented-wide">
+          <div className="segmented-pill-track">
             {(['grid', 'list'] as const).map((defaultView) => (
               <button
                 type="button"
                 key={defaultView}
+                className={`segmented-pill-btn ${
+                  draft.defaultView === defaultView ? 'active' : ''
+                }`}
                 aria-pressed={draft.defaultView === defaultView}
                 onClick={() => setDraft({ ...draft, defaultView })}
               >
-                {defaultView === 'grid' ? 'Grid' : 'List'}
+                {draft.defaultView === defaultView && (
+                  <motion.div
+                    layoutId="settingsViewPill"
+                    className="segmented-pill-slider"
+                    transition={{
+                      type: 'spring',
+                      stiffness: 500,
+                      damping: 35,
+                    }}
+                  />
+                )}
+                <span className="segmented-pill-text">
+                  {defaultView === 'grid' ? 'Grid' : 'List'}
+                </span>
               </button>
             ))}
           </div>
@@ -1868,6 +3695,79 @@ function SettingsPanel({
         <div className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
+              <FolderIcon size={16} />
+            </span>
+            <div>
+              <h2>Organize destination</h2>
+              <p>Default way organized tabs are saved to your library.</p>
+            </div>
+          </div>
+          <div className="segmented-pill-track">
+            <button
+              type="button"
+              className={`segmented-pill-btn ${
+                organizeMode === 'multiple' ? 'active' : ''
+              }`}
+              aria-pressed={organizeMode === 'multiple'}
+              onClick={() => {
+                setOrganizeMode('multiple');
+                try {
+                  localStorage.setItem('tabman-organize-mode', 'multiple');
+                } catch {}
+              }}
+            >
+              {organizeMode === 'multiple' && (
+                <motion.div
+                  layoutId="settingsDestPill"
+                  className="segmented-pill-slider"
+                  transition={{
+                    type: 'spring',
+                    stiffness: 500,
+                    damping: 35,
+                  }}
+                />
+              )}
+              <span className="segmented-pill-text">Separate collections</span>
+            </button>
+            <button
+              type="button"
+              className={`segmented-pill-btn ${
+                organizeMode === 'single' ? 'active' : ''
+              }`}
+              aria-pressed={organizeMode === 'single'}
+              onClick={() => {
+                setOrganizeMode('single');
+                try {
+                  localStorage.setItem('tabman-organize-mode', 'single');
+                } catch {}
+              }}
+            >
+              {organizeMode === 'single' && (
+                <motion.div
+                  layoutId="settingsDestPill"
+                  className="segmented-pill-slider"
+                  transition={{
+                    type: 'spring',
+                    stiffness: 500,
+                    damping: 35,
+                  }}
+                />
+              )}
+              <span className="segmented-pill-text">
+                Single collection with tags
+              </span>
+            </button>
+          </div>
+          <p className="settings-note">
+            {organizeMode === 'multiple'
+              ? 'Creates a distinct collection for each group or domain rule.'
+              : 'Puts all tabs into one dated collection and tags them with their group name.'}
+          </p>
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card-head">
+            <span className="settings-icon">
               <ZapIcon size={16} />
             </span>
             <div>
@@ -1899,21 +3799,36 @@ function TrashPanel({
   busy,
   onRestore,
   onDelete,
+  onClearAll,
 }: {
   collections: LibraryCollection[];
   busy: boolean;
   onRestore: (collectionId: string) => void;
   onDelete: (collectionId: string) => void;
+  onClearAll?: () => void;
 }) {
   return (
     <section className="trash">
-      <header className="settings-head">
-        <p className="eyebrow">Recovery</p>
-        <h1>Trash</h1>
-        <p className="settings-intro">
-          Trashed collections stay in this browser profile until you delete them
-          forever.
-        </p>
+      <header className="settings-head trash-header-row">
+        <div>
+          <p className="eyebrow">Recovery</p>
+          <h1>Trash</h1>
+          <p className="settings-intro">
+            Trashed collections stay in this browser profile until you delete
+            them forever.
+          </p>
+        </div>
+        {collections.length > 0 && onClearAll && (
+          <button
+            className="btn btn-danger btn-sm"
+            type="button"
+            disabled={busy}
+            onClick={onClearAll}
+          >
+            <TrashIcon size={14} />
+            Empty trash
+          </button>
+        )}
       </header>
       {collections.length === 0 ? (
         <div className="empty">
@@ -2137,35 +4052,163 @@ function ToastStack({
   toasts: Toast[];
   onDismiss: (id: number) => void;
 }) {
-  if (toasts.length === 0) {
-    return null;
-  }
   return (
     <section className="toast-stack" aria-label="Notifications">
-      {toasts.map((toast) => (
-        <div
-          className={`toast toast-${toast.tone}`}
-          key={toast.id}
-          role="status"
-        >
-          <span className="toast-mark" aria-hidden="true">
-            {toast.tone === 'danger' ? (
+      <AnimatePresence>
+        {toasts.map((toast) => (
+          <motion.div
+            className={`toast toast-${toast.tone}`}
+            key={toast.id}
+            role="status"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.9 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="toast-mark" aria-hidden="true">
+              {toast.tone === 'danger' ? (
+                <CloseIcon size={13} />
+              ) : (
+                <CheckIcon size={13} />
+              )}
+            </span>
+            <span>{toast.message}</span>
+            <button
+              className="btn btn-ghost btn-icon btn-sm"
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => onDismiss(toast.id)}
+            >
               <CloseIcon size={13} />
-            ) : (
-              <CheckIcon size={13} />
-            )}
-          </span>
-          <span>{toast.message}</span>
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+function HelpDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="overlay">
+      <button
+        className="overlay-backdrop"
+        type="button"
+        aria-label="Close help"
+        onClick={onClose}
+      />
+      <div
+        className="dialog help-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tabman Guide & Concepts"
+      >
+        <div className="dialog-head">
+          <div className="dialog-title">
+            <HelpIcon size={18} />
+            <h2>Tabman Guide & Concepts</h2>
+          </div>
           <button
             className="btn btn-ghost btn-icon btn-sm"
             type="button"
-            aria-label="Dismiss"
-            onClick={() => onDismiss(toast.id)}
+            onClick={onClose}
+            aria-label="Close"
           >
-            <CloseIcon size={13} />
+            <CloseIcon size={14} />
           </button>
         </div>
-      ))}
-    </section>
+        <div className="help-modal-body">
+          <div className="help-grid">
+            <article className="help-topic">
+              <div className="help-topic-head">
+                <WindowIcon size={16} />
+                <h3>Park Window</h3>
+              </div>
+              <p>
+                Saves all open tabs from a specific browser window into a
+                collection and closes that window in your browser to free up
+                system RAM.
+              </p>
+            </article>
+
+            <article className="help-topic">
+              <div className="help-topic-head">
+                <ZapIcon size={16} />
+                <h3>Collect Tabs</h3>
+              </div>
+              <p>
+                Takes a snapshot of every open tab across all windows and saves
+                them into a collection without closing any of your browser
+                windows.
+              </p>
+            </article>
+
+            <article className="help-topic">
+              <div className="help-topic-head">
+                <LayersIcon size={16} />
+                <h3>Local Rules vs AI</h3>
+              </div>
+              <p>
+                <strong>Local Rules:</strong> Offline domain/path pattern
+                matching.
+                <br />
+                <strong>AI Provider:</strong> Uses your OpenAI/Anthropic/custom
+                LLM key to group tabs semantically.
+              </p>
+            </article>
+
+            <article className="help-topic">
+              <div className="help-topic-head">
+                <FolderIcon size={16} />
+                <h3>Single vs Multiple Collections</h3>
+              </div>
+              <p>
+                Choose whether organization proposals create separate
+                collections per category or group everything into one collection
+                using tags.
+              </p>
+            </article>
+
+            <article className="help-topic">
+              <div className="help-topic-head">
+                <GridIcon size={16} />
+                <h3>Kanban Board Preview</h3>
+              </div>
+              <p>
+                Preview organization proposals on an interactive drag-and-drop
+                board. Move tabs between columns, collapse columns, or add
+                custom groups before saving.
+              </p>
+            </article>
+
+            <article className="help-topic">
+              <div className="help-topic-head">
+                <RestoreIcon size={16} />
+                <h3>Restore Tabs</h3>
+              </div>
+              <p>
+                Reopen entire collections or selected tabs in new windows with
+                one click, restoring your saved sessions anytime.
+              </p>
+            </article>
+          </div>
+        </div>
+        <div className="dialog-actions">
+          <button className="btn btn-primary" type="button" onClick={onClose}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -148,7 +148,50 @@ describe('the dashboard', () => {
         })(),
     );
 
+    const confirmButton = await screen.findByRole('button', {
+      name: /^Collect$/,
+    });
+    await user.click(confirmButton);
+
     expect(await screen.findByText(/3 open tabs collected/)).toBeTruthy();
+  });
+
+  it('opens the help dialog from the top bar', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const helpButton = await screen.findByRole('button', {
+      name: /Help & Concepts Guide/,
+    });
+    await user.click(helpButton);
+
+    expect(await screen.findByText('Tabman Guide & Concepts')).toBeTruthy();
+    expect(await screen.findByText('Park Window')).toBeTruthy();
+    expect(await screen.findByText('Collect Tabs')).toBeTruthy();
+  });
+
+  it('navigates to windows section from the rail', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const windowsLink = await screen.findByRole('button', {
+      name: /Windows/,
+    });
+    await user.click(windowsLink);
+
+    expect(await screen.findByText('Open Windows & Tabs')).toBeTruthy();
+  });
+
+  it('navigates to trash from the rail and shows empty state', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const trashLink = await screen.findByRole('button', {
+      name: /Trash/,
+    });
+    await user.click(trashLink);
+
+    expect(await screen.findByText('Trash is empty')).toBeTruthy();
   });
 });
 
