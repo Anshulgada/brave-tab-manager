@@ -48,13 +48,26 @@ export async function collectOpenTabs(): Promise<OrganizeTab[]> {
     } catch {
       continue;
     }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    const allowedSchemes = [
+      'http:',
+      'https:',
+      'chrome:',
+      'chrome-extension:',
+      'brave:',
+      'edge:',
+      'about:',
+      'file:',
+    ];
+    if (!allowedSchemes.includes(parsed.protocol)) {
       continue;
     }
+    const hostname = (
+      parsed.hostname || parsed.protocol.replace(':', '')
+    ).slice(0, 253);
     collected.push({
       id: crypto.randomUUID(),
-      title: (tab.title ?? parsed.hostname).slice(0, 2048),
-      hostname: parsed.hostname.slice(0, 253),
+      title: (tab.title ?? hostname).slice(0, 2048),
+      hostname,
       url: tab.url,
     });
   }
@@ -64,6 +77,7 @@ export async function collectOpenTabs(): Promise<OrganizeTab[]> {
 /** Ask the provider for a proposal, or fall back to the local rules. */
 export async function buildProposal(
   mode: 'provider' | 'deterministic',
+  rules?: string,
 ): Promise<OrganizeProposal> {
   const tabs = await collectOpenTabs();
   if (tabs.length === 0) {
@@ -72,7 +86,7 @@ export async function buildProposal(
   const createdAt = new Date().toISOString();
 
   if (mode === 'deterministic') {
-    const suggestions = deterministicSuggestions(tabs);
+    const suggestions = deterministicSuggestions(tabs, rules);
     return {
       provider: 'deterministic',
       createdAt,
@@ -223,16 +237,41 @@ export async function restoreCollection(
       .where('collectionId')
       .equals(collectionId)
       .toArray();
+    const validTabs = tabs.filter(
+      (tab) => tab.url.startsWith('http://') || tab.url.startsWith('https://'),
+    );
+    if (validTabs.length > 0) {
+      try {
+        const first = validTabs[0];
+        const win = await browser.windows.create({ url: first?.url });
+        affected += 1;
+        const windowId = win?.id;
+        for (const tab of validTabs.slice(1)) {
+          try {
+            await browser.tabs.create({
+              windowId,
+              url: tab.url,
+              active: false,
+            });
+            affected += 1;
+          } catch {
+            warnings.push(`${tab.title || tab.url} could not be opened`);
+          }
+        }
+      } catch {
+        for (const tab of validTabs) {
+          try {
+            await browser.tabs.create({ url: tab.url, active: false });
+            affected += 1;
+          } catch {
+            warnings.push(`${tab.title || tab.url} could not be opened`);
+          }
+        }
+      }
+    }
     for (const tab of tabs) {
       if (!tab.url.startsWith('http://') && !tab.url.startsWith('https://')) {
         warnings.push(`${tab.title || tab.url} cannot be opened`);
-        continue;
-      }
-      try {
-        await browser.tabs.create({ url: tab.url, active: false });
-        affected += 1;
-      } catch {
-        warnings.push(`${tab.title || tab.url} could not be opened`);
       }
     }
   } finally {
@@ -337,6 +376,9 @@ export async function applyProposal(
           });
           const { tabs: _tabs, tags: _tags, ...collectionRecord } = collection;
           await database.collections.add(collectionRecord);
+          if (tags.length > 0) {
+            await database.tags.bulkAdd(tags);
+          }
           await database.tabs.bulkAdd(records);
           tabCount += records.length;
         }

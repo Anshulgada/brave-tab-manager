@@ -53,20 +53,36 @@ export async function collectOpenTabs(
     } catch {
       continue;
     }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    const allowedSchemes = [
+      'http:',
+      'https:',
+      'chrome:',
+      'chrome-extension:',
+      'brave:',
+      'edge:',
+      'about:',
+      'file:',
+    ];
+    if (!allowedSchemes.includes(parsed.protocol)) {
       continue;
     }
+    const hostname = (
+      parsed.hostname || parsed.protocol.replace(':', '')
+    ).slice(0, 253);
     try {
       const tab = tabSchema.parse({
         id: crypto.randomUUID(),
-        title: (source.title ?? parsed.hostname).slice(0, 2048),
+        title: (source.title ?? hostname).slice(0, 2048),
         url: source.url,
-        hostname: parsed.hostname.slice(0, 253),
+        hostname,
         ...(source.favIconUrl ? { favIconUrl: source.favIconUrl } : {}),
         pinned: source.pinned,
         position: records.length,
         createdAt: now,
-        lastAccessedAt: null,
+        lastAccessedAt:
+          typeof source.lastAccessed === 'number'
+            ? new Date(source.lastAccessed).toISOString()
+            : null,
         tagIds: [],
       });
       records.push({
@@ -86,6 +102,7 @@ export async function collectOpenTabs(
   const database = new TabmanDatabase();
   let targetCollectionId!: string;
   let collectionName!: string;
+  let affected = records.length;
   try {
     await database.transaction(
       'rw',
@@ -99,11 +116,16 @@ export async function collectOpenTabs(
             .where('collectionId')
             .equals(existing.id)
             .toArray();
-          if (existingTabs.length === 0) {
-            const taggedRecords = records.map((record, index) => ({
+
+          const existingUrls = new Set(existingTabs.map((t) => t.url));
+          const newRecords = records.filter((r) => !existingUrls.has(r.url));
+
+          if (newRecords.length > 0) {
+            const startPosition = existingTabs.length;
+            const taggedRecords = newRecords.map((record, index) => ({
               ...record,
               collectionId: existing.id,
-              position: index,
+              position: startPosition + index,
             }));
             await database.collections.put({
               ...existing,
@@ -111,10 +133,11 @@ export async function collectOpenTabs(
               updatedAt: now,
             });
             await database.tabs.bulkAdd(taggedRecords);
-            targetCollectionId = existing.id;
-            collectionName = cleanName(name, existing.name);
-            return;
           }
+          targetCollectionId = existing.id;
+          collectionName = cleanName(name, existing.name);
+          affected = newRecords.length;
+          return;
         }
 
         targetCollectionId = collectionId ?? crypto.randomUUID();
@@ -155,7 +178,7 @@ export async function collectOpenTabs(
   await notifyLibraryChanged();
   return {
     ok: true,
-    affected: records.length,
+    affected,
     collectionId: targetCollectionId,
     collectionName,
     ...(warnings.length > 0 ? { warnings } : {}),

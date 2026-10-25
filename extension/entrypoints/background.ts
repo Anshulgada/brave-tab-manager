@@ -16,12 +16,14 @@ const REQUEST_TYPES = new Set<SwitchboardRequest['type']>([
   'library/restore',
   'library/collect',
   'library/organize',
+  'library/organize/apply',
   'providers/get',
   'providers/save',
   'providers/remove',
   'providers/activate',
   'providers/set-key',
   'providers/forget-key',
+  'providers/grant',
 ]);
 
 export default defineBackground(() => {

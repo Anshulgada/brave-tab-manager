@@ -34,6 +34,7 @@ export const switchboardRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('switchboard/park'),
     tabIds: z.array(positiveInt).min(1),
     name: z.string().max(120),
+    closeTabs: z.boolean().optional(),
   }),
   z.strictObject({ type: z.literal('dashboard/open') }),
   z.strictObject({
@@ -48,6 +49,7 @@ export const switchboardRequestSchema = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('library/organize'),
     mode: z.enum(['provider', 'deterministic']).default('provider'),
+    rules: z.string().optional(),
   }),
   z.strictObject({
     type: z.literal('library/organize/apply'),

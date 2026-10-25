@@ -191,20 +191,20 @@ describe('local collection library', () => {
 
     const result = await restoreTabs([
       {
-        title: 'Settings',
-        url: 'chrome://settings/',
+        title: 'Script',
+        url: 'javascript:alert(1)',
         pinned: false,
       },
       {
-        title: 'About',
-        url: 'about:blank',
+        title: 'Data',
+        url: 'data:text/html,hello',
         pinned: false,
       },
     ]);
 
     expect(result).toEqual({
       restored: 0,
-      failures: ['Settings (http/https only)', 'About (http/https only)'],
+      failures: ['Script (unsupported scheme)', 'Data (unsupported scheme)'],
     });
     expect(create).not.toHaveBeenCalled();
   });

@@ -316,20 +316,223 @@ export async function requestSuggestions(
   return validateBatch(extractJson(text), tabs);
 }
 
-/** Group the tabs by hostname without contacting any service. */
-export function deterministicSuggestions(tabs: OrganizeTab[]): Suggestion[] {
+export interface ParsedRule {
+  collectionName: string;
+  patterns: RegExp[];
+}
+
+export const DEFAULT_PREBUILT_RULES_JSONL = `{"group": "AI & LLMs", "patterns": ["*chatgpt.com*", "*claude.ai*", "*gemini.google.com*", "*kimi.ai*", "*kimi.moonshot.cn*", "*perplexity.ai*", "*deepseek.com*"]}
+{"group": "Media & Streaming", "patterns": ["*youtube.com*", "*youtu.be*", "*twitch.tv*", "*netflix.com*", "*spotify.com*", "*vimeo.com*"]}
+{"group": "Development", "patterns": ["*github.com*", "*gitlab.com*", "*stackoverflow.com*", "*npmjs.com*", "*developer.mozilla.org*"]}
+{"group": "Social & Community", "patterns": ["*x.com*", "*twitter.com*", "*reddit.com*", "*linkedin.com*", "*news.ycombinator.com*"]}
+{"group": "Tools & Docs", "patterns": ["*notion.so*", "*figma.com*", "*docs.google.com*", "*linear.app*"]}`;
+
+function compilePattern(pattern: string): RegExp {
+  const p = pattern.trim();
+  if (p.startsWith('/') && p.endsWith('/') && p.length > 2) {
+    try {
+      return new RegExp(p.slice(1, -1), 'i');
+    } catch {
+      // fallback to wildcard if invalid regex literal
+    }
+  }
+  const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(escaped, 'i');
+}
+
+export function parseLocalRules(rulesText?: string): ParsedRule[] {
+  if (!rulesText?.trim()) return [];
+  const trimmed = rulesText.trim();
+  const rules: ParsedRule[] = [];
+
+  // Try parsing as full JSON array
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsedArray = JSON.parse(trimmed) as Array<Record<string, unknown>>;
+      if (Array.isArray(parsedArray)) {
+        for (const item of parsedArray) {
+          const name = String(
+            item.group || item.name || item.collectionName || '',
+          ).trim();
+          const raw = Array.isArray(item.patterns || item.match)
+            ? ((item.patterns || item.match) as string[])
+            : [];
+          if (name && raw.length > 0) {
+            rules.push({
+              collectionName: name,
+              patterns: raw.map(String).map(compilePattern),
+            });
+          }
+        }
+        if (rules.length > 0) return rules;
+      }
+    } catch {
+      // fallback to line-by-line
+    }
+  }
+
+  // Parse line-by-line (supports JSONL and human-friendly formats)
+  const lines = trimmed
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (line.startsWith('{') && line.endsWith('}')) {
+      try {
+        const obj = JSON.parse(line) as Record<string, unknown>;
+        const name = String(
+          obj.group || obj.name || obj.collectionName || '',
+        ).trim();
+        const raw = Array.isArray(obj.patterns || obj.match)
+          ? ((obj.patterns || obj.match) as string[])
+          : typeof obj.patterns === 'string'
+            ? [obj.patterns]
+            : [];
+        if (name && raw.length > 0) {
+          rules.push({
+            collectionName: name,
+            patterns: raw.map(String).map(compilePattern),
+          });
+          continue;
+        }
+      } catch {
+        // fallback to standard line parser
+      }
+    }
+
+    let name = '';
+    let rawPatterns: string[] = [];
+    if (line.includes(':')) {
+      const parts = line.split(':');
+      name = parts[0]?.trim() ?? '';
+      rawPatterns = (parts[1] ?? '')
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+    } else if (line.includes('->')) {
+      const parts = line.split('->');
+      rawPatterns = (parts[0] ?? '')
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+      name = parts[1]?.trim() ?? '';
+    } else {
+      const p = line.trim();
+      const host = p
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/.*$/, '')
+        .replace(/\*.*$/, '');
+      const parts = host.split('.').filter(Boolean);
+      name = parts.at(-2) ?? parts[0] ?? p;
+      rawPatterns = [p];
+    }
+    if (name && rawPatterns.length > 0) {
+      rules.push({
+        collectionName: name,
+        patterns: rawPatterns.map(compilePattern),
+      });
+    }
+  }
+  return rules;
+}
+
+const TLD_BLACKLIST = new Set([
+  'com',
+  'org',
+  'net',
+  'edu',
+  'gov',
+  'mil',
+  'int',
+  'io',
+  'ai',
+  'co',
+  'app',
+  'dev',
+  'me',
+  'info',
+  'biz',
+  'tv',
+  'cc',
+  'uk',
+  'ca',
+  'de',
+  'jp',
+  'fr',
+  'au',
+  'in',
+  'cn',
+  'ru',
+  'br',
+  'nl',
+  'se',
+  'no',
+  'es',
+  'it',
+  'ch',
+  'xyz',
+  'tech',
+  'online',
+  'site',
+  'store',
+  'cloud',
+  'pro',
+  'www',
+]);
+
+function extractMeaningfulTags(hostname: string): string[] {
+  const parts = hostname
+    .toLowerCase()
+    .split('.')
+    .filter((part) => part.length > 0 && !TLD_BLACKLIST.has(part));
+  if (parts.length === 0) {
+    return [];
+  }
+  return parts.slice(-2).map((label) => label.slice(0, 64));
+}
+
+/** Group the tabs by hostname or local rules without contacting any service. */
+export function deterministicSuggestions(
+  tabs: OrganizeTab[],
+  rulesText?: string,
+): Suggestion[] {
+  const parsedRules = parseLocalRules(rulesText);
+
   return tabs.map((tab) => {
     const labels = tab.hostname.split('.').filter((part) => part.length > 0);
-    const collectionName = (
+    const meaningfulParts = labels.filter(
+      (part) => !TLD_BLACKLIST.has(part.toLowerCase()),
+    );
+    const defaultName = (
+      meaningfulParts.at(-1) ??
       labels.at(-2) ??
       labels[0] ??
       tab.hostname ??
       'Tabs'
     ).slice(0, 120);
-    const tags = labels.slice(-2).map((label) => label.slice(0, 64));
+    const tags = extractMeaningfulTags(tab.hostname);
+
+    if (parsedRules.length > 0) {
+      for (const rule of parsedRules) {
+        if (
+          rule.patterns.some(
+            (re) =>
+              (tab.url ? re.test(tab.url) : false) || re.test(tab.hostname),
+          )
+        ) {
+          return {
+            tabId: tab.id,
+            collectionName: rule.collectionName,
+            tags,
+          };
+        }
+      }
+    }
+
     return {
       tabId: tab.id,
-      collectionName: collectionName || 'Tabs',
+      collectionName: defaultName || 'Tabs',
       tags,
     };
   });

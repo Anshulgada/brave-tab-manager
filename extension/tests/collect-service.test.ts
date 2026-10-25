@@ -58,7 +58,7 @@ describe('collecting the open tabs', () => {
   it('skips the tabs it cannot store', async () => {
     installBrowserMock([
       OPEN_TAB,
-      { ...OPEN_TAB, id: 2, url: 'chrome://settings' },
+      { ...OPEN_TAB, id: 2, url: 'javascript:void(0)' },
       { ...OPEN_TAB, id: 3, incognito: true },
     ]);
 
