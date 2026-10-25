@@ -25,7 +25,7 @@ from tabman.theme import CONTEXT_SETTINGS, apply_theme
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "extension" / "output" / "chrome-mv3"
 STUB = ROOT / "scripts" / "preview_stub.js"
-PAGES = ("dashboard.html", "sidepanel.html")
+PAGES = ("dashboard.html",)
 
 apply_theme()
 
@@ -83,7 +83,6 @@ def main(port: int, keep: bool) -> None:
     directory = build_preview(workdir)
     server = serve(directory, port)
     click.echo(f"dashboard: http://127.0.0.1:{port}/dashboard.html")
-    click.echo(f"side panel: http://127.0.0.1:{port}/sidepanel.html")
     click.echo(f"serving from {directory} (ctrl-c to stop)")
     try:
         threading.Event().wait()
