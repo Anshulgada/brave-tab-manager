@@ -6,6 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0]
+
+### Added
+
+- Hash routing (`#/home`, `#/windows`, `#/organize`, `#/rules`, `#/trash`, `#/preferences`, `#/collections/:id`) persists current view and sub-views across dashboard refreshes, browser navigation, and deep-linking.
+- Kanban drag-and-drop board for the Organize view with dynamic card reordering, inter-group transfers, automatic new group creation with placeholder naming when dragging between groups, and inline card title editing.
+- Pinterest/Masonry style auto-flowing column grid layout for organize cards.
+- Default pre-configured grouping rules for AI assistants (ChatGPT, Claude, Gemini, Kimi), video platforms (YouTube, Twitch, Vimeo), and developer hubs (GitHub, GitLab).
+- Floating bulk action dock in the Collections view that stays fixed above the viewport bottom with entrance/exit transitions without jumping page content.
+- Trash "Clear all" button with an interactive confirmation modal.
+- Circular checkboxes across all cards, selection controls, and bulk management lists.
+- Smooth theme toggle transition animation between light and dark modes with synchronized toggle styling.
+- Domain-based sorting option for collections in addition to Title, Recency, and Park Order.
+
+### Changed
+
+- Decomposed monolithic dashboard files into modular domain-driven components (`components/`, `panels/`) and dedicated CSS modules (`styles/`).
+- Standardized toggle controls and color tag pickers across Preferences and Tag Management.
+- Upgraded lower bound dependency pins for dev tooling (`ruff`, `ty`) in `pyproject.toml`.
+
 ## [0.4.4]
 
 ### Fixed
