@@ -111,6 +111,7 @@ addopts = [
     "-ra",
 ]
 testpaths = ["tests"]
+pythonpath = [".", "src"]
 markers = [
     "integration: tests that require external services, browsers, or credentials",
 ]
