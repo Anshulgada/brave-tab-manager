@@ -533,6 +533,29 @@
   transform: scale(0.98);
 }
 
+.kanban-card.is-excluded {
+  background: var(--surface-subtle);
+  border-style: dashed;
+  opacity: 0.45;
+}
+
+.kanban-card-check {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  margin-right: 2px;
+}
+
+.kanban-card-check input[type="checkbox"] {
+  accent-color: var(--brand);
+  border-radius: 50%;
+  cursor: pointer;
+  height: 14px;
+  width: 14px;
+}
+
 .kanban-card:hover {
   border-color: var(--border);
   box-shadow: var(--shadow-sm);

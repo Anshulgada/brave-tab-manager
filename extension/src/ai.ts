@@ -8,7 +8,12 @@
 
 import { z } from 'zod';
 
-export const apiFormatSchema = z.enum(['openai', 'responses', 'anthropic']);
+export const apiFormatSchema = z.enum([
+  'openai',
+  'responses',
+  'anthropic',
+  'ollama',
+]);
 export type ApiFormat = z.infer<typeof apiFormatSchema>;
 
 export const providerProfileSchema = z.strictObject({
@@ -85,6 +90,9 @@ export function originPattern(baseUrl: string): string {
 /** Return the endpoint a provider call is sent to. */
 export function endpointFor(profile: ProviderProfile): string {
   const base = profile.baseUrl.replace(/\/+$/, '');
+  if (profile.apiFormat === 'ollama') {
+    return `${base}/api/chat`;
+  }
   if (profile.apiFormat === 'responses') {
     return base.endsWith('/v1') ? `${base}/responses` : `${base}/v1/responses`;
   }
@@ -190,6 +198,14 @@ function extractProviderText(
   payload: object,
   provider: ProviderProfile,
 ): string {
+  if (provider.apiFormat === 'ollama') {
+    const message = (payload as { message?: { content?: unknown } }).message;
+    const content = message?.content;
+    if (typeof content === 'string' && content.trim()) {
+      return content;
+    }
+    throw new ProviderError(`${provider.name} returned no text`);
+  }
   if (provider.apiFormat === 'anthropic') {
     const content = (payload as { content?: unknown }).content;
     if (Array.isArray(content)) {
@@ -274,7 +290,21 @@ export async function requestSuggestions(
 ): Promise<Suggestion[]> {
   const prompt = buildPrompt(tabs, includeFullUrl);
   let response: Response;
-  if (profile.apiFormat === 'anthropic') {
+  if (profile.apiFormat === 'ollama') {
+    response = await fetch(endpointFor(profile), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: profile.model,
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+        format: 'json',
+        options: { temperature: 0 },
+      }),
+    });
+  } else if (profile.apiFormat === 'anthropic') {
     response = await fetch(endpointFor(profile), {
       method: 'POST',
       headers: {

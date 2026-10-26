@@ -313,13 +313,14 @@ describe('Tabman database import and export', () => {
 });
 
 describe('Tabman database versions', () => {
-  it('opens all version 2 stores on a new database', async () => {
+  it('opens all current stores on a new database', async () => {
     const database = createDatabase();
     await database.open();
 
     expect(database.verno).toBe(DATABASE_VERSION);
     expect(database.tables.map((table) => table.name).sort()).toEqual([
       'collections',
+      'corrections',
       'proposals',
       'sessions',
       'settings',
@@ -327,6 +328,7 @@ describe('Tabman database versions', () => {
       'tags',
     ]);
     expect(database.tabs.schema.idxByName.normalizedHostname).toBeDefined();
+    expect(database.corrections).toBeDefined();
   });
 
   it('migrates version 1 tabs and populates the new index', async () => {

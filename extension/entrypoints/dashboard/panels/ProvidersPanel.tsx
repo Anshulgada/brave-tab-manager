@@ -17,6 +17,11 @@ import type { PanelProps } from '../types';
 
 const FORMATS: { value: ApiFormat; label: string; hint: string }[] = [
   {
+    value: 'ollama',
+    label: 'Ollama (Localhost)',
+    hint: 'POST {base}/api/chat, local models (no API key needed)',
+  },
+  {
     value: 'responses',
     label: 'OpenAI Responses',
     hint: 'POST {base}/responses, the current OpenAI API',
@@ -24,7 +29,7 @@ const FORMATS: { value: ApiFormat; label: string; hint: string }[] = [
   {
     value: 'openai',
     label: 'OpenAI compatible',
-    hint: 'POST {base}/chat/completions, for OpenRouter, Ollama, vLLM and friends',
+    hint: 'POST {base}/chat/completions, for OpenRouter, vLLM and friends',
   },
   {
     value: 'anthropic',
