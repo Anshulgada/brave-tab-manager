@@ -269,13 +269,13 @@ describe('background switchboard service', () => {
     expect(await database.tabs.count()).toBe(0);
   });
 
-  it('skips non-http(s) tabs when parking a selection', async () => {
+  it('skips unsupported URL scheme tabs when parking a selection', async () => {
     const browserMock = installBrowserMock();
     browserMock.tabs.get.mockImplementation(async (tabId: number) => {
       if (tabId === 1) {
         return {
           ...tab(1),
-          url: 'chrome://settings/',
+          url: 'javascript:void(0)',
           title: 'Settings',
         };
       }
@@ -291,9 +291,36 @@ describe('background switchboard service', () => {
     ).resolves.toMatchObject({
       ok: true,
       affected: 1,
-      warnings: ['Settings cannot be parked (http/https only)'],
+      warnings: ['Settings cannot be parked (unsupported URL scheme)'],
     });
     expect(browserMock.tabs.remove).toHaveBeenCalledTimes(1);
+    expect(browserMock.tabs.remove).toHaveBeenCalledWith(2);
+  });
+
+  it('parks browser internal tabs like chrome:// and brave://', async () => {
+    const browserMock = installBrowserMock();
+    browserMock.tabs.get.mockImplementation(async (tabId: number) => {
+      if (tabId === 1) {
+        return {
+          ...tab(1),
+          url: 'brave://extensions/',
+          title: 'Extensions',
+        };
+      }
+      return tab(tabId);
+    });
+
+    await expect(
+      handleSwitchboardRequest({
+        type: 'switchboard/park',
+        tabIds: [1, 2],
+        name: 'Brave tabs',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      affected: 2,
+    });
+    expect(browserMock.tabs.remove).toHaveBeenCalledWith(1);
     expect(browserMock.tabs.remove).toHaveBeenCalledWith(2);
   });
 

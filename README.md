@@ -137,6 +137,16 @@ tabman export backup.md --format markdown
 
 `tabman --help` uses rich-click, so the command tree is rendered with colored, rounded Rich panels, grouped commands, and readable option columns.
 
+## The extension
+
+The extension has three surfaces, and they all work without an account.
+
+**The side panel** is the switchboard. It lists every open window with its tabs, searches across all of them at once, and shows the duplicates you have open in more than one place. Select tabs to close them, discard them, move them to another window, group them, or park them into the library. The **Collect** button saves every open tab into a new collection without closing anything, and the **Saved** list restores a collection back into the browser.
+
+**The library** is a full page application. The home of an empty library offers **Collect every open tab**, which asks for a collection name and saves the open tabs into it without closing them. It has a collection rail with live counts, a command palette on `Ctrl` + `K`, a card or list view of the saved tabs, tag filters, sorting, a floating bar for bulk actions, and a dark theme you can flip from the top bar. Drag a saved tab onto a collection in the rail to move it. The **Collect every open tab** action at the top of the library saves what you have open right now, without closing the tabs.
+
+**The organizer** asks a provider to group your open tabs. Add a provider once with its display name, base URL, model, and format, give it a key, and the organizer sends one batched request, shows you exactly what it would create, and writes nothing until you apply it. The local rules, which group by hostname, always work offline.
+
 ### Live capture (optional)
 
 The extension is the preferred way to capture open tabs. The CLI can also read Chromium's local DevTools endpoint, but Brave must first be restarted with remote debugging enabled:
@@ -161,11 +171,11 @@ The first command stores a preview proposal. The second applies it and replaces 
 
 Tabman speaks the compatibility formats that nearly every hosted and local model gateway implements, so you are never locked into one vendor:
 
-| Format      | Endpoint                       | Notes                                                                                                                  |
-| ----------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `responses` | `POST {base}/responses`        | OpenAI's current API and the one their docs recommend. Used by the built-in `openai` provider.                            |
+| Format      | Endpoint                       | Notes                                                                                                                    |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `responses` | `POST {base}/responses`        | OpenAI's current API and the one their docs recommend. Used by the built-in `openai` provider.                           |
 | `openai`    | `POST {base}/chat/completions` | The classic OpenAI-compatible format. OpenRouter, Groq, Together, Ollama, vLLM, LM Studio, LiteLLM, Mistral and friends. |
-| `anthropic` | `POST {base}/v1/messages`      | Anthropic and Anthropic-compatible gateways.                                                                            |
+| `anthropic` | `POST {base}/v1/messages`      | Anthropic and Anthropic-compatible gateways.                                                                             |
 
 Add a provider once with a display name, a base URL, and the model name exactly as the provider expects it:
 
@@ -200,9 +210,9 @@ tabman organize --provider "My Gateway" --base-url https://gateway.example/v1 --
 
 Two providers are built in and only need a key:
 
-| Provider    | Default model      | Default base URL            | Key                |
-| ----------- | ------------------ | --------------------------- | ------------------ |
-| `openai`    | `gpt-6-luna`       | `https://api.openai.com/v1` | `OPENAI_API_KEY`   |
+| Provider    | Default model      | Default base URL            | Key                 |
+| ----------- | ------------------ | --------------------------- | ------------------- |
+| `openai`    | `gpt-6-luna`       | `https://api.openai.com/v1` | `OPENAI_API_KEY`    |
 | `anthropic` | `claude-haiku-5-5` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` |
 
 `gpt-6-luna` and `claude-haiku-5-5` are the fast, cheap members of their families, which is what bulk tab grouping needs; point a custom profile at `gpt-6-astra`, `gpt-6.1-sol`, `claude-sonnet-5-5`, or `claude-opus-5-5` when you want more reasoning for the same job.
@@ -245,6 +255,14 @@ tabman import all_tabs.md --legacy
 | `tabman config remove-provider <name>` | Remove a configured provider.                                                                        |
 | `tabman version`                       | Print the installed version.                                                                         |
 
+## Screens
+
+| Library                                                            | Switchboard                                                     |
+| ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| ![The Tabman library dashboard](docs/images/dashboard-library.png) | ![The Tabman switchboard side panel](docs/images/sidepanel.png) |
+
+The dark theme, the command palette, and the bulk action bar are part of the same system.
+
 ## Development
 
 Prerequisites:
@@ -254,6 +272,87 @@ Prerequisites:
 - Bun 1.4.3+ (for the extension)
 - Brave or another Chromium browser 114+
 
+### Run the checks locally
+
+The continuous integration workflow only runs when a commit lands on `main`, so every branch is verified on your machine first. One command runs exactly what the workflow runs:
+
+```powershell
+uv run python scripts\ci_local.py
+```
+
+Narrow it down when you only touched one stack, or let it work out what changed:
+
+```powershell
+uv run python scripts\ci_local.py python
+uv run python scripts\ci_local.py extension
+uv run python scripts\ci_local.py changed
+```
+
+The pre-push hook runs the same gates for the files you are about to push, so a branch cannot reach `main` unchecked. Every script in `scripts/` uses rich-click, so they all share the same look and the same options:
+
+```powershell
+uv run python scripts\ci_local.py --help
+uv run python scripts\pre_push.py --help
+uv run python scripts\preview_ui.py --help
+```
+
+```powershell
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+uv run bandit -q -r src
+cd extension
+bun run check
+bun run typecheck
+bun run test
+bun run build
+```
+
+### Run the workflow itself locally
+
+[act](https://github.com/nektos/act) (MIT) runs the real workflow file in a container, so a broken YAML or a bad action version fails before you push:
+
+```powershell
+winget install nektos.act   # Windows
+brew install act             # macOS
+sudo apt install act        # Debian and Ubuntu
+```
+
+```powershell
+uv run python scripts\ci_local.py --act
+```
+
+The same works as a subcommand: `uv run python scripts\ci_local.py act`.
+
+act needs Docker or Podman. On Windows, Podman is the free option. Two more open source tools are worth knowing:
+
+- [actionlint](https://github.com/rhysd/actionlint) checks the workflow files for mistakes without running them.
+- [zizmor](https://github.com/woodruffw/zizmor) audits the workflows for security problems such as unpinned actions and template injection.
+
+Both are part of the local gate, and the workflow job on `main` runs them again:
+
+```powershell
+uv run zizmor --persona=regular --min-severity=low .github/workflows
+actionlint
+```
+
+zizmor is already a development dependency, so `uv run zizmor` works out of the box. actionlint is a single binary:
+
+```powershell
+winget install rhysd.actionlint   # Windows
+brew install actionlint            # macOS
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
+```
+
+The act run needs a working container engine. If Docker reports that it cannot start on Windows, the WSL kernel modules are the usual cause, and `wsl --update` in an elevated prompt followed by a restart fixes it. The native gate above does not need a container at all.
+
+The workflows pin every action to a commit hash, keep the checkout credentials out of the workspace, and disable the caches in the release job, so a poisoned cache cannot reach a published artifact.
+
+> This repository is public, so GitHub-hosted runners are free and unlimited for it. The workflow still runs only on `main` to keep the queue short and the feedback local.
+
+### Everyday commands
+
 ```powershell
 uv sync
 uv run pytest
@@ -261,6 +360,8 @@ uv run ruff check .
 uv run ruff format --check .
 uv run ty check
 uv run bandit -q -r src
+uv run pip-audit
+uv run detect-secrets-hook --baseline .secrets.baseline
 ```
 
 Extension checks:
@@ -279,6 +380,19 @@ Version sync check:
 ```powershell
 uv run python scripts/check_versions.py
 ```
+
+## Documentation
+
+| File                                                         | What it covers                                                        |
+| ------------------------------------------------------------ | --------------------------------------------------------------------- |
+| [PRIVACY.md](PRIVACY.md)                                     | What is stored, what leaves the machine, and how to remove it         |
+| [SECURITY.md](SECURITY.md)                                   | How to report a problem, and the hardening rules this project follows |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                           | The setup, the gate, and the rules for a pull request                 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)                     | How we treat each other                                               |
+| [docs/architecture.md](docs/architecture.md)                 | How the two surfaces fit together                                     |
+| [docs/dos-and-donts.md](docs/dos-and-donts.md)               | The mistakes this project has already made                            |
+| [docs/TABMAN-REBUILD-PLAN.md](docs/TABMAN-REBUILD-PLAN.md)   | The original rebuild plan                                             |
+| [docs/TABMAN-REBUILD-TASKS.md](docs/TABMAN-REBUILD-TASKS.md) | The phase checklist                                                   |
 
 ## Release process
 

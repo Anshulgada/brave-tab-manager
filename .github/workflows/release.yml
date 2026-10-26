@@ -14,12 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          enable-cache: true
+          enable-cache: false
 
       - name: Install Python
         run: uv python install 3.14.6
@@ -41,7 +43,7 @@ jobs:
         run: uv build
 
       - name: Upload Python distributions
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: python-dist
           path: dist/*
@@ -52,17 +54,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: extension/.node-version
+          package-manager-cache: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.4.3
+          no-cache: true
 
       - name: Install dependencies
         working-directory: extension
@@ -81,7 +86,7 @@ jobs:
         run: bun run zip
 
       - name: Upload extension archive
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: extension-dist
           path: extension/output/tabmanextension-*-chrome.zip
@@ -99,13 +104,13 @@ jobs:
       id-token: write
     steps:
       - name: Download Python distributions
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: python-dist
           path: dist
 
       - name: Publish with trusted publishing
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: dist/
           skip-existing: true
@@ -119,10 +124,12 @@ jobs:
       contents: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: release-assets
           merge-multiple: true
@@ -142,7 +149,7 @@ jobs:
           done
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: release-assets/*
           generate_release_notes: true

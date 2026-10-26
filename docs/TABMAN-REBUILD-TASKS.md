@@ -1,7 +1,7 @@
 # Tabman Rebuild — Task Checklist
 
-> **Status:** Phases **0–6** complete · product implementation underway · updated 2026-07-19
-> **Branch:** `feat/rebuild` (create from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
+> **Status:** Phases **0–7** complete · `0.4.x` in review on `feat/ui-overhaul` · updated 2026-10-21
+> **Branch:** `feat/ui-overhaul` (from `main`) · **Plan:** [`TABMAN-REBUILD-PLAN.md`](TABMAN-REBUILD-PLAN.md) · **Research:** [`TABMAN-REBUILD-RESEARCH.md`](TABMAN-REBUILD-RESEARCH.md)
 > **Product:** Sideload WXT+React extension (switchboard + Raindrop-like library) + SokWatch-grade Python CLI vault
 
 Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Deferred (post-MVP)
@@ -114,15 +114,15 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 ## Phase 7 — Optional BYOK AI
 
-- [ ] **7.1** Adapter registry (Gemini, OpenAI, Anthropic, Groq, Ollama, custom base URL)
-- [ ] **7.2** Runtime optional host permissions (HTTPS/localhost only)
-- [ ] **7.3** Batch request → one structured response for all tabs
-- [ ] **7.4** Zod validation in service worker; invalid batch rejected
-- [ ] **7.5** Preview diff → user confirm → apply (Stella pattern)
-- [ ] **7.6** Deterministic local fallback always available
-- [ ] **7.7** Session-only keys + forget-key; no keys in logs
-- [ ] **7.8** CLI parity with Pydantic structured batch organize
-- [ ] **7.9** Contract tests for valid/invalid structured payloads
+- [x] **7.1** Adapter registry (OpenAI, Responses, Anthropic, and any custom base URL)
+- [x] **7.2** Runtime optional host permissions (HTTPS/localhost only)
+- [x] **7.3** Batch request → one structured response for all tabs
+- [x] **7.4** Zod validation in service worker; invalid batch rejected
+- [x] **7.5** Preview diff → user confirm → apply (Stella pattern)
+- [x] **7.6** Deterministic local fallback always available
+- [x] **7.7** Session-only keys + forget-key; no keys in logs
+- [x] **7.8** CLI parity with Pydantic structured batch organize
+- [x] **7.9** Contract tests for valid/invalid structured payloads
 
 **Phase 7 gate:** Organize preview works with one provider OR deterministic fallback; no apply without confirm.
 
@@ -130,17 +130,40 @@ Legend: `[ ]` = Not started | `[/]` = In progress | `[x]` = Done | `[~]` = Defer
 
 ## Phase 8 — Quality, Docs, Sideload Release
 
-- [ ] **8.1** Vitest + Testing Library coverage for core extension flows
-- [ ] **8.2** Python unit suite green in CI without secrets
-- [ ] **8.3** CI uploads `wxt zip` sideload artifact
-- [ ] **8.4** README: Load unpacked (Brave/Chrome) + CLI `uv` install
-- [ ] **8.5** `PRIVACY.md`, architecture notes, dos-and-donts
-- [ ] **8.6** Community files: CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, issue/PR templates
-- [ ] **8.7** Archive/remove stale `Prompt.md`, `.structure`, BrowserStack claims
-- [ ] **8.8** Manifest permission audit; no embedded secrets
+### 0.4.x interface rebuild (in review on `feat/ui-overhaul`)
+
+- [x] Shared design system: tokens, light and dark palettes, and motion tokens
+- [x] Dashboard rebuilt as an application shell with a collection rail
+- [x] Command palette on `Ctrl`/`Cmd`+`K` for collections and commands
+- [x] Card and list views, tag filters, sorting, and a floating bulk bar
+- [x] In-app confirmation dialog and toast notifications replace `window.confirm`
+- [x] Side panel rebuilt with the same language and a docked action bar
+- [x] Library opens on a fresh install and from the toolbar button
+- [x] `scripts/preview_ui.py` serves the built pages for visual review
+- [x] Vitest coverage for the shared interface helpers
+
+### 0.4.x features
+
+- [x] The extension organizes the open tabs with a provider, with a preview before the apply
+- [x] The extension collects every open tab into the library without closing it
+- [x] The side panel restores a saved collection
+- [x] A saved tab can be dragged onto a collection
+- [x] The theme button flips between light and dark at once
+- [x] The keyboard hints follow the platform
+
+### Remaining
+
+- [x] **8.1** Vitest + Testing Library coverage for core extension flows
+- [x] **8.2** Python unit suite green in CI without secrets
+- [x] **8.3** CI uploads `wxt zip` sideload artifact
+- [x] **8.4** README: Load unpacked (Brave/Chrome) + CLI `uv` install
+- [x] **8.5** `PRIVACY.md`, architecture notes, dos-and-donts
+- [x] **8.6** Community files: CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, issue/PR templates
+- [x] **8.7** Archive/remove stale `Prompt.md`, `.structure`, BrowserStack claims
+- [x] **8.8** Manifest permission audit; no embedded secrets
 - [ ] **8.9** Manual Brave acceptance: switchboard, park/restore, optional AI, CLI schema round-trip
 - [ ] **[~]** Chrome Web Store listing (optional, deferred)
-- [ ] **[~]** PyPI publish (optional, gated)
+- [x] **[~]** PyPI publish (optional, gated)
 
 **Phase 8 gate:** MVP success criteria in the Plan §10 are met.
 

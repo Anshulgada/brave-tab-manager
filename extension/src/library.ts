@@ -5,6 +5,7 @@ import type {
   TabRecord,
   TagRecord,
 } from './database';
+import { normalizeHostname } from './database';
 import { exportDatabase, importExportDocument } from './import-export';
 import type { ExportDocument, Settings } from './schema';
 
@@ -113,6 +114,16 @@ export async function createCollection(
   if (!cleanName) {
     throw new Error('Collection name is required');
   }
+  const clash = await database.collections
+    .filter(
+      (collection) =>
+        collection.status === 'active' &&
+        collection.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase(),
+    )
+    .first();
+  if (clash) {
+    throw new Error('A collection with that name already exists');
+  }
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   await database.collections.add({
@@ -128,6 +139,36 @@ export async function createCollection(
   return id;
 }
 
+export async function updateCollection(
+  database: TabmanDatabase,
+  collectionId: string,
+  patch: { name?: string; description?: string | null; color?: string | null },
+): Promise<void> {
+  const collection = await database.collections.get(collectionId);
+  if (!collection) {
+    throw new Error('That collection no longer exists');
+  }
+  const next: Partial<CollectionRecord> = {};
+  if (patch.name !== undefined) {
+    const clean = patch.name.trim().slice(0, 120);
+    if (!clean) {
+      throw new Error('Collection name is required');
+    }
+    next.name = clean;
+  }
+  if (patch.description !== undefined) {
+    const clean = patch.description?.trim().slice(0, 500) ?? null;
+    next.description = clean || null;
+  }
+  if (patch.color !== undefined) {
+    next.color = patch.color;
+  }
+  await database.collections.update(collectionId, {
+    ...next,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export async function renameCollection(
   database: TabmanDatabase,
   collectionId: string,
@@ -137,6 +178,17 @@ export async function renameCollection(
   if (!cleanName) {
     throw new Error('Collection name is required');
   }
+  const clash = await database.collections
+    .filter(
+      (collection) =>
+        collection.id !== collectionId &&
+        collection.status === 'active' &&
+        collection.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase(),
+    )
+    .first();
+  if (clash) {
+    throw new Error('A collection with that name already exists');
+  }
   const updated = await database.collections.update(collectionId, {
     name: cleanName,
     updatedAt: new Date().toISOString(),
@@ -144,6 +196,176 @@ export async function renameCollection(
   if (!updated) {
     throw new Error('Collection no longer exists');
   }
+}
+
+export async function updateTab(
+  database: TabmanDatabase,
+  tabId: string,
+  patch: { title?: string; url?: string; pinned?: boolean },
+): Promise<void> {
+  const tab = await database.tabs.get(tabId);
+  if (!tab) {
+    throw new Error('That tab no longer exists');
+  }
+  const next: Partial<TabRecord> = {};
+  if (patch.title !== undefined) {
+    const clean = patch.title.trim().slice(0, 240);
+    if (!clean) {
+      throw new Error('Title is required');
+    }
+    next.title = clean;
+  }
+  if (patch.url !== undefined) {
+    const clean = patch.url.trim();
+    if (!clean) {
+      throw new Error('URL is required');
+    }
+    next.url = clean;
+    let hostname = clean;
+    try {
+      hostname = new URL(clean).hostname;
+    } catch {
+      // keep the raw value
+    }
+    next.normalizedHostname = normalizeHostname(hostname);
+  }
+  if (patch.pinned !== undefined) {
+    next.pinned = patch.pinned;
+  }
+  await database.tabs.update(tabId, next);
+  await database.collections.update(tab.collectionId, {
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function createTag(
+  database: TabmanDatabase,
+  collectionId: string,
+  name: string,
+  color?: string | null,
+): Promise<string> {
+  const cleanName = name.trim().slice(0, 64);
+  if (!cleanName) {
+    throw new Error('Tag name is required');
+  }
+  const collection = await database.collections.get(collectionId);
+  if (collection?.status !== 'active') {
+    throw new Error('That collection no longer exists');
+  }
+  const existing = await database.tags
+    .where('collectionId')
+    .equals(collectionId)
+    .filter(
+      (tag) => tag.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase(),
+    )
+    .first();
+  if (existing) {
+    return existing.id;
+  }
+  const id = crypto.randomUUID();
+  const count = await database.tags
+    .where('collectionId')
+    .equals(collectionId)
+    .count();
+  await database.tags.add({
+    id,
+    collectionId,
+    name: cleanName,
+    color: color ?? null,
+    sortOrder: count,
+  });
+  await database.collections.update(collectionId, {
+    updatedAt: new Date().toISOString(),
+  });
+  return id;
+}
+
+export async function updateTag(
+  database: TabmanDatabase,
+  tagId: string,
+  patch: { name?: string; color?: string | null },
+): Promise<void> {
+  const tag = await database.tags.get(tagId);
+  if (!tag) {
+    throw new Error('That tag no longer exists');
+  }
+  const next: Partial<TagRecord> = {};
+  if (patch.name !== undefined) {
+    const clean = patch.name.trim().slice(0, 64);
+    if (!clean) {
+      throw new Error('Tag name is required');
+    }
+    next.name = clean;
+  }
+  if (patch.color !== undefined) {
+    next.color = patch.color;
+  }
+  await database.tags.update(tagId, next);
+}
+
+export async function renameTag(
+  database: TabmanDatabase,
+  tagId: string,
+  name: string,
+): Promise<void> {
+  const cleanName = name.trim().slice(0, 64);
+  if (!cleanName) {
+    throw new Error('Tag name is required');
+  }
+  const tag = await database.tags.get(tagId);
+  if (!tag) {
+    throw new Error('That tag no longer exists');
+  }
+  const clash = await database.tags
+    .where('collectionId')
+    .equals(tag.collectionId)
+    .filter(
+      (candidate) =>
+        candidate.id !== tagId &&
+        candidate.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase(),
+    )
+    .first();
+  if (clash) {
+    throw new Error('That tag name already exists in this collection');
+  }
+  const updated = await database.tags.update(tagId, { name: cleanName });
+  if (!updated) {
+    throw new Error('That tag no longer exists');
+  }
+  await database.collections.update(tag.collectionId, {
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function deleteTag(
+  database: TabmanDatabase,
+  tagId: string,
+): Promise<void> {
+  const tag = await database.tags.get(tagId);
+  if (!tag) {
+    throw new Error('That tag no longer exists');
+  }
+  await database.transaction(
+    'rw',
+    [database.tabs, database.tags, database.collections],
+    async () => {
+      const tabs = await database.tabs
+        .where('collectionId')
+        .equals(tag.collectionId)
+        .toArray();
+      for (const tab of tabs) {
+        if (tab.tagIds.includes(tagId)) {
+          await database.tabs.update(tab.id, {
+            tagIds: tab.tagIds.filter((id) => id !== tagId),
+          });
+        }
+      }
+      await database.tags.delete(tagId);
+      await database.collections.update(tag.collectionId, {
+        updatedAt: new Date().toISOString(),
+      });
+    },
+  );
 }
 
 export async function setCollectionStatus(
@@ -380,7 +602,16 @@ export async function moveTabs(
 function isRestorableUrl(url: string): boolean {
   try {
     const { protocol } = new URL(url);
-    return protocol === 'http:' || protocol === 'https:';
+    return [
+      'http:',
+      'https:',
+      'chrome:',
+      'chrome-extension:',
+      'brave:',
+      'edge:',
+      'about:',
+      'file:',
+    ].includes(protocol);
   } catch {
     return false;
   }
@@ -389,21 +620,56 @@ function isRestorableUrl(url: string): boolean {
 function restoreFailureLabel(tab: Pick<TabRecord, 'title' | 'url'>): string {
   const label = tab.title || tab.url;
   if (!isRestorableUrl(tab.url)) {
-    return `${label} (http/https only)`;
+    return `${label} (unsupported scheme)`;
   }
   return label;
 }
 
 export async function restoreTabs(
   tabs: Pick<TabRecord, 'title' | 'url' | 'pinned'>[],
+  inNewWindow = false,
 ): Promise<RestoreResult> {
   const failures: string[] = [];
   let restored = 0;
-  for (const tab of tabs) {
+  const restorable = tabs.filter((tab) => {
     if (!isRestorableUrl(tab.url)) {
       failures.push(restoreFailureLabel(tab));
-      continue;
+      return false;
     }
+    return true;
+  });
+
+  if (restorable.length === 0) {
+    return { restored: 0, failures };
+  }
+
+  if (inNewWindow && restorable.length > 0) {
+    try {
+      const firstTab = restorable[0];
+      const win = await browser.windows.create({
+        url: firstTab?.url,
+      });
+      restored += 1;
+      const windowId = win?.id;
+      for (const tab of restorable.slice(1)) {
+        try {
+          await browser.tabs.create({
+            windowId,
+            url: tab.url,
+            pinned: tab.pinned,
+          });
+          restored += 1;
+        } catch {
+          failures.push(restoreFailureLabel(tab));
+        }
+      }
+      return { restored, failures };
+    } catch {
+      // Fallback to regular tabs.create if window creation is unavailable
+    }
+  }
+
+  for (const tab of restorable) {
     try {
       await browser.tabs.create({ url: tab.url, pinned: tab.pinned });
       restored += 1;

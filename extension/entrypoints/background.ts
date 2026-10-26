@@ -1,9 +1,9 @@
 import {
   clearStaleParkingLocks,
   handleSwitchboardRequest,
-  notifySwitchboardChanged,
 } from '../src/background-service';
 import type { SwitchboardRequest } from '../src/messages';
+import { notifySwitchboardChanged } from '../src/notify';
 
 const REQUEST_TYPES = new Set<SwitchboardRequest['type']>([
   'switchboard/get',
@@ -13,6 +13,17 @@ const REQUEST_TYPES = new Set<SwitchboardRequest['type']>([
   'switchboard/group',
   'switchboard/park',
   'dashboard/open',
+  'library/restore',
+  'library/collect',
+  'library/organize',
+  'library/organize/apply',
+  'providers/get',
+  'providers/save',
+  'providers/remove',
+  'providers/activate',
+  'providers/set-key',
+  'providers/forget-key',
+  'providers/grant',
 ]);
 
 export default defineBackground(() => {
@@ -59,5 +70,13 @@ export default defineBackground(() => {
     void browser.tabs.create({
       url: browser.runtime.getURL('/dashboard.html'),
     });
+  });
+
+  browser.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'install') {
+      void browser.tabs.create({
+        url: browser.runtime.getURL('/dashboard.html'),
+      });
+    }
   });
 });

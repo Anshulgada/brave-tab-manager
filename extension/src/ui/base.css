@@ -1,0 +1,640 @@
+/**
+ * Tabman design tokens and primitives.
+ *
+ * The palette is a neutral, slightly cool gray scale with an indigo to
+ * violet brand accent. Both themes are defined here so the dashboard and
+ * the side panel stay in sync.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --font-ui:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display:
+    "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --canvas: #f7f7fa;
+  --canvas-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-muted: #f1f1f5;
+  --surface-hover: #ececf2;
+  --surface-active: #e4e4ec;
+  --overlay: rgb(15 16 24 / 45%);
+
+  --text: #14151b;
+  --text-soft: #4a4d5a;
+  --text-muted: #74778a;
+  --text-faint: #9b9eb0;
+
+  --border: #e4e4ec;
+  --border-strong: #d3d4de;
+  --border-subtle: #eeeef4;
+
+  --brand: #5b6cff;
+  --brand-strong: #4453e8;
+  --brand-soft: #eceeff;
+  --brand-text: #3d4bd6;
+  --gradient: linear-gradient(135deg, #5b6cff 0%, #9a5bff 100%);
+
+  --success: #14875a;
+  --success-soft: #e4f6ed;
+  --warning: #a86412;
+  --warning-soft: #fdf1de;
+  --danger: #c9384a;
+  --danger-strong: #a92a3c;
+  --danger-soft: #fdecee;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --shadow-xs: 0 1px 2px rgb(16 18 30 / 6%);
+  --shadow-sm: 0 1px 2px rgb(16 18 30 / 6%), 0 4px 12px rgb(16 18 30 / 6%);
+  --shadow-md: 0 2px 4px rgb(16 18 30 / 6%), 0 12px 32px rgb(16 18 30 / 10%);
+  --shadow-lg: 0 8px 24px rgb(16 18 30 / 12%), 0 32px 64px rgb(16 18 30 / 16%);
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-fast: 120ms;
+  --motion-normal: 200ms;
+  --motion-slow: 1400ms;
+  --motion-spin: 900ms;
+  --fast: var(--motion-fast) var(--ease);
+  --normal: var(--motion-normal) var(--ease);
+
+  --rail-width: 264px;
+  --topbar-height: 60px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0b0b0f;
+    --canvas-elevated: #131318;
+    --surface: #14141a;
+    --surface-elevated: #1e1e28;
+    --surface-muted: #1c1c24;
+    --surface-hover: #23232d;
+    --surface-active: #2b2b37;
+    --overlay: rgb(3 3 8 / 62%);
+
+    --text: #f1f2f6;
+    --text-soft: #c3c5d1;
+    --text-muted: #9295a6;
+    --text-faint: #6f7284;
+
+    --border: #26262f;
+    --border-strong: #33333f;
+    --border-subtle: #1e1e26;
+
+    --brand: #7c8bff;
+    --brand-strong: #93a0ff;
+    --brand-soft: #1e2033;
+    --brand-text: #a6b0ff;
+
+    --success: #4ed09a;
+    --success-soft: #10261f;
+    --warning: #e0a55a;
+    --warning-soft: #2a2113;
+    --danger: #ff7a8a;
+    --danger-strong: #ff97a4;
+    --danger-soft: #2c151a;
+
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 30%);
+    --shadow-md: 0 2px 4px rgb(0 0 0 / 40%), 0 12px 32px rgb(0 0 0 / 45%);
+    --shadow-lg: 0 8px 24px rgb(0 0 0 / 50%), 0 32px 64px rgb(0 0 0 / 55%);
+  }
+}
+
+:root[data-theme="dark"] {
+  --canvas: #0b0b0f;
+  --canvas-elevated: #131318;
+  --surface: #14141a;
+  --surface-elevated: #1e1e28;
+  --surface-muted: #1c1c24;
+  --surface-hover: #23232d;
+  --surface-active: #2b2b37;
+  --overlay: rgb(3 3 8 / 62%);
+
+  --text: #f1f2f6;
+  --text-soft: #c3c5d1;
+  --text-muted: #9295a6;
+  --text-faint: #6f7284;
+
+  --border: #26262f;
+  --border-strong: #33333f;
+  --border-subtle: #1e1e26;
+
+  --brand: #7c8bff;
+  --brand-strong: #93a0ff;
+  --brand-soft: #1e2033;
+  --brand-text: #a6b0ff;
+
+  --success: #4ed09a;
+  --success-soft: #10261f;
+  --warning: #e0a55a;
+  --warning-soft: #2a2113;
+  --danger: #ff7a8a;
+  --danger-strong: #ff97a4;
+  --danger-soft: #2c151a;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 30%);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 40%), 0 12px 32px rgb(0 0 0 / 45%);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 50%), 0 32px 64px rgb(0 0 0 / 55%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* Scrollbars ------------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-pill);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  background-clip: content-box;
+}
+
+/* Brand mark ------------------------------------------------------------- */
+
+.brand-mark {
+  align-items: center;
+  background: var(--gradient);
+  border-radius: 11px;
+  box-shadow: var(--shadow-sm);
+  color: #fff;
+  display: inline-flex;
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  height: 32px;
+  justify-content: center;
+  letter-spacing: -0.02em;
+  width: 32px;
+}
+
+/* Buttons ---------------------------------------------------------------- */
+
+.btn {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 7px;
+  justify-content: center;
+  line-height: 1;
+  padding: 9px 13px;
+  transition:
+    background var(--fast),
+    border-color var(--fast),
+    box-shadow var(--fast),
+    color var(--fast),
+    transform var(--fast);
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.btn-primary {
+  background: var(--brand);
+  border-color: transparent;
+  box-shadow: var(--shadow-xs);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+  border-color: transparent;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-soft);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.btn-danger {
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-icon {
+  border-radius: var(--radius-sm);
+  padding: 8px;
+}
+
+.btn-sm {
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+/* Inputs ----------------------------------------------------------------- */
+
+.input,
+.select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 13px;
+  padding: 9px 12px;
+  transition:
+    border-color var(--fast),
+    box-shadow var(--fast),
+    background var(--fast);
+  width: 100%;
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+}
+
+.input:hover,
+.select:hover {
+  border-color: var(--border-strong);
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent);
+  outline: none;
+}
+
+.select {
+  appearance: none;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='M3.5 5.25 7 8.75 10.5 5.25' stroke='%239aa0a6' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: calc(100% - 12px) center;
+  background-repeat: no-repeat;
+  background-size: 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 36px 9px 12px;
+  transition:
+    border-color var(--fast),
+    box-shadow var(--fast),
+    background-color var(--fast);
+}
+
+/* Chips and pills -------------------------------------------------------- */
+
+.chip {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 6px;
+  line-height: 1;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.chip-brand {
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+.chip-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.chip-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.chip-warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.chip-button {
+  cursor: pointer;
+  transition:
+    background var(--fast),
+    color var(--fast);
+}
+
+.chip-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.chip-button[aria-pressed="true"] {
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+/* Toggle ----------------------------------------------------------------- */
+
+.switch {
+  align-items: center;
+  background: var(--surface-active);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  height: 22px;
+  padding: 2px;
+  transition: background var(--fast);
+  width: 38px;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--brand);
+}
+
+.switch-thumb {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+  height: 18px;
+  transform: translateX(0);
+  transition: transform var(--fast);
+  width: 18px;
+}
+
+.switch[aria-checked="true"] .switch-thumb {
+  transform: translateX(16px);
+}
+
+/* Segmented control ------------------------------------------------------ */
+
+.segmented {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.segmented button {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 6px;
+  padding: 6px 10px;
+  transition:
+    background var(--fast),
+    color var(--fast);
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  color: var(--text);
+}
+
+/* Checkbox --------------------------------------------------------------- */
+
+input[type="checkbox"]:not(.switch),
+.checkbox {
+  align-items: center;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  height: 18px;
+  justify-content: center;
+  margin: 0;
+  outline: none;
+  position: relative;
+  transition:
+    background var(--fast),
+    border-color var(--fast),
+    box-shadow var(--fast),
+    transform var(--fast);
+  width: 18px;
+}
+
+input[type="checkbox"]:not(.switch):focus-visible,
+.checkbox:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+  outline: none;
+}
+
+input[type="checkbox"]:not(.switch):hover,
+.checkbox:hover {
+  border-color: var(--brand);
+}
+
+input[type="checkbox"]:not(.switch):checked,
+.checkbox:checked {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+input[type="checkbox"]:not(.switch):checked::after,
+.checkbox:checked::after {
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  content: "";
+  display: block;
+  height: 9px;
+  transform: translateY(-1px) rotate(45deg);
+  width: 5px;
+}
+
+/* Utility ---------------------------------------------------------------- */
+
+.visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.kbd {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 3px 5px;
+}
+
+.spinner {
+  animation: tabman-spin var(--motion-spin) linear infinite;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  border-top-color: var(--brand);
+  display: inline-block;
+  height: 18px;
+  width: 18px;
+}
+
+@keyframes tabman-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.skeleton {
+  animation: tabman-pulse var(--motion-slow) ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 25%,
+    var(--surface-hover) 37%,
+    var(--surface-muted) 63%
+  );
+  background-size: 400% 100%;
+  border-radius: var(--radius-md);
+}
+
+@keyframes tabman-pulse {
+  0% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0.01ms;
+    --motion-normal: 0.01ms;
+    --motion-slow: 0.01ms;
+  }
+}

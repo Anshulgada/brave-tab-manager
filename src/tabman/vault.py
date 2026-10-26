@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from tabman.models import (
     Collection,
@@ -390,8 +388,3 @@ def write_document(path: Path, document: ExportDocument) -> None:
     temporary = path.with_name(f"{path.name}.tmp")
     temporary.write_text(document.to_json() + "\n", encoding="utf-8")
     temporary.replace(path)
-
-
-def document_as_dict(document: ExportDocument) -> dict[str, Any]:
-    """Provide a JSON-compatible mapping for callers that need structured output."""
-    return json.loads(document.to_json(indent=None))

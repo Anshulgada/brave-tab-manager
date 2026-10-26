@@ -1,0 +1,154 @@
+/* Rules Page Overhaul ----------------------------------------------------- */
+
+.rules-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.rules-toolbar-left {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.rules-toolbar-right {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.rules-visual-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.rule-group-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  transition:
+    border-color var(--fast),
+    box-shadow var(--fast);
+}
+
+.rule-group-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.rule-group-card-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.rule-group-card-title {
+  align-items: center;
+  display: flex;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.rule-patterns-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 36px;
+}
+
+.rule-pattern-chip {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  gap: 4px;
+  padding: 3px 6px;
+}
+
+.rule-pattern-remove {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 9999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 18px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background var(--fast),
+    color var(--fast),
+    transform var(--fast);
+  width: 18px;
+}
+
+.rule-pattern-remove:hover {
+  background: var(--danger-soft, #fee2e2);
+  color: var(--danger, #ef4444);
+  transform: scale(1.15);
+}
+
+.rule-group-delete-btn {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background var(--fast),
+    color var(--fast),
+    transform var(--fast);
+  width: 24px;
+}
+
+.rule-group-delete-btn:hover {
+  background: var(--danger-soft, #fee2e2);
+  color: var(--danger, #ef4444);
+  transform: scale(1.1);
+}
+
+.rule-pattern-add-form {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.rules-code-editor {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.rules-code-editor textarea {
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+  min-height: 280px;
+  resize: vertical;
+  tab-size: 2;
+}

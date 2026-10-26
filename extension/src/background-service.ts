@@ -1,9 +1,22 @@
+import { collectOpenTabs } from './collect-service';
 import { normalizeHostname, TabmanDatabase, type TabRecord } from './database';
 import {
   errorResponse,
   parseSwitchboardRequest,
   type SwitchboardResponse,
 } from './messages';
+import { notifyLibraryChanged, notifySwitchboardChanged } from './notify';
+import {
+  activateProvider,
+  applyProposal,
+  buildProposal,
+  forgetStoredKey,
+  readProviderSettings,
+  removeProvider,
+  restoreCollection,
+  setApiKey,
+  upsertProvider,
+} from './organize-service';
 import { collectionSchema, tabSchema } from './schema';
 import { buildSwitchboardSnapshot } from './switchboard';
 
@@ -40,6 +53,8 @@ function supportedAddress(value: string | undefined): string | undefined {
       'brave:',
       'edge:',
       'about:',
+      'file:',
+      'data:',
     ].includes(protocol)
       ? value
       : undefined;
@@ -54,25 +69,20 @@ function parkableAddress(value: string | undefined): string | undefined {
   }
   try {
     const protocol = new URL(value).protocol;
-    return protocol === 'http:' || protocol === 'https:' ? value : undefined;
+    return [
+      'http:',
+      'https:',
+      'chrome:',
+      'chrome-extension:',
+      'brave:',
+      'edge:',
+      'about:',
+      'file:',
+    ].includes(protocol)
+      ? value
+      : undefined;
   } catch {
     return undefined;
-  }
-}
-
-export async function notifySwitchboardChanged(): Promise<void> {
-  try {
-    await browser.runtime.sendMessage({ type: 'switchboard/changed' });
-  } catch {
-    // No switchboard surface is currently listening.
-  }
-}
-
-async function notifyLibraryChanged(): Promise<void> {
-  try {
-    await browser.runtime.sendMessage({ type: 'library/changed' });
-  } catch {
-    // No library surface is currently listening.
   }
 }
 
@@ -253,6 +263,7 @@ async function groupTabs(
 async function parkTabs(
   tabIds: number[],
   name: string,
+  closeTabs = true,
 ): Promise<SwitchboardResponse> {
   const ids = requireTabIds(tabIds);
   const results = await Promise.allSettled(
@@ -279,23 +290,29 @@ async function parkTabs(
     const url = parkableAddress(source.url);
     if (!url || source.id === undefined) {
       warnings.push(
-        `${source.title || 'A tab'} cannot be parked (http/https only)`,
+        `${source.title || 'A tab'} cannot be parked (unsupported URL scheme)`,
       );
       continue;
     }
     try {
       const parsedUrl = new URL(url);
       const favIconUrl = supportedAddress(source.favIconUrl);
+      const hostname = (
+        parsedUrl.hostname || parsedUrl.protocol.replace(':', '')
+      ).slice(0, 253);
       const tab = tabSchema.parse({
         id: crypto.randomUUID(),
         title: (source.title ?? url).slice(0, 2048),
         url,
-        hostname: parsedUrl.hostname,
+        hostname,
         ...(favIconUrl ? { favIconUrl } : {}),
         pinned: source.pinned,
         position: records.length,
         createdAt: now,
-        lastAccessedAt: null,
+        lastAccessedAt:
+          typeof source.lastAccessed === 'number'
+            ? new Date(source.lastAccessed).toISOString()
+            : null,
         tagIds: [],
       });
       records.push({
@@ -363,14 +380,16 @@ async function parkTabs(
       },
     );
 
-    const closeResults = await Promise.allSettled(
-      parkedBrowserTabIds.map((tabId) => browser.tabs.remove(tabId)),
-    );
-    for (const [index, result] of closeResults.entries()) {
-      if (result.status === 'rejected') {
-        warnings.push(
-          `Parked tab ${parkedBrowserTabIds[index] ?? 'unknown'} could not be closed`,
-        );
+    if (closeTabs) {
+      const closeResults = await Promise.allSettled(
+        parkedBrowserTabIds.map((tabId) => browser.tabs.remove(tabId)),
+      );
+      for (const [index, result] of closeResults.entries()) {
+        if (result.status === 'rejected') {
+          warnings.push(
+            `Parked tab ${parkedBrowserTabIds[index] ?? 'unknown'} could not be closed`,
+          );
+        }
       }
     }
   } finally {
@@ -445,13 +464,55 @@ export async function handleSwitchboardRequest(
       case 'switchboard/group':
         return await groupTabs(request.tabIds, request.title);
       case 'switchboard/park':
-        return await parkTabs(request.tabIds, request.name);
+        return await parkTabs(
+          request.tabIds,
+          request.name,
+          request.closeTabs ?? true,
+        );
       case 'dashboard/open':
         await browser.tabs.create({
           url: browser.runtime.getURL('/dashboard.html'),
         });
         return { ok: true };
+      case 'library/restore':
+        return await restoreCollection(request.collectionId);
+      case 'library/collect':
+        return await collectOpenTabs(request.name);
+      case 'library/organize': {
+        const proposal = await buildProposal(request.mode, request.rules);
+        return { ok: true, proposal };
+      }
+      case 'library/organize/apply': {
+        const applied = await applyProposal(request.proposal as never);
+        await notifyLibraryChanged();
+        return { ok: true, applied };
+      }
+      case 'providers/get': {
+        const { settings, hasKey } = await readProviderSettings();
+        return { ok: true, settings, hasKey };
+      }
+      case 'providers/save': {
+        const settings = await upsertProvider(request.profile);
+        return { ok: true, settings };
+      }
+      case 'providers/remove': {
+        const settings = await removeProvider(request.id);
+        return { ok: true, settings };
+      }
+      case 'providers/activate': {
+        const settings = await activateProvider(request.id);
+        return { ok: true, settings };
+      }
+      case 'providers/set-key': {
+        await setApiKey(request.key, request.remember);
+        return { ok: true };
+      }
+      case 'providers/forget-key': {
+        await forgetStoredKey();
+        return { ok: true };
+      }
     }
+    return { ok: true };
   } catch (error) {
     return errorResponse(error);
   }

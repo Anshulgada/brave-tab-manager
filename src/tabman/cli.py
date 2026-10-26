@@ -5,9 +5,7 @@ from __future__ import annotations
 import getpass
 import json
 import sqlite3
-import sys
 from collections.abc import Sequence
-from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
 
@@ -40,70 +38,35 @@ from tabman.config import (
 )
 from tabman.legacy import LegacyImportError, import_legacy
 from tabman.models import ExportDocument, ProposalStatus
+from tabman.theme import (
+    CONTEXT_SETTINGS,
+    AutoWidthCommand,
+    AutoWidthGroup,
+    apply_theme,
+    panel,
+)
 from tabman.vault import Vault, read_document, write_document
 
-CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 VaultPath = click.Path(dir_okay=False, path_type=Path)
 
 
-def _enable_utf8_output() -> None:
-    """Ask the terminal for UTF-8 so panel borders render as real box art.
-
-    Windows consoles still default to a legacy code page, and Rich falls back to
-    ASCII boxes when the stream cannot encode them.
-    """
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is None:
-            continue
-        encoding = (getattr(stream, "encoding", "") or "").casefold()
-        if encoding.startswith("utf"):
-            continue
-        with suppress(OSError, ValueError):
-            reconfigure(encoding="utf-8", errors="replace")
-
-
-_enable_utf8_output()
-
-# A colorful, boxed layout: every panel gets its own accent color, options and
-# commands read in bright cyan/magenta, and usage stays quiet.
-rich_click_config.MAX_WIDTH = 100
-rich_click_config.TEXT_MARKUP = "rich"
-rich_click_config.COMMANDS_BEFORE_OPTIONS = True
-rich_click_config.STYLE_OPTIONS_PANEL_BOX = "ROUNDED"
-rich_click_config.STYLE_COMMANDS_PANEL_BOX = "ROUNDED"
-rich_click_config.STYLE_ERRORS_PANEL_BOX = "ROUNDED"
-rich_click_config.STYLE_OPTIONS_PANEL_BORDER = "cyan"
-rich_click_config.STYLE_COMMANDS_PANEL_BORDER = "magenta"
-rich_click_config.STYLE_ERRORS_PANEL_BORDER = "red"
-rich_click_config.STYLE_OPTIONS_PANEL_TITLE_STYLE = "bold cyan"
-rich_click_config.STYLE_COMMANDS_PANEL_TITLE_STYLE = "bold magenta"
-rich_click_config.STYLE_OPTIONS_PANEL_PADDING = (0, 1)
-rich_click_config.STYLE_COMMANDS_PANEL_PADDING = (0, 1)
-rich_click_config.STYLE_USAGE = "dim"
-rich_click_config.STYLE_USAGE_COMMAND = "bold"
-rich_click_config.STYLE_COMMAND = "bold cyan"
-rich_click_config.STYLE_OPTION = "cyan"
-rich_click_config.STYLE_METAVAR = "magenta"
-rich_click_config.STYLE_HEADER_TEXT = "bold"
-rich_click_config.STYLE_EPILOG_TEXT = "dim"
-rich_click_config.ERRORS_SUGGESTION = None
-# Rich downgrades rounded boxes to square ones on legacy Windows consoles.
-# Tabman forces UTF-8 output, so keep the rounded art everywhere.
-rich_click_config.LEGACY_WINDOWS = False
+apply_theme()
 
 COMMAND_GROUPS: dict[str, list[CommandGroupDict]] = {
     "tabman": [
-        {"name": "Vault", "commands": ["import", "export", "search"]},
-        {"name": "Tabs", "commands": ["capture", "organize"]},
-        {"name": "Setup", "commands": ["config", "version"]},
+        panel("Vault", "import", "export", "search"),
+        panel("Tabs", "capture", "organize"),
+        panel("Setup", "config", "version"),
     ],
     "tabman config": [
-        {"name": "Read", "commands": ["show", "list-providers"]},
-        {
-            "name": "Write",
-            "commands": ["set", "set-key", "add-provider", "remove-provider"],
-        },
+        panel("Read", "show", "list-providers"),
+        panel(
+            "Write",
+            "set",
+            "set-key",
+            "add-provider",
+            "remove-provider",
+        ),
     ],
 }
 rich_click_config.COMMAND_GROUPS = COMMAND_GROUPS
@@ -176,6 +139,7 @@ def _provider_table(rows: list[dict[str, object]], title: str) -> Table:
 
 
 @click.group(
+    cls=AutoWidthGroup,
     name="tabman",
     help=(
         "Manage a local vault of Chromium tabs and collections.\n"
@@ -193,13 +157,13 @@ def app() -> None:
     """Manage a local vault of Chromium tabs and collections."""
 
 
-@app.command("version")
+@app.command(cls=AutoWidthCommand, name="version")
 def version_command() -> None:
     """Print the version sourced from installed package metadata."""
     click.echo(__version__)
 
 
-@app.command("import")
+@app.command(cls=AutoWidthCommand, name="import")
 @click.argument(
     "source",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
@@ -246,7 +210,7 @@ def import_command(
     )
 
 
-@app.command("export")
+@app.command(cls=AutoWidthCommand, name="export")
 @click.argument("destination", type=click.Path(dir_okay=False, path_type=Path))
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
@@ -270,7 +234,7 @@ def export_command(destination: Path, vault: Path | None, format_: str) -> None:
     console.print(f"[green]Exported[/] vault to [cyan]{escape(str(destination))}[/].")
 
 
-@app.command("search")
+@app.command(cls=AutoWidthCommand, name="search")
 @click.argument("query", required=False, default="")
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
@@ -348,7 +312,7 @@ def search_command(
     console.print(table)
 
 
-@app.command("capture")
+@app.command(cls=AutoWidthCommand, name="capture")
 @click.option("--name", required=True, help="Name for the captured collection.")
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
@@ -375,7 +339,7 @@ def capture_command(name: str, vault: Path | None, endpoint: str) -> None:
     )
 
 
-@app.command("organize")
+@app.command(cls=AutoWidthCommand, name="organize")
 @click.option(
     "--vault", type=VaultPath, help="SQLite vault path; defaults to the user data dir."
 )
@@ -502,6 +466,7 @@ def organize_command(
 
 @click.group(
     "config",
+    cls=AutoWidthGroup,
     help="Inspect or update non-secret local configuration.",
     context_settings=CONTEXT_SETTINGS,
 )
@@ -509,7 +474,7 @@ def config_app() -> None:
     """Inspect or update non-secret local configuration."""
 
 
-@config_app.command("show")
+@config_app.command(cls=AutoWidthCommand, name="show")
 def config_show() -> None:
     """Print non-secret settings and only the names of available keys."""
     try:
@@ -518,7 +483,7 @@ def config_show() -> None:
         _fail(error)
 
 
-@config_app.command("list-providers")
+@config_app.command(cls=AutoWidthCommand, name="list-providers")
 @click.option(
     "--format",
     "format_",
@@ -564,7 +529,7 @@ def config_list_providers(format_: str) -> None:
     )
 
 
-@config_app.command("add-provider")
+@config_app.command(cls=AutoWidthCommand, name="add-provider")
 @click.argument("name")
 @click.option(
     "--base-url",
@@ -636,7 +601,7 @@ def config_add_provider(
     )
 
 
-@config_app.command("remove-provider")
+@config_app.command(cls=AutoWidthCommand, name="remove-provider")
 @click.argument("name")
 def config_remove_provider(name: str) -> None:
     """Remove a configured provider profile."""
@@ -655,7 +620,7 @@ def config_remove_provider(name: str) -> None:
     console.print(f"[green]Provider removed[/] [cyan]{escape(name)}[/].")
 
 
-@config_app.command("set")
+@config_app.command(cls=AutoWidthCommand, name="set")
 @click.option("--vault", type=VaultPath, help="Default SQLite vault path.")
 @click.option("--provider", help="Default organize provider.")
 @click.option("--mistral-base-url", help="Mistral-compatible API base URL.")
@@ -697,7 +662,7 @@ def config_set(
     console.print("[green]Configuration updated.[/]")
 
 
-@config_app.command("set-key")
+@config_app.command(cls=AutoWidthCommand, name="set-key")
 @click.argument("provider")
 def config_set_key(provider: str) -> None:
     """Prompt securely and store a provider key in the user config directory."""

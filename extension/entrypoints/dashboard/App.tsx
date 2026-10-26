@@ -6,11 +6,13 @@ import {
   useRef,
   useState,
 } from 'react';
-
-import { TabmanDatabase } from '../../src/database';
+import { DEFAULT_PREBUILT_RULES_JSONL } from '../../src/ai';
+import { TabmanDatabase, type TabRecord } from '../../src/database';
 import {
   createCollection,
+  createTag,
   deleteTabs,
+  deleteTag,
   exportLibrary,
   importLibrary,
   type LibraryCollection,
@@ -22,51 +24,159 @@ import {
   restoreTabs,
   setCollectionStatus,
   tagTabs,
+  updateCollection,
   updateSettings,
+  updateTab,
+  updateTag,
 } from '../../src/library';
 import type { LibraryChangedMessage } from '../../src/messages';
-import { PRODUCT_NAME } from '../../src/product';
+import { sendSwitchboardRequest } from '../../src/runtime';
 import type { Settings } from '../../src/schema';
-
-type LibrarySection = 'collections' | 'trash' | 'settings';
-type ImportMode = 'merge' | 'replace';
+import { pluralize, tabLabel } from '../../src/ui/format';
+import {
+  DownloadIcon,
+  GridIcon,
+  ListIcon,
+  PlusIcon,
+  RestoreIcon,
+  SettingsIcon,
+  TrashIcon,
+  UploadIcon,
+} from '../../src/ui/icons';
+import {
+  BulkBar,
+  CollectionDetail,
+  CollectModal,
+  CommandPalette,
+  ConfirmDialog,
+  EditCollectionModal,
+  EditTabModal,
+  HelpDialog,
+  HomePanel,
+  LoadingState,
+  NavigationRail,
+  TagManagerModal,
+  ToastStack,
+  Topbar,
+} from './components';
+import {
+  OrganizePanel,
+  ProvidersPanel,
+  RulesPanel,
+  SettingsPanel,
+  TrashPanel,
+  WindowsPanel,
+} from './panels';
+import { useHashRoute } from './router';
+import {
+  type Command,
+  type ConfirmRequest,
+  type Section,
+  type SortOrder,
+  type Toast,
+  VIEW_STORAGE_KEY,
+  type View,
+} from './types';
 
 const database = new TabmanDatabase();
 
-function collectionMatches(
-  collection: LibraryCollection,
-  query: string,
-): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  return (
-    !needle ||
-    collection.name.toLocaleLowerCase().includes(needle) ||
-    collection.tabs.some((tab) =>
-      [tab.title, tab.hostname, tab.url].some((value) =>
-        value.toLocaleLowerCase().includes(needle),
-      ),
-    )
-  );
+function readStoredView(fallback: View): View {
+  try {
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    return stored === 'grid' || stored === 'list' ? stored : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function rootDomainSortKey(hostname: string): string {
+  if (!hostname) return '';
+  const clean = hostname.toLowerCase().trim();
+  const withoutPort = clean.split(':')[0] || '';
+  const stripped = withoutPort.replace(/^(www\d*|m)\./, '');
+  const parts = stripped.split('.');
+  if (parts.length > 1) {
+    return parts[0] || stripped;
+  }
+  return stripped;
 }
 
 export function App() {
   const importInput = useRef<HTMLInputElement>(null);
+  const createFormRef = useRef<HTMLFormElement>(null);
+  const createInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const loadGeneration = useRef(0);
   const busyRef = useRef(false);
+  const toastId = useRef(0);
+
+  const [route, setRoute] = useHashRoute();
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>();
-  const [section, setSection] = useState<LibrarySection>('collections');
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
+  const [rules, setRules] = useState(DEFAULT_PREBUILT_RULES_JSONL);
+
+  const [menuFor, setMenuFor] = useState<string>();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [collectDialogOpen, setCollectDialogOpen] = useState(false);
+  const [collectName, setCollectName] = useState('');
+
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+
+  const [collectionEditorOpen, setCollectionEditorOpen] = useState(false);
+  const [editCollectionName, setEditCollectionName] = useState('');
+  const [editCollectionDescription, setEditCollectionDescription] =
+    useState('');
+  const [editCollectionColor, setEditCollectionColor] = useState('');
+
+  const [editingTab, setEditingTab] = useState<TabRecord>();
+  const [editTitle, setEditTitle] = useState('');
+  const [editUrl, setEditUrl] = useState('');
+
   const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('recent');
+  const [view, setView] = useState<View>('grid');
+
   const [newCollectionName, setNewCollectionName] = useState('');
+  const [creating, setCreating] = useState(false);
   const [tagName, setTagName] = useState('');
   const [renameValue, setRenameValue] = useState('');
-  const [importMode, setImportMode] = useState<ImportMode>('merge');
+  const [renaming, setRenaming] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>();
+
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
+  const [draggingTabId, setDraggingTabId] = useState<string>();
+  const [dropTargetId, setDropTargetId] = useState<string>();
+
+  const navigateTo = useCallback(
+    (next: Section, collectionId?: string) => {
+      setSelectedTabs(new Set());
+      setQuery('');
+      setMenuFor(undefined);
+      setRoute({ section: next, collectionId });
+    },
+    [setRoute],
+  );
+
+  const pushToast = useCallback(
+    (message: string, tone: Toast['tone'] = 'info') => {
+      const id = ++toastId.current;
+      setToasts((current) => [...current, { id, message, tone }]);
+      window.setTimeout(() => {
+        setToasts((current) => current.filter((toast) => toast.id !== id));
+      }, 4200);
+    },
+    [],
+  );
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
 
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -76,14 +186,7 @@ export function App() {
         return;
       }
       setSnapshot(next);
-      setSelectedCollectionId((current) => {
-        const active = next.collections.filter(
-          (collection) => collection.status === 'active',
-        );
-        return active.some((collection) => collection.id === current)
-          ? current
-          : active[0]?.id;
-      });
+
       const liveTabIds = new Set(
         next.collections.flatMap((collection) =>
           collection.tabs.map((tab) => tab.id),
@@ -93,20 +196,29 @@ export function App() {
         (current) =>
           new Set([...current].filter((tabId) => liveTabIds.has(tabId))),
       );
-      setError(undefined);
     } catch (loadError) {
       if (generation !== loadGeneration.current) {
         return;
       }
-      setError(
+      pushToast(
         loadError instanceof Error
           ? loadError.message
           : 'Could not read the local library',
+        'danger',
       );
     } finally {
       if (generation === loadGeneration.current) {
         setLoading(false);
       }
+    }
+  }, [pushToast]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('tabman-local-rules');
+      setRules(stored?.trim() ? stored : DEFAULT_PREBUILT_RULES_JSONL);
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -122,57 +234,182 @@ export function App() {
         void load();
       }
     };
-    browser.runtime.onMessage.addListener(messageListener);
+    if (typeof browser !== 'undefined' && browser.runtime?.onMessage) {
+      browser.runtime.onMessage.addListener(messageListener);
+    }
     document.addEventListener('visibilitychange', visibilityListener);
     return () => {
-      browser.runtime.onMessage.removeListener(messageListener);
+      if (typeof browser !== 'undefined' && browser.runtime?.onMessage) {
+        browser.runtime.onMessage.removeListener(messageListener);
+      }
       document.removeEventListener('visibilitychange', visibilityListener);
     };
   }, [load]);
 
-  const settings = snapshot?.settings;
   useEffect(() => {
-    if (!settings) {
-      return;
+    if (!menuFor) return;
+    const handler = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.rail-menu-popover, .rail-menu')) return;
+      setMenuFor(undefined);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuFor]);
+
+  const settings = snapshot?.settings;
+  const [currentTheme, setCurrentTheme] = useState<string>('system');
+
+  const applyTheme = useCallback((theme: string) => {
+    const updateTheme = () => {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme =
+        theme === 'system' ? 'light dark' : theme;
+      setCurrentTheme(theme);
+    };
+
+    if (
+      typeof document !== 'undefined' &&
+      'startViewTransition' in document &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      document.startViewTransition(() => {
+        updateTheme();
+      });
+    } else {
+      updateTheme();
     }
-    document.documentElement.dataset.theme = settings.theme;
-    document.documentElement.style.colorScheme =
-      settings.theme === 'system' ? 'light dark' : settings.theme;
-  }, [settings]);
+  }, []);
+
+  useEffect(() => {
+    if (settings?.theme) {
+      applyTheme(settings.theme);
+    }
+  }, [applyTheme, settings?.theme]);
+
+  const toggleTheme = async () => {
+    const baseSettings = settings ?? {
+      theme: 'system',
+      defaultView: 'grid',
+      includeFullUrlInAi: false,
+      aiProvider: null,
+    };
+    const next = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    setSnapshot((current) =>
+      current
+        ? { ...current, settings: { ...current.settings, theme: next } }
+        : current,
+    );
+    await saveSettings({ ...baseSettings, theme: next });
+  };
+
+  const defaultView = settings?.defaultView;
+  useEffect(() => {
+    if (defaultView) {
+      setView(readStoredView(defaultView));
+    }
+  }, [defaultView]);
 
   const activeCollections = useMemo(
     () =>
-      snapshot?.collections.filter(
-        (collection) =>
-          collection.status === 'active' &&
-          collectionMatches(collection, query),
-      ) ?? [],
-    [query, snapshot],
+      (snapshot?.collections ?? []).filter(
+        (collection) => collection.status === 'active',
+      ),
+    [snapshot],
   );
-  const trashedCollections =
-    snapshot?.collections.filter(
+
+  const trashedCollections = useMemo(
+    () =>
+      (snapshot?.collections ?? []).filter(
+        (collection) => collection.status === 'trashed',
+      ),
+    [snapshot],
+  );
+
+  const selectedCollection = useMemo(() => {
+    if (route.collectionId) {
+      const match = activeCollections.find((c) => c.id === route.collectionId);
+      if (match) return match;
+    }
+    return undefined;
+  }, [activeCollections, route.collectionId]);
+
+  const filteredCollections = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return activeCollections;
+    return activeCollections.filter(
       (collection) =>
-        collection.status === 'trashed' && collectionMatches(collection, query),
-    ) ?? [];
-  const selectedCollection = snapshot?.collections.find(
-    (collection) => collection.id === selectedCollectionId,
-  );
-  const queryNeedle = query.trim().toLocaleLowerCase();
-  const queryMatchesCollection =
-    selectedCollection?.name.toLocaleLowerCase().includes(queryNeedle) ?? false;
-  const visibleTabs =
-    selectedCollection?.tabs.filter(
+        collection.name.toLocaleLowerCase().includes(needle) ||
+        collection.tabs.some((tab) =>
+          [tab.title, tab.hostname, tab.url].some((value) =>
+            value.toLocaleLowerCase().includes(needle),
+          ),
+        ),
+    );
+  }, [activeCollections, query]);
+
+  const visibleTabs = useMemo(() => {
+    const tabs = selectedCollection?.tabs ?? [];
+    const needle = query.trim().toLocaleLowerCase();
+    const filtered = tabs.filter(
       (tab) =>
         (!tagFilter || tab.tagIds.includes(tagFilter)) &&
-        (!queryNeedle ||
-          queryMatchesCollection ||
+        (!needle ||
           [tab.title, tab.hostname, tab.url].some((value) =>
-            value.toLocaleLowerCase().includes(queryNeedle),
+            value.toLocaleLowerCase().includes(needle),
           )),
-    ) ?? [];
+    );
+    return [...filtered].sort((left, right) => {
+      if (left.pinned !== right.pinned) {
+        return left.pinned ? -1 : 1;
+      }
+      if (sortOrder === 'name') {
+        return tabLabel(left.title, left.hostname, left.url).localeCompare(
+          tabLabel(right.title, right.hostname, right.url),
+        );
+      }
+      if (sortOrder === 'domain') {
+        const leftDomain = rootDomainSortKey(left.hostname);
+        const rightDomain = rootDomainSortKey(right.hostname);
+        const cmp = leftDomain.localeCompare(rightDomain);
+        if (cmp !== 0) return cmp;
+        return tabLabel(left.title, left.hostname, left.url).localeCompare(
+          tabLabel(right.title, right.hostname, right.url),
+        );
+      }
+      if (sortOrder === 'tabs') {
+        return left.position - right.position;
+      }
+      return (
+        Date.parse(right.lastAccessedAt ?? right.createdAt) -
+        Date.parse(left.lastAccessedAt ?? left.createdAt)
+      );
+    });
+  }, [query, selectedCollection, sortOrder, tagFilter]);
+
+  const savedTabCount = useMemo(
+    () =>
+      activeCollections.reduce(
+        (total, collection) => total + collection.tabs.length,
+        0,
+      ),
+    [activeCollections],
+  );
+
+  const tagCount = useMemo(() => {
+    const names = new Set<string>();
+    for (const collection of activeCollections) {
+      for (const tag of collection.tags) {
+        names.add(tag.name.toLocaleLowerCase());
+      }
+    }
+    return names.size;
+  }, [activeCollections]);
 
   useEffect(() => {
     setRenameValue(selectedCollection?.name ?? '');
+    setRenaming(false);
   }, [selectedCollection?.name]);
 
   const runMutation = useCallback(
@@ -181,32 +418,29 @@ export function App() {
       successMessage: string,
       clearSelection = true,
     ) => {
-      if (busyRef.current) {
-        return;
-      }
+      if (busyRef.current) return;
       busyRef.current = true;
       setBusy(true);
-      setError(undefined);
-      setNotice(undefined);
       try {
         await work();
-        setNotice(successMessage);
+        pushToast(successMessage, 'success');
         if (clearSelection) {
           setSelectedTabs(new Set());
         }
         await load();
       } catch (mutationError) {
-        setError(
+        pushToast(
           mutationError instanceof Error
             ? mutationError.message
             : 'The library action failed',
+          'danger',
         );
       } finally {
         busyRef.current = false;
         setBusy(false);
       }
     },
-    [load],
+    [load, pushToast],
   );
 
   const toggleTab = (tabId: string) => {
@@ -221,64 +455,64 @@ export function App() {
     });
   };
 
-  const restore = async (tabs: LibraryCollection['tabs'], label: string) => {
-    if (busyRef.current) {
-      return;
-    }
-    busyRef.current = true;
-    setBusy(true);
-    setError(undefined);
-    setNotice(undefined);
-    try {
-      const result = await restoreTabs(tabs);
-      const failureMessage =
-        result.failures.length > 0
-          ? ` ${result.failures.length} failed: ${result.failures.join(', ')}.`
-          : '';
-      setNotice(`${result.restored} ${label} restored.${failureMessage}`);
-    } catch (restoreError) {
-      setError(
-        restoreError instanceof Error
-          ? restoreError.message
-          : 'Could not restore saved tabs',
-      );
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  };
+  const restore = useCallback(
+    async (
+      tabs: LibraryCollection['tabs'],
+      label: string,
+      inNewWindow = false,
+    ) => {
+      if (busyRef.current) return;
+      busyRef.current = true;
+      setBusy(true);
+      try {
+        const result = await restoreTabs(tabs, inNewWindow);
+        const failureMessage =
+          result.failures.length > 0
+            ? ` ${result.failures.length} failed: ${result.failures.join(', ')}.`
+            : '';
+        pushToast(
+          `${result.restored} ${label} restored.${failureMessage}`,
+          result.failures.length > 0 ? 'danger' : 'success',
+        );
+      } catch (restoreError) {
+        pushToast(
+          restoreError instanceof Error
+            ? restoreError.message
+            : 'Could not restore saved tabs',
+          'danger',
+        );
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    },
+    [pushToast],
+  );
 
   const onImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file) {
-      return;
-    }
-    const replace = importMode === 'replace';
-    if (
-      replace &&
-      !window.confirm(
-        'Replace the entire local library with this export? This cannot be undone.',
-      )
-    ) {
-      return;
-    }
-    await runMutation(
-      async () => {
-        const input: unknown = JSON.parse(await file.text());
-        await importLibrary(database, input, replace);
-      },
-      replace ? 'Library replaced from export.' : 'Export merged into library.',
+    if (!file) return;
+    const replace = window.confirm(
+      'Replace the entire local library with this export? This cannot be undone.',
     );
+    if (replace) {
+      await runMutation(async () => {
+        const input: unknown = JSON.parse(await file.text());
+        await importLibrary(database, input, true);
+      }, 'Library replaced from export.');
+      return;
+    }
+    await runMutation(async () => {
+      const input: unknown = JSON.parse(await file.text());
+      await importLibrary(database, input, false);
+    }, 'Export merged into the library.');
   };
 
-  const downloadExport = async () => {
-    if (busyRef.current) {
-      return;
-    }
+  const downloadExport = useCallback(async () => {
+    if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
-    setError(undefined);
     try {
       const exported = await exportLibrary(database);
       const url = URL.createObjectURL(
@@ -291,12 +525,85 @@ export function App() {
       link.download = `tabman-export-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setNotice('Library export downloaded.');
+      pushToast('Library export downloaded.', 'success');
     } catch (exportError) {
-      setError(
+      pushToast(
         exportError instanceof Error
           ? exportError.message
           : 'Could not export the library',
+        'danger',
+      );
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [pushToast]);
+
+  const saveSettings = useCallback(
+    async (next: Settings) => {
+      await runMutation(
+        () => updateSettings(database, next),
+        'Preferences saved.',
+        false,
+      );
+    },
+    [runMutation],
+  );
+
+  const applyView = useCallback((next: View) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const collectAll = async () => {
+    if (busyRef.current) return;
+    if (route.section === 'collection' && selectedCollection) {
+      await performCollect(selectedCollection.name, selectedCollection.id);
+      return;
+    }
+    setCollectName(`Collected ${new Date().toLocaleDateString()}`);
+    setCollectDialogOpen(true);
+  };
+
+  const performCollect = async (name: string, collectionId?: string) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setCollectDialogOpen(false);
+    try {
+      const response = await sendSwitchboardRequest({
+        type: 'library/collect',
+        name,
+        collectionId,
+      });
+      if (!response.ok) throw new Error(response.error);
+      if (!('affected' in response)) {
+        throw new Error('The collect action did not report a result');
+      }
+      const count = response.affected;
+      const collName = response.collectionName ?? 'the collection';
+      if (count === 0) {
+        pushToast(`All open tabs are already in ${collName}.`, 'info');
+      } else {
+        pushToast(
+          `${count} open ${pluralize(count, 'tab')} collected into ${collName}.`,
+          'success',
+        );
+      }
+      await load();
+      if (response.collectionId) {
+        navigateTo('collection', response.collectionId);
+      }
+    } catch (collectError) {
+      pushToast(
+        collectError instanceof Error
+          ? collectError.message
+          : 'The open tabs could not be collected',
+        'danger',
       );
     } finally {
       busyRef.current = false;
@@ -304,201 +611,285 @@ export function App() {
     }
   };
 
-  const saveSettings = async (next: Settings) => {
-    await runMutation(
-      () => updateSettings(database, next),
-      'Privacy and appearance settings saved.',
-      false,
-    );
+  const requestConfirm = (request: ConfirmRequest) => {
+    setConfirmRequest(request);
   };
+
+  useEffect(() => {
+    if (!creating) return;
+    createInputRef.current?.focus();
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        createFormRef.current &&
+        !createFormRef.current.contains(e.target as Node)
+      ) {
+        setCreating(false);
+        setNewCollectionName('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [creating]);
+
+  useEffect(() => {
+    if (renaming) {
+      renameInputRef.current?.focus();
+    }
+  }, [renaming]);
+
+  const commands = useMemo<Command[]>(() => {
+    const list: Command[] = [
+      {
+        id: 'new-collection',
+        label: 'New collection',
+        hint: 'Create an empty collection',
+        icon: <PlusIcon />,
+        run: () => {
+          navigateTo('home');
+          setCreating(true);
+        },
+      },
+      {
+        id: 'import',
+        label: 'Import an export',
+        hint: 'Merge a Tabman JSON export',
+        icon: <UploadIcon />,
+        run: () => importInput.current?.click(),
+      },
+      {
+        id: 'export',
+        label: 'Export the library',
+        hint: 'Download a JSON backup',
+        icon: <DownloadIcon />,
+        run: () => void downloadExport(),
+      },
+      {
+        id: 'view',
+        label: `Switch to ${view === 'grid' ? 'list' : 'grid'} view`,
+        icon: view === 'grid' ? <ListIcon /> : <GridIcon />,
+        run: () => applyView(view === 'grid' ? 'list' : 'grid'),
+      },
+      {
+        id: 'trash',
+        label: 'Open trash',
+        icon: <TrashIcon />,
+        run: () => navigateTo('trash'),
+      },
+      {
+        id: 'settings',
+        label: 'Open preferences',
+        icon: <SettingsIcon />,
+        run: () => navigateTo('settings'),
+      },
+    ];
+    if (selectedCollection) {
+      list.unshift({
+        id: 'restore-all',
+        label: `Restore every tab in ${selectedCollection.name}`,
+        icon: <RestoreIcon />,
+        run: () => void restore(selectedCollection.tabs, 'saved tabs'),
+      });
+    }
+    return list;
+  }, [
+    applyView,
+    downloadExport,
+    navigateTo,
+    restore,
+    selectedCollection,
+    view,
+  ]);
+
+  const filteredCommands = useMemo(() => {
+    const needle = paletteQuery.trim().toLocaleLowerCase();
+    if (!needle) return commands;
+    return commands.filter((cmd) =>
+      [cmd.label, cmd.hint ?? ''].some((value) =>
+        value.toLocaleLowerCase().includes(needle),
+      ),
+    );
+  }, [commands, paletteQuery]);
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((current) => !current);
+        setPaletteQuery('');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const selectedTabRecords =
     selectedCollection?.tabs.filter((tab) => selectedTabs.has(tab.id)) ?? [];
 
+  // Determine effective section
+  const currentSection = route.section;
+
   return (
-    <main className="dashboard">
-      <header className="dashboard-header">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            T
-          </span>
-          <div>
-            <p className="eyebrow">{PRODUCT_NAME}</p>
-            <h1>Local tab library</h1>
-          </div>
-        </div>
-        <div className="header-actions">
-          <label className="import-mode">
-            <span>Import mode</span>
-            <select
-              value={importMode}
-              onChange={(event) =>
-                setImportMode(event.target.value as ImportMode)
-              }
-            >
-              <option value="merge">Merge import</option>
-              <option value="replace">Replace library</option>
-            </select>
-          </label>
-          <button
-            className="secondary"
-            type="button"
-            disabled={busy}
-            onClick={() => importInput.current?.click()}
-          >
-            Import
-          </button>
-          <input
-            ref={importInput}
-            className="visually-hidden"
-            type="file"
-            accept="application/json,.json"
-            aria-label="Choose a Tabman JSON export"
-            tabIndex={-1}
-            onChange={(event) => void onImport(event)}
-          />
-          <button
-            className="secondary"
-            type="button"
-            disabled={busy}
-            onClick={() => void downloadExport()}
-          >
-            Export
-          </button>
-          <button
-            type="button"
-            aria-pressed={section === 'settings'}
-            onClick={() => setSection('settings')}
-          >
-            Settings
-          </button>
-        </div>
-      </header>
+    <div className="app">
+      <Topbar
+        currentTheme={currentTheme}
+        importInputRef={importInput}
+        onOpenPalette={() => {
+          setPaletteOpen(true);
+          setPaletteQuery('');
+        }}
+        onImportFile={(e) => void onImport(e)}
+        onExport={() => void downloadExport()}
+        onToggleTheme={() => void toggleTheme()}
+        onOpenHelp={() => setHelpOpen(true)}
+        onOpenSettings={() => navigateTo('settings')}
+      />
 
-      <div className="dashboard-shell">
-        <aside className="library-sidebar">
-          <label className="library-search">
-            <span className="visually-hidden">Search saved tabs</span>
-            <input
-              type="search"
-              placeholder="Search library…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <nav aria-label="Library sections">
-            <button
-              className={section === 'collections' ? 'nav-active' : ''}
-              type="button"
-              aria-current={section === 'collections' ? 'page' : undefined}
-              onClick={() => setSection('collections')}
-            >
-              <span>Collections</span>
-              <span>{activeCollections.length}</span>
-            </button>
-            <button
-              className={section === 'trash' ? 'nav-active' : ''}
-              type="button"
-              aria-current={section === 'trash' ? 'page' : undefined}
-              onClick={() => setSection('trash')}
-            >
-              <span>Trash</span>
-              <span>{trashedCollections.length}</span>
-            </button>
-          </nav>
+      <div className="workspace">
+        <NavigationRail
+          section={currentSection}
+          onNavigate={(sec) => navigateTo(sec)}
+          trashedCount={trashedCollections.length}
+          collections={filteredCollections}
+          selectedCollectionId={selectedCollection?.id}
+          onSelectCollection={(id) => {
+            setTagFilter('');
+            setSelectedTabs(new Set());
+            navigateTo('collection', id);
+          }}
+          creating={creating}
+          onStartCreate={() => setCreating(true)}
+          onCancelCreate={() => {
+            setCreating(false);
+            setNewCollectionName('');
+          }}
+          newCollectionName={newCollectionName}
+          onNewCollectionNameChange={setNewCollectionName}
+          onCreateSubmit={(e) => {
+            e.preventDefault();
+            void runMutation(async () => {
+              const id = await createCollection(database, newCollectionName);
+              setNewCollectionName('');
+              setCreating(false);
+              navigateTo('collection', id);
+            }, 'Collection created.');
+          }}
+          createInputRef={createInputRef}
+          createFormRef={createFormRef}
+          menuFor={menuFor}
+          onToggleMenu={(id) =>
+            setMenuFor((current) => (current === id ? undefined : id))
+          }
+          onEditCollection={(coll) => {
+            setMenuFor(undefined);
+            navigateTo('collection', coll.id);
+            setCollectionEditorOpen(true);
+            setEditCollectionName(coll.name);
+            setEditCollectionDescription(coll.description ?? '');
+            setEditCollectionColor(coll.color ?? '');
+          }}
+          onRenameCollection={(coll) => {
+            setMenuFor(undefined);
+            navigateTo('collection', coll.id);
+            setRenaming(true);
+          }}
+          onTrashCollection={(coll) => {
+            setMenuFor(undefined);
+            if (window.confirm(`Move "${coll.name}" to the trash?`)) {
+              void runMutation(
+                () => setCollectionStatus(database, [coll.id], 'trashed'),
+                'Collection moved to trash.',
+              );
+            }
+          }}
+          dropTargetId={dropTargetId}
+          onDragOver={(id, e) => {
+            if (!draggingTabId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            setDropTargetId(id);
+          }}
+          onDragLeave={(id) => {
+            setDropTargetId((current) =>
+              current === id ? undefined : current,
+            );
+          }}
+          onDrop={(coll, e) => {
+            e.preventDefault();
+            setDropTargetId(undefined);
+            const tabId = draggingTabId;
+            setDraggingTabId(undefined);
+            if (!tabId) return;
+            void runMutation(
+              () => moveTabs(database, [tabId], coll.id),
+              `Moved to ${coll.name}.`,
+            );
+          }}
+          savedTabCount={savedTabCount}
+          tagCount={tagCount}
+          busy={busy}
+          hasQuery={Boolean(query.trim())}
+        />
 
-          {section === 'collections' && (
-            <>
-              <form
-                className="create-collection"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void runMutation(async () => {
-                    const id = await createCollection(
-                      database,
-                      newCollectionName,
-                    );
-                    setNewCollectionName('');
-                    setSelectedCollectionId(id);
-                  }, 'Collection created.');
-                }}
-              >
-                <input
-                  aria-label="New collection name"
-                  placeholder="New collection"
-                  maxLength={120}
-                  value={newCollectionName}
-                  onChange={(event) => setNewCollectionName(event.target.value)}
-                />
-                <button
-                  type="submit"
-                  disabled={busy || !newCollectionName.trim()}
-                >
-                  Add
-                </button>
-              </form>
-              <div className="collection-nav">
-                {activeCollections.map((collection) => (
-                  <button
-                    className={
-                      collection.id === selectedCollectionId ? 'selected' : ''
-                    }
-                    type="button"
-                    key={collection.id}
-                    onClick={() => {
-                      setSelectedCollectionId(collection.id);
-                      setTagFilter('');
-                      setSelectedTabs(new Set());
-                      setSection('collections');
-                    }}
-                  >
-                    <span className="collection-color" aria-hidden="true" />
-                    <span>
-                      <strong>{collection.name}</strong>
-                      <small>{collection.tabs.length} tabs</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-          <p className="local-note">
-            Stored locally in this browser profile. Nothing syncs to a cloud
-            service.
-          </p>
-        </aside>
-
-        <section className="library-content">
-          {error && (
-            <div className="banner error" role="alert">
-              <span>{error}</span>
-              <button
-                className="text-button"
-                type="button"
-                onClick={() => void load()}
-              >
-                Retry
-              </button>
-            </div>
-          )}
-          {notice && (
-            <p className="banner success" role="status">
-              {notice}
-            </p>
-          )}
-
+        <main className="content">
           {loading ? (
-            <div className="library-empty" aria-live="polite">
-              <span className="spinner" aria-hidden="true" />
-              <h2>Opening your local library</h2>
-            </div>
-          ) : section === 'settings' && settings ? (
+            <LoadingState />
+          ) : currentSection === 'home' || currentSection === 'library' ? (
+            <HomePanel
+              collections={activeCollections}
+              savedTabCount={savedTabCount}
+              tagCount={tagCount}
+              onCollect={() => void collectAll()}
+              onCreate={() => setCreating(true)}
+              onSelectCollection={(id) => {
+                setTagFilter('');
+                setSelectedTabs(new Set());
+                navigateTo('collection', id);
+              }}
+              onDeleteCollections={(ids) => {
+                if (
+                  window.confirm(
+                    `Move ${ids.length} ${pluralize(ids.length, 'collection')} to the trash?`,
+                  )
+                ) {
+                  void runMutation(
+                    () => setCollectionStatus(database, ids, 'trashed'),
+                    `${pluralize(ids.length, 'collection')} moved to trash.`,
+                  );
+                }
+              }}
+            />
+          ) : currentSection === 'windows' ? (
+            <WindowsPanel onNotify={pushToast} />
+          ) : currentSection === 'settings' ? (
             <SettingsPanel
-              settings={settings}
+              settings={
+                settings ??
+                ({
+                  theme: 'system',
+                  defaultView: 'grid',
+                  includeFullUrlInAi: false,
+                } as Settings)
+              }
               busy={busy}
+              onApplyTheme={applyTheme}
               onSave={(next) => void saveSettings(next)}
             />
-          ) : section === 'trash' ? (
+          ) : currentSection === 'providers' ? (
+            <ProvidersPanel onNotify={pushToast} />
+          ) : currentSection === 'organize' ? (
+            <OrganizePanel
+              rules={rules}
+              onNotify={pushToast}
+              onApplied={() => {
+                void load();
+                navigateTo('home');
+              }}
+            />
+          ) : currentSection === 'rules' ? (
+            <RulesPanel rules={rules} onChange={setRules} />
+          ) : currentSection === 'trash' ? (
             <TrashPanel
               collections={trashedCollections}
               busy={busy}
@@ -508,456 +899,318 @@ export function App() {
                   'Collection restored.',
                 )
               }
-              onDelete={(collectionId) => {
-                if (
-                  window.confirm(
-                    'Permanently delete this collection and all saved tabs?',
-                  )
-                ) {
-                  void runMutation(
-                    () =>
-                      permanentlyDeleteCollections(database, [collectionId]),
-                    'Collection permanently deleted.',
-                  );
-                }
-              }}
-            />
-          ) : !selectedCollection ? (
-            <Onboarding />
-          ) : (
-            <>
-              <header className="collection-header">
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
+              onDelete={(collectionId) =>
+                requestConfirm({
+                  title: 'Delete permanently?',
+                  body: 'The collection and every saved tab inside it are erased from this browser profile. This cannot be undone.',
+                  confirmLabel: 'Delete forever',
+                  tone: 'danger',
+                  onConfirm: () =>
                     void runMutation(
                       () =>
-                        renameCollection(
+                        permanentlyDeleteCollections(database, [collectionId]),
+                      'Collection permanently deleted.',
+                    ),
+                })
+              }
+              onClearAll={() =>
+                requestConfirm({
+                  title: 'Empty trash permanently?',
+                  body: `All ${trashedCollections.length} trashed ${pluralize(
+                    trashedCollections.length,
+                    'collection',
+                  )} and every saved tab inside them will be erased from this browser profile. This cannot be undone.`,
+                  confirmLabel: 'Empty trash',
+                  tone: 'danger',
+                  onConfirm: () =>
+                    void runMutation(
+                      () =>
+                        permanentlyDeleteCollections(
                           database,
-                          selectedCollection.id,
-                          renameValue,
+                          trashedCollections.map((c) => c.id),
                         ),
-                      'Collection renamed.',
-                      false,
-                    );
-                  }}
-                >
-                  <input
-                    aria-label="Collection name"
-                    value={renameValue}
-                    maxLength={120}
-                    onChange={(event) => setRenameValue(event.target.value)}
-                  />
-                  <button
-                    className="secondary"
-                    type="submit"
-                    disabled={
-                      busy ||
-                      !renameValue.trim() ||
-                      renameValue.trim() === selectedCollection.name
-                    }
-                  >
-                    Save
-                  </button>
-                </form>
-                <div className="collection-header-actions">
-                  <button
-                    type="button"
-                    disabled={busy || selectedCollection.tabs.length === 0}
-                    onClick={() =>
-                      void restore(selectedCollection.tabs, 'saved tabs')
-                    }
-                  >
-                    Restore all
-                  </button>
-                  <button
-                    className="danger secondary"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      if (window.confirm('Move this collection to Trash?')) {
-                        void runMutation(
-                          () =>
-                            setCollectionStatus(
-                              database,
-                              [selectedCollection.id],
-                              'trashed',
-                            ),
-                          'Collection moved to Trash.',
-                        );
-                      }
-                    }}
-                  >
-                    Trash
-                  </button>
-                </div>
-              </header>
-
-              <div className="library-controls">
-                <fieldset className="tag-filters">
-                  <legend className="visually-hidden">Filter by tag</legend>
-                  <button
-                    className={!tagFilter ? 'filter-active' : ''}
-                    type="button"
-                    aria-pressed={!tagFilter}
-                    onClick={() => setTagFilter('')}
-                  >
-                    All
-                  </button>
-                  {selectedCollection.tags.map((tag) => (
-                    <button
-                      className={tagFilter === tag.id ? 'filter-active' : ''}
-                      type="button"
-                      key={tag.id}
-                      aria-pressed={tagFilter === tag.id}
-                      onClick={() => setTagFilter(tag.id)}
-                    >
-                      {tag.name}
-                    </button>
-                  ))}
-                </fieldset>
-                <fieldset className="view-toggle">
-                  <legend className="visually-hidden">Collection view</legend>
-                  {(['list', 'grid'] as const).map((view) => (
-                    <button
-                      className={
-                        settings?.defaultView === view ? 'filter-active' : ''
-                      }
-                      type="button"
-                      key={view}
-                      aria-pressed={settings?.defaultView === view}
-                      onClick={() => {
-                        if (settings) {
-                          void saveSettings({
-                            theme: settings.theme,
-                            defaultView: view,
-                            includeFullUrlInAi: settings.includeFullUrlInAi,
-                            aiProvider: settings.aiProvider,
-                          });
-                        }
-                      }}
-                    >
-                      {view === 'list' ? 'List' : 'Grid'}
-                    </button>
-                  ))}
-                </fieldset>
-              </div>
-
-              {selectedTabs.size > 0 && (
-                <div className="bulk-bar">
-                  <strong>{selectedTabs.size} selected</strong>
-                  <form
-                    onSubmit={(event) => {
-                      event.preventDefault();
+                      'Trash emptied.',
+                    ),
+                })
+              }
+            />
+          ) : currentSection === 'collection' ? (
+            selectedCollection ? (
+              <CollectionDetail
+                collection={selectedCollection}
+                busy={busy}
+                onCollect={() => void collectAll()}
+                renaming={renaming}
+                renameValue={renameValue}
+                onRenameValueChange={setRenameValue}
+                onStartRename={() => setRenaming(true)}
+                onCancelRename={() => {
+                  setRenaming(false);
+                  setRenameValue(selectedCollection.name);
+                }}
+                onSubmitRename={(e) => {
+                  e.preventDefault();
+                  void runMutation(
+                    () =>
+                      renameCollection(
+                        database,
+                        selectedCollection.id,
+                        renameValue,
+                      ),
+                    'Collection renamed.',
+                    false,
+                  ).then(() => setRenaming(false));
+                }}
+                renameInputRef={renameInputRef}
+                onRestoreCollection={() =>
+                  void restore(selectedCollection.tabs, 'saved tabs', true)
+                }
+                onTrashCollection={() =>
+                  requestConfirm({
+                    title: 'Move to trash?',
+                    body: 'The collection stays recoverable in Trash until you delete it forever.',
+                    confirmLabel: 'Move to trash',
+                    tone: 'brand',
+                    onConfirm: () =>
                       void runMutation(
-                        async () => {
-                          await tagTabs(database, [...selectedTabs], tagName);
-                          setTagName('');
-                        },
-                        'Tag applied to selected tabs.',
-                        false,
-                      );
-                    }}
-                  >
-                    <input
-                      aria-label="Tag selected tabs"
-                      placeholder="Add tag"
-                      maxLength={64}
-                      value={tagName}
-                      onChange={(event) => setTagName(event.target.value)}
-                    />
-                    <button type="submit" disabled={busy || !tagName.trim()}>
-                      Tag
-                    </button>
-                  </form>
-                  <select
-                    aria-label="Move selected saved tabs"
-                    defaultValue=""
-                    disabled={busy}
-                    onChange={(event) => {
-                      const target = event.target.value;
-                      if (target) {
-                        void runMutation(
-                          () => moveTabs(database, [...selectedTabs], target),
-                          'Selected tabs moved. Matching tag names were kept in the destination collection.',
-                        );
-                      }
-                      event.target.value = '';
-                    }}
-                  >
-                    <option value="" disabled>
-                      Move to…
-                    </option>
-                    {snapshot?.collections
-                      .filter(
-                        (collection) =>
-                          collection.status === 'active' &&
-                          collection.id !== selectedCollection.id,
-                      )
-                      .map((collection) => (
-                        <option value={collection.id} key={collection.id}>
-                          {collection.name}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      void restore(selectedTabRecords, 'selected tabs')
-                    }
-                  >
-                    Restore
-                  </button>
-                  <button
-                    className="danger secondary"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete ${selectedTabs.size} saved tab${selectedTabs.size === 1 ? '' : 's'}?`,
-                        )
-                      ) {
-                        void runMutation(
-                          () => deleteTabs(database, [...selectedTabs]),
-                          'Selected saved tabs deleted.',
-                        );
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
-
-              {visibleTabs.length === 0 ? (
-                <div className="library-empty">
-                  <h2>
-                    {tagFilter
-                      ? 'No tabs with this tag'
-                      : query.trim()
-                        ? 'No matching tabs'
-                        : 'Collection is empty'}
-                  </h2>
-                  <p>
-                    {query.trim() || tagFilter
-                      ? 'Try a different search or clear the tag filter.'
-                      : 'Park tabs from the side panel, or import a Tabman JSON export.'}
-                  </p>
-                </div>
-              ) : (
-                <div
-                  className={`saved-tabs ${settings?.defaultView ?? 'list'}`}
-                >
-                  {visibleTabs.map((tab) => (
-                    <article className="saved-tab" key={tab.id}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${tab.title || tab.hostname || tab.url}`}
-                        checked={selectedTabs.has(tab.id)}
-                        onChange={() => toggleTab(tab.id)}
-                      />
-                      {tab.favIconUrl ? (
-                        <img src={tab.favIconUrl} alt="" />
-                      ) : (
-                        <span className="saved-fallback" aria-hidden="true">
-                          {tab.hostname.slice(0, 1).toLocaleUpperCase()}
-                        </span>
-                      )}
-                      <div className="saved-tab-copy">
-                        <a href={tab.url} target="_blank" rel="noreferrer">
-                          {tab.title || tab.url}
-                        </a>
-                        <span>{tab.hostname || tab.url}</span>
-                        <div className="tab-tags">
-                          {selectedCollection.tags
-                            .filter((tag) => tab.tagIds.includes(tag.id))
-                            .map((tag) => (
-                              <span key={tag.id}>{tag.name}</span>
-                            ))}
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
+                        () =>
+                          setCollectionStatus(
+                            database,
+                            [selectedCollection.id],
+                            'trashed',
+                          ),
+                        'Collection moved to trash.',
+                      ),
+                  })
+                }
+                query={query}
+                onQueryChange={setQuery}
+                selectedTabs={selectedTabs}
+                visibleTabs={visibleTabs}
+                onToggleSelectAll={() => {
+                  if (
+                    selectedTabs.size === visibleTabs.length &&
+                    visibleTabs.length > 0
+                  ) {
+                    setSelectedTabs(new Set());
+                  } else {
+                    setSelectedTabs(new Set(visibleTabs.map((t) => t.id)));
+                  }
+                }}
+                sortOrder={sortOrder}
+                onSortOrderChange={(val) => setSortOrder(val)}
+                view={view}
+                onViewChange={applyView}
+                onOpenTagManager={() => setTagManagerOpen(true)}
+                tagFilter={tagFilter}
+                onTagFilterChange={setTagFilter}
+                onToggleTab={toggleTab}
+                onRestoreTab={(tab) =>
+                  void restore(
+                    selectedCollection.tabs.filter((c) => c.id === tab.id),
+                    'tab',
+                  )
+                }
+                onDeleteTab={(tab) =>
+                  requestConfirm({
+                    title: 'Delete saved tab?',
+                    body: 'The tab is removed from this collection. The page itself is not touched.',
+                    confirmLabel: 'Delete tab',
+                    tone: 'danger',
+                    onConfirm: () =>
+                      void runMutation(
+                        () => deleteTabs(database, [tab.id]),
+                        'Saved tab deleted.',
+                      ),
+                  })
+                }
+                onEditTab={(tab) => {
+                  setEditingTab(tab);
+                  setEditTitle(tab.title);
+                  setEditUrl(tab.url);
+                }}
+                onPinTab={(tab) =>
+                  void runMutation(
+                    () =>
+                      updateTab(database, tab.id, {
+                        pinned: !tab.pinned,
+                      }),
+                    tab.pinned ? 'Tab unpinned.' : 'Tab pinned.',
+                    false,
+                  )
+                }
+                onDragStartTab={(tabId) => setDraggingTabId(tabId)}
+                onDragEndTab={() => setDraggingTabId(undefined)}
+              />
+            ) : null
+          ) : null}
+        </main>
       </div>
-    </main>
-  );
-}
 
-interface SettingsPanelProps {
-  settings: Settings;
-  busy: boolean;
-  onSave: (settings: Settings) => void;
-}
-
-function SettingsPanel({ settings, busy, onSave }: SettingsPanelProps) {
-  const [draft, setDraft] = useState<Settings>({
-    theme: settings.theme,
-    defaultView: settings.defaultView,
-    includeFullUrlInAi: settings.includeFullUrlInAi,
-    aiProvider: settings.aiProvider,
-  });
-
-  useEffect(
-    () =>
-      setDraft({
-        theme: settings.theme,
-        defaultView: settings.defaultView,
-        includeFullUrlInAi: settings.includeFullUrlInAi,
-        aiProvider: settings.aiProvider,
-      }),
-    [settings],
-  );
-
-  return (
-    <section className="settings-panel">
-      <p className="eyebrow">Preferences</p>
-      <h2>Appearance and privacy</h2>
-      <p className="settings-intro">
-        Tabman stays local by default. Browser storage is profile storage, not
-        an operating-system keychain.
-      </p>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave({
-            theme: draft.theme,
-            defaultView: draft.defaultView,
-            includeFullUrlInAi: draft.includeFullUrlInAi,
-            aiProvider: draft.aiProvider,
-          });
-        }}
-      >
-        <label>
-          Theme
-          <select
-            value={draft.theme}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                theme: event.target.value as Settings['theme'],
+      {selectedTabs.size > 0 &&
+        selectedCollection &&
+        currentSection === 'collection' && (
+          <BulkBar
+            count={selectedTabs.size}
+            busy={busy}
+            collections={activeCollections.filter(
+              (collection) => collection.id !== selectedCollection.id,
+            )}
+            tags={selectedCollection.tags}
+            tagName={tagName}
+            onTagNameChange={setTagName}
+            onTag={() =>
+              void runMutation(
+                async () => {
+                  await tagTabs(database, [...selectedTabs], tagName);
+                  setTagName('');
+                },
+                'Tag applied to the selected tabs.',
+                false,
+              )
+            }
+            onMove={(targetId) =>
+              void runMutation(
+                () => moveTabs(database, [...selectedTabs], targetId),
+                'Selected tabs moved.',
+              )
+            }
+            onRestore={() => void restore(selectedTabRecords, 'selected tabs')}
+            onDelete={() =>
+              requestConfirm({
+                title: `Delete ${selectedTabs.size} ${pluralize(selectedTabs.size, 'tab')}?`,
+                body: 'The saved copies are removed from the library. The open browser tabs are not touched.',
+                confirmLabel: 'Delete tabs',
+                tone: 'danger',
+                onConfirm: () =>
+                  void runMutation(
+                    () => deleteTabs(database, [...selectedTabs]),
+                    'Selected tabs deleted.',
+                  ),
               })
             }
-          >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-        <label>
-          Default collection view
-          <select
-            value={draft.defaultView}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                defaultView: event.target.value as Settings['defaultView'],
-              })
-            }
-          >
-            <option value="list">List</option>
-            <option value="grid">Grid</option>
-          </select>
-        </label>
-        <label className="check-setting">
-          <input
-            type="checkbox"
-            checked={draft.includeFullUrlInAi}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                includeFullUrlInAi: event.target.checked,
-              })
-            }
+            onClear={() => setSelectedTabs(new Set())}
           />
-          <span>
-            Include full URLs in optional AI requests
-            <small>
-              Off sends only titles and hostnames. No page content is scraped.
-            </small>
-          </span>
-        </label>
-        <button type="submit" disabled={busy}>
-          Save settings
-        </button>
-      </form>
-    </section>
-  );
-}
+        )}
 
-interface TrashPanelProps {
-  collections: LibraryCollection[];
-  busy: boolean;
-  onRestore: (collectionId: string) => void;
-  onDelete: (collectionId: string) => void;
-}
-
-function TrashPanel({
-  collections,
-  busy,
-  onRestore,
-  onDelete,
-}: TrashPanelProps) {
-  return (
-    <section className="trash-panel">
-      <p className="eyebrow">Recovery</p>
-      <h2>Trash</h2>
-      <p>Trashed collections remain local until permanently deleted.</p>
-      {collections.length === 0 ? (
-        <div className="library-empty">
-          <h3>Trash is empty</h3>
-        </div>
-      ) : (
-        <div className="trash-list">
-          {collections.map((collection) => (
-            <article key={collection.id}>
-              <div>
-                <strong>{collection.name}</strong>
-                <span>{collection.tabs.length} saved tabs</span>
-              </div>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onRestore(collection.id)}
-              >
-                Restore
-              </button>
-              <button
-                className="danger secondary"
-                type="button"
-                disabled={busy}
-                onClick={() => onDelete(collection.id)}
-              >
-                Delete forever
-              </button>
-            </article>
-          ))}
-        </div>
+      {paletteOpen && (
+        <CommandPalette
+          commands={filteredCommands}
+          query={paletteQuery}
+          onQueryChange={setPaletteQuery}
+          onClose={() => setPaletteOpen(false)}
+        />
       )}
-    </section>
-  );
-}
 
-function Onboarding() {
-  return (
-    <section className="onboarding">
-      <p className="eyebrow">Start local</p>
-      <h2>Build a calmer browser workspace</h2>
-      <p>
-        Create a collection here, then use the side panel to park a selection or
-        a whole window. Your tabs remain searchable in this browser profile.
-      </p>
-      <ol>
-        <li>Create a named collection.</li>
-        <li>Park open tabs from the switchboard.</li>
-        <li>Restore any selection when you need it.</li>
-      </ol>
-    </section>
+      {selectedCollection && (
+        <TagManagerModal
+          isOpen={tagManagerOpen}
+          collection={selectedCollection}
+          onClose={() => setTagManagerOpen(false)}
+          onCreateTag={async (name, color) => {
+            await runMutation(
+              async () => {
+                await createTag(database, selectedCollection.id, name, color);
+              },
+              'Tag added.',
+              false,
+            );
+          }}
+          onUpdateTag={async (tagId, name, color) => {
+            await runMutation(
+              () => updateTag(database, tagId, { name, color }),
+              'Tag updated.',
+              false,
+            );
+          }}
+          onDeleteTag={async (tagId) => {
+            await runMutation(
+              () => deleteTag(database, tagId),
+              'Tag deleted.',
+              false,
+            );
+          }}
+        />
+      )}
+
+      <CollectModal
+        isOpen={collectDialogOpen}
+        busy={busy}
+        name={collectName}
+        onNameChange={setCollectName}
+        onClose={() => setCollectDialogOpen(false)}
+        onConfirm={() =>
+          void performCollect(
+            collectName.trim() ||
+              `Collected ${new Date().toLocaleDateString()}`,
+          )
+        }
+      />
+
+      <EditTabModal
+        tab={editingTab}
+        title={editTitle}
+        onTitleChange={setEditTitle}
+        url={editUrl}
+        onUrlChange={setEditUrl}
+        onClose={() => setEditingTab(undefined)}
+        onSave={() => {
+          if (!editingTab) return;
+          void runMutation(
+            async () => {
+              await updateTab(database, editingTab.id, {
+                title: editTitle,
+                url: editUrl,
+              });
+              setEditingTab(undefined);
+            },
+            'Tab updated.',
+            false,
+          );
+        }}
+      />
+
+      {selectedCollection && (
+        <EditCollectionModal
+          isOpen={collectionEditorOpen}
+          name={editCollectionName}
+          onNameChange={setEditCollectionName}
+          description={editCollectionDescription}
+          onDescriptionChange={setEditCollectionDescription}
+          color={editCollectionColor}
+          onColorChange={setEditCollectionColor}
+          onClose={() => setCollectionEditorOpen(false)}
+          onSave={() =>
+            void runMutation(
+              async () => {
+                await updateCollection(database, selectedCollection.id, {
+                  name: editCollectionName,
+                  description: editCollectionDescription,
+                  color: editCollectionColor || null,
+                });
+                setCollectionEditorOpen(false);
+              },
+              'Collection updated.',
+              false,
+            )
+          }
+        />
+      )}
+
+      {confirmRequest && (
+        <ConfirmDialog
+          request={confirmRequest}
+          onCancel={() => setConfirmRequest(undefined)}
+          onConfirm={() => {
+            confirmRequest.onConfirm();
+            setConfirmRequest(undefined);
+          }}
+        />
+      )}
+
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+    </div>
   );
 }

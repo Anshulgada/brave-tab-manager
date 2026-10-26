@@ -6,6 +6,83 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0]
+
+### Added
+
+- Hash routing (`#/home`, `#/windows`, `#/organize`, `#/rules`, `#/trash`, `#/preferences`, `#/collections/:id`) persists current view and sub-views across dashboard refreshes, browser navigation, and deep-linking.
+- Kanban drag-and-drop board for the Organize view with dynamic card reordering, inter-group transfers, automatic new group creation with placeholder naming when dragging between groups, and inline card title editing.
+- Pinterest/Masonry style auto-flowing column grid layout for organize cards.
+- Default pre-configured grouping rules for AI assistants (ChatGPT, Claude, Gemini, Kimi), video platforms (YouTube, Twitch, Vimeo), and developer hubs (GitHub, GitLab).
+- Floating bulk action dock in the Collections view that stays fixed above the viewport bottom with entrance/exit transitions without jumping page content.
+- Trash "Clear all" button with an interactive confirmation modal.
+- Circular checkboxes across all cards, selection controls, and bulk management lists.
+- Smooth theme toggle transition animation between light and dark modes with synchronized toggle styling.
+- Domain-based sorting option for collections in addition to Title, Recency, and Park Order.
+
+### Changed
+
+- Decomposed monolithic dashboard files into modular domain-driven components (`components/`, `panels/`) and dedicated CSS modules (`styles/`).
+- Standardized toggle controls and color tag pickers across Preferences and Tag Management.
+- Upgraded lower bound dependency pins for dev tooling (`ruff`, `ty`) in `pyproject.toml`.
+
+## [0.4.4]
+
+### Fixed
+
+- Collecting the open tabs no longer fails with "The extension background service did not respond", because the service worker always answers and the sender retries while the worker wakes up.
+- The collect action now works on the empty library home as well as on a populated one, asks for the collection name first, and selects the collection it just created.
+- The side panel's collect button reports how many tabs were collected.
+
+## [0.4.3]
+
+### Fixed
+
+- Collecting the open tabs no longer fails with "The extension background service did not respond": the service worker always answers, the sender retries once while the worker wakes up, and the dead `providers/grant` case is gone.
+- The collect button now works on the empty library home as well as on a populated one, asks for the collection name first, and selects the collection it just created.
+- The side panel's collect button reports how many tabs were collected.
+
+## [0.4.2]
+
+### Fixed
+
+- The collect action was only reachable once a collection already existed. The
+  empty library home now offers it too, so a fresh install can collect the
+  open tabs as its first move.
+- Collecting asks for the collection name first, prefilled with the date, and
+  selects the collection it just created.
+
+## [0.4.1]
+
+### Added
+
+- The extension can organize your open tabs. Add a provider with a display name, base URL, model, and format, give it a key, and the organizer sends one batched request, shows exactly what it would create, and writes nothing until you apply it. The local rules, which group by hostname, always work offline.
+- A **Collect every open tab** action in the library and in the side panel saves the tabs you have open into a new collection without closing them.
+- The side panel lists the saved collections and restores any of them back into the browser.
+- A theme button in the top bar flips between the light and the dark theme at once, and the preferences apply the choice immediately.
+- Drag a saved tab onto a collection in the rail to move it.
+- Provider profiles, keys, and the permission prompts live in the browser only. The key stays in session storage unless you ask for it to be remembered, and a forget button removes it.
+- `PRIVACY.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, an issue and a pull request template, an architecture note, and a list of the dos and don'ts.
+- React component tests for the dashboard and the side panel, and a test suite for the provider adapters, taking the extension suite to 78 tests.
+- The workflow job on main runs actionlint and zizmor, and the Python job adds a dependency audit and a secret scan.
+- The provider adapters speak the OpenAI Responses API next to the chat completions and Anthropic formats, and the extension declares the host permissions for a provider as optional.
+
+### Changed
+
+- Rebuilt the extension interface from scratch on a shared design system: neutral surfaces with an indigo to violet accent, Space Grotesk headings, Inter body text, layered shadows, and rounded panels that read the same in light and dark mode.
+- The dashboard is now an application shell: a collection rail with live counts, a command palette on `Ctrl` plus `K`, a card or list view of saved tabs, tag filters, sorting, a floating bulk action bar, toasts instead of inline banners, and a confirmation dialog instead of `window.confirm`.
+- The side panel follows the same language with a compact search field, window groups, duplicate, audio, and sleep badges, and a docked action bar for close, discard, move, park, and group.
+- The library opens automatically the first time the extension is installed, and the toolbar button opens it from anywhere.
+- The keyboard hints read like the keyboard you have: `Ctrl` on Windows and Linux, `⌘` on a Mac.
+- `scripts/preview_ui.py` serves the built interface in a normal browser with a stubbed extension API so the UI can be reviewed and screenshotted without sideloading.
+
+### Fixed
+
+- Rendered rich-click panels as rounded, colored boxes on every terminal by forcing UTF-8 output instead of falling back to ASCII borders.
+- The help now measures the longest row it has to draw, so the panels stop at the width the content needs instead of filling the terminal or wrapping early.
+- Report corrupt vaults, malformed configuration values, and unsupported organize providers as concise errors instead of tracebacks.
+- Preserve valid deterministic collection names and tags for very long hostnames, and validate blank provider output.
+
 ## [0.3.16]
 
 ### Added

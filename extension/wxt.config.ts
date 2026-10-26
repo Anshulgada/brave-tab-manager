@@ -8,7 +8,12 @@ export default defineConfig({
     description:
       'A local-first switchboard and collection library for open tabs.',
     minimum_chrome_version: '114',
-    permissions: ['tabs', 'tabGroups', 'storage', 'sessions', 'sidePanel'],
+    permissions: ['tabs', 'tabGroups', 'storage', 'sessions'],
+    optional_host_permissions: [
+      'https://*/*',
+      'http://localhost/*',
+      'http://127.0.0.1/*',
+    ],
     icons: {
       16: 'icon-16.png',
       32: 'icon-32.png',

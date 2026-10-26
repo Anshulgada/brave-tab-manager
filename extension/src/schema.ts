@@ -13,6 +13,7 @@ const allowedSchemes = new Set([
   'brave:',
   'edge:',
   'about:',
+  'file:',
 ]);
 
 const address = z
