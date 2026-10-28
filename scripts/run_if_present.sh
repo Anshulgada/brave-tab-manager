@@ -1,15 +1,16 @@
 #!/usr/bin/env sh
-# Run a tool only when it is installed, so local `pre-commit` runs do not fail
-# on machines that are missing the optional (and sometimes heavy) dev tools.
-# The same checks are enforced for real in CI, which installs the tooling.
+# Run a tool only when it is installed, so local `pre-commit` runs do not
+# fail on machines that are missing the optional (and sometimes heavy) dev
+# tools. The same checks are enforced for real in CI, which installs the
+# tooling.
 #
-# Usage: scripts/run_if_present.sh <tool> [args...] -- [files...]
-#   e.g.  scripts/run_if_present.sh shellcheck --severity=warning
+# Usage: scripts/run_if_present.sh <tool> [args...]
+#   e.g.  scripts/run_if_present.sh shellcheck
 #         scripts/run_if_present.sh bun --cwd extension run check
 set -u
 
 if [ $# -eq 0 ]; then
-    echo "usage: $0 <tool> [args...] -- [file...]" >&2
+    echo "usage: $0 <tool> [args...]" >&2
     exit 1
 fi
 
