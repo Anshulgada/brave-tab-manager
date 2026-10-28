@@ -1,6 +1,6 @@
 [project]
 name = "tabman"
-version = "0.5.0"
+version = "0.5.1"
 description = "Local-first tab collections and automation for Chromium browsers."
 readme = "README.md"
 requires-python = ">=3.14"
