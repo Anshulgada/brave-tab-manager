@@ -36,6 +36,12 @@ def capture_collection(
         response = http.get(_discovery_url(endpoint))
         response.raise_for_status()
         payload = response.json()
+    except httpx.ConnectError as error:
+        raise CaptureError(
+            f"cannot reach the Chromium debugging endpoint at {endpoint}. "
+            "The browser has to be started with the DevTools port open: "
+            "run 'tabman cdp enable', then restart the browser."
+        ) from error
     except (httpx.HTTPError, ValueError) as error:
         raise CaptureError(f"cannot read Chromium tabs: {error}") from error
     finally:
