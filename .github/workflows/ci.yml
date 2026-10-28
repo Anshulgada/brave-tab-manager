@@ -52,6 +52,41 @@ jobs:
 
       - name: Secret scan
         run: uv run detect-secrets-hook --baseline .secrets.baseline
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Check shell syntax
+        run: |
+          for script in scripts/*.sh; do
+            echo "checking $script"
+            sh -n "$script"
+            dash -n "$script"
+          done
+
+      - name: Lint shell scripts
+        run: shellcheck --severity=warning scripts/*.sh
+
+      - name: Check the Linux CDP installer end to end
+        run: |
+          # The installer must work in a throwaway HOME, without a browser
+          # and without touching the real machine.
+          export HOME="$(mktemp -d)"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_DATA_HOME="$HOME/.local/share"
+          mkdir -p "$XDG_DATA_HOME/applications" "$HOME/.local/bin"
+          sh scripts/install-cdp-linux.sh install
+          sh scripts/install-cdp-linux.sh status
+          test -f "$XDG_DATA_HOME/applications/brave-browser.desktop"
+          sh scripts/install-cdp-linux.sh uninstall
+          test ! -f "$XDG_DATA_HOME/applications/brave-browser.desktop"
+
 
   extension:
     name: Extension
