@@ -33,7 +33,6 @@
 
 set -eu
 
-REPOSITORY="Anshulgada/brave-tab-manager"
 CDP_PORT="${TABMAN_CDP_PORT:-9222}"
 
 # Where Tabman keeps its state. The CLI resolves this with platformdirs, so

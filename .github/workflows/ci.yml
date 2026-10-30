@@ -77,9 +77,12 @@ jobs:
         run: |
           # The installer must work in a throwaway HOME, without a browser
           # and without touching the real machine.
-          export HOME="$(mktemp -d)"
-          export XDG_CONFIG_HOME="$HOME/.config"
-          export XDG_DATA_HOME="$HOME/.local/share"
+          HOME="$(mktemp -d)"
+          export HOME
+          XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_CONFIG_HOME
+          XDG_DATA_HOME="$HOME/.local/share"
+          export XDG_DATA_HOME
           mkdir -p "$XDG_DATA_HOME/applications" "$HOME/.local/bin"
           sh scripts/install-cdp-linux.sh install
           sh scripts/install-cdp-linux.sh status
