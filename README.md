@@ -73,6 +73,12 @@ tabman --help
 
 `uv tool install` puts the `tabman` command on your `PATH`. Upgrade it later with `uv tool upgrade tabman`, and remove it with `uv tool uninstall tabman`.
 
+> **Pin the Python version.** The CLI needs Python 3.14 or newer. Without a pin, `uv` resolves against the system Python and quietly installs the last release that supports it -- `0.2.0` on Python 3.12, which is the old CLI and reports itself as `0.1.0`. Add `--python ">=3.14"` to get the current release:
+>
+> ```sh
+> uv tool install --python ">=3.14" tabman
+> ```
+
 If you are installing from Git:
 
 ```powershell
@@ -93,21 +99,36 @@ macOS/Linux:
 curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install.sh | sh
 ```
 
+**Tested platforms.** The CDP shortcut and table below were verified on the
+hardware actually available:
+
+| Platform                                                         | Status                                                                                                                                                             |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ubuntu 24.04.5 LTS on `x86_64`, Brave 156.1.98.60 (Chromium 156) | Tested end to end (dock launch → port 9222 → `tabman capture`).                                                                                                    |
+| Windows 11 on an Intel chipset, legacy Brave installer           | Tabman 0.2.0 worked manually with `brave.exe --remote-debugging-port=9222`. The **CPD (CDP) shortcut is Linux-only**; on Windows the port is still opened by hand. |
+
+macOS and Linux on other architectures (`aarch64`/ARM) are not yet verified;
+the installer should still run, but the Brave integration on those is manual
+(open Brave with `--remote-debugging-port=9222`). Issues and reports are welcome.
+
 The installer is a complete setup, not just a download:
 
 1. It installs `uv` if the machine does not have it.
-2. It installs the CLI with `uv tool install` (PyPI first, Git branch as a fallback) and verifies that `tabman --version` works.
+2. It installs the CLI with `uv tool install` (PyPI first, Git branch as a fallback) and verifies that `tabman --version` works. The Python version is pinned to `>=3.14`, so the current release is installed even on a machine whose system Python is older.
 3. It asks **"Download the Tabman browser extension too?"** and, when you say yes, downloads the latest release archive and unpacks it for _Load unpacked_.
-4. It prints the next steps: the commands to try, where the extension was unpacked, and how to finish the browser setup.
+4. On Linux it runs `scripts/install-cdp-linux.sh`, which wires the DevTools port into the browser's desktop entry so `tabman capture` works.
+5. It prints the next steps: the commands to try, where the extension was unpacked, and how to finish the browser setup.
 
 Environment variables:
 
-| Variable                  | Effect                                      |
-| ------------------------- | ------------------------------------------- |
-| `TABMAN_VERSION`          | Pin a version, for example `0.3.15`.        |
-| `TABMAN_ASSUME_YES=1`     | Accept the extension prompt without asking. |
-| `TABMAN_SKIP_EXTENSION=1` | Skip the extension download entirely.       |
-| `TABMAN_EXTENSION_ROOT`   | Where the extension is unpacked.            |
+| Variable                  | Effect                                           |
+| ------------------------- | ------------------------------------------------ |
+| `TABMAN_VERSION`          | Pin a version, for example `0.3.15`.             |
+| `TABMAN_ASSUME_YES=1`     | Accept the extension prompt without asking.      |
+| `TABMAN_SKIP_EXTENSION=1` | Skip the extension download entirely.            |
+| `TABMAN_EXTENSION_ROOT`   | Where the extension is unpacked.                 |
+| `TABMAN_PYTHON`           | Python constraint for the CLI. Default `>=3.14`. |
+| `TABMAN_SKIP_CDP=1`       | Skip the Linux DevTools setup.                   |
 
 ### pipx
 
@@ -157,6 +178,37 @@ tabman capture --name "Open tabs"
 ```
 
 Remote debugging exposes local browser control. Do not leave the port enabled when you are not using it.
+
+#### Linux: enable the port once
+
+On Linux the browser is normally started from the dock or the app grid, so the flag cannot be passed on the command line. `scripts/install-cdp-linux.sh` sets this up for you: it installs a launcher wrapper and a desktop entry override in `~/.local/share/applications`, so Brave opens the DevTools port on every cold start, whatever started it.
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/Anshulgada/brave-tab-manager/main/scripts/install-cdp-linux.sh | sh
+```
+
+Or, as part of the one-line installer, it runs automatically on Linux.
+
+The port is **enabled by default**, so `tabman capture` works as soon as Brave has been restarted. Chromium binds the DevTools port to `127.0.0.1` and has no switch to widen it, so the port is reachable from this machine but not from the network. Toggle it when you want the browser closed off to live capture:
+
+```sh
+tabman cdp status   # show whether it is on and whether it is listening
+tabman cdp enable   # enable the port for the next browser start
+tabman cdp disable  # disable it
+tabman capture --name "Open tabs"
+```
+
+> **Chromium is single-instance.** A flag handed to a browser that is already running on the same profile is ignored, so quit Brave completely before reopening it. The wrapper shows a notification when it detects this instead of failing silently.
+
+If Brave **autostarts** at login, the installer routes that entry through the wrapper as well, so a login-launched browser opens the port too. A user autostart entry is rewritten in place; a system one is shadowed from `~/.config/autostart/` rather than edited, because the system file belongs to the package.
+
+The script also supports `status` and `uninstall`, which removes the wrapper, the helper, and the desktop entry overrides, and restores anything it backed up. The installer additionally installs a `tabman-cdp` alias for `tabman cdp`, for toggling the port before the CLI is on `PATH`.
+
+| Variable                 | Effect                                                              |
+| ------------------------ | ------------------------------------------------------------------- |
+| `TABMAN_CDP_PORT`        | DevTools port to use. Default `9222`.                               |
+| `TABMAN_CDP_AUTOSTART=0` | Install with the port off, so it only opens on `tabman cdp enable`. |
+| `TABMAN_SKIP_CDP=1`      | Skip the DevTools setup when running `scripts/install.sh`.          |
 
 ### Organize
 
@@ -253,6 +305,9 @@ tabman import all_tabs.md --legacy
 | `tabman config list-providers`         | List built-in and configured providers.                                                              |
 | `tabman config add-provider <name>`    | Add an OpenAI- or Anthropic-compatible provider.                                                     |
 | `tabman config remove-provider <name>` | Remove a configured provider.                                                                        |
+| `tabman cdp status`                    | Show whether the DevTools port is enabled and reachable.                                             |
+| `tabman cdp enable`                    | Enable the DevTools port for the next browser start.                                                 |
+| `tabman cdp disable`                   | Disable the DevTools port.                                                                           |
 | `tabman version`                       | Print the installed version.                                                                         |
 
 ## Screens
@@ -401,8 +456,8 @@ uv run python scripts/check_versions.py
 3. Commit and tag the release:
 
    ```powershell
-   git tag v0.3.16
-   git push origin v0.3.16
+   git tag v0.5.8
+   git push origin v0.5.8
    ```
 
 4. `.github/workflows/release.yml` builds the wheel/sdist and extension zip, publishes to PyPI, and creates a GitHub Release with the install scripts.

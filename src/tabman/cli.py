@@ -21,6 +21,15 @@ from rich.text import Text
 from rich_click.utils import CommandGroupDict
 
 from tabman import __version__
+from tabman.cdp import (
+    DEFAULT_PORT,
+    CdpError,
+    endpoint_for,
+    set_enabled,
+)
+from tabman.cdp import (
+    status as cdp_status,
+)
 from tabman.config import (
     DETERMINISTIC_PROVIDER,
     SECRET_ENV_NAMES,
@@ -56,7 +65,7 @@ COMMAND_GROUPS: dict[str, list[CommandGroupDict]] = {
     "tabman": [
         panel("Vault", "import", "export", "search"),
         panel("Tabs", "capture", "organize"),
-        panel("Setup", "config", "version"),
+        panel("Setup", "config", "cdp", "version"),
     ],
     "tabman config": [
         panel("Read", "show", "list-providers"),
@@ -67,6 +76,9 @@ COMMAND_GROUPS: dict[str, list[CommandGroupDict]] = {
             "add-provider",
             "remove-provider",
         ),
+    ],
+    "tabman cdp": [
+        {"name": "Port", "commands": ["status", "enable", "disable"]},
     ],
 }
 rich_click_config.COMMAND_GROUPS = COMMAND_GROUPS
@@ -319,24 +331,90 @@ def search_command(
 )
 @click.option(
     "--endpoint",
-    default="http://127.0.0.1:9222",
-    help="Local Chromium debugging endpoint (browser must be started with CDP).",
+    default="",
+    help="Local Chromium debugging endpoint; defaults to the enabled port.",
 )
 def capture_command(name: str, vault: Path | None, endpoint: str) -> None:
     """Capture CDP metadata; importing extension JSON remains preferred."""
     from tabman.capture import capture_collection
 
+    if not endpoint:
+        endpoint = endpoint_for(DEFAULT_PORT)
     try:
         collection = capture_collection(endpoint, name)
         _vault(vault).append_collection(collection)
     except (OSError, sqlite3.Error, ValidationError, RuntimeError, ValueError) as error:
         _fail(error)
+        return
     count = len(collection.tabs)
     tab_word = "tab" if count == 1 else "tabs"
     console.print(
         f"[green]Captured[/] {count} {tab_word} into "
         f"[cyan]{escape(collection.name)}[/]."
     )
+
+
+@click.group(
+    cls=AutoWidthGroup,
+    name="cdp",
+    help="Control the local Chromium DevTools port used by live capture.",
+    context_settings=CONTEXT_SETTINGS,
+)
+def cdp_app() -> None:
+    """Control the local Chromium DevTools port used by live capture."""
+
+
+@cdp_app.command(cls=AutoWidthCommand, name="status")
+@click.option(
+    "--port",
+    default=DEFAULT_PORT,
+    show_default=True,
+    help="DevTools port to inspect.",
+)
+def cdp_status_command(port: int) -> None:
+    """Show whether the DevTools port is enabled and reachable."""
+    state = cdp_status(port)
+    console.print(f"[green]DevTools port[/] {escape(state.summary)}")
+    console.print(f"[dim]toggle: {escape(str(state.toggle))}[/]")
+    if not state.listening:
+        console.print(
+            "[dim]The browser opens the port when it starts, so quit it "
+            "completely and reopen it.[/]"
+        )
+
+
+@cdp_app.command(cls=AutoWidthCommand, name="enable")
+@click.option(
+    "--port",
+    default=DEFAULT_PORT,
+    show_default=True,
+    help="DevTools port the browser should open.",
+)
+def cdp_enable_command(port: int) -> None:
+    """Enable the DevTools port for the next browser start."""
+    try:
+        set_enabled(True)
+    except CdpError as error:
+        _fail(error)
+    console.print(
+        f"[green]DevTools port enabled[/] on {escape(endpoint_for(port))}. "
+        "[dim]Restart the browser to apply it.[/]"
+    )
+
+
+@cdp_app.command(cls=AutoWidthCommand, name="disable")
+def cdp_disable_command() -> None:
+    """Disable the DevTools port."""
+    try:
+        set_enabled(False)
+    except CdpError as error:
+        _fail(error)
+    console.print(
+        "[green]DevTools port disabled.[/] [dim]Restart the browser to apply it.[/]"
+    )
+
+
+app.add_command(cdp_app)
 
 
 @app.command(cls=AutoWidthCommand, name="organize")

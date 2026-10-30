@@ -15,6 +15,7 @@ repos:
       - id: end-of-file-fixer
       - id: mixed-line-ending
         args: [--fix=lf]
+        exclude: '\.ps1$'
       - id: trailing-whitespace
 
   - repo: local
@@ -40,14 +41,14 @@ repos:
 
       - id: biome
         name: Biome check
-        entry: bun --cwd extension run check
+        entry: scripts/run_if_present.sh bun --cwd extension run check
         language: system
         pass_filenames: false
         files: ^extension/
 
       - id: typescript
         name: TypeScript type check
-        entry: bun --cwd extension run typecheck
+        entry: scripts/run_if_present.sh bun --cwd extension run typecheck
         language: system
         pass_filenames: false
         files: ^extension/
@@ -57,6 +58,20 @@ repos:
         entry: uv run detect-secrets-hook --baseline .secrets.baseline
         language: system
         exclude: ^(uv\.lock|extension/bun\.lock)$
+
+      - id: shellcheck
+        name: ShellCheck
+        entry: scripts/run_if_present.sh shellcheck
+        language: system
+        types: [shell]
+        files: ^scripts/.*\.sh$
+
+      - id: shellcheck-shell-syntax
+        name: POSIX shell syntax check
+        entry: sh -n
+        language: system
+        types: [shell]
+        files: ^scripts/.*\.sh$
 
       - id: path-filtered-gates
         name: Path-filtered build and test gates

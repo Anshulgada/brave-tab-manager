@@ -15,10 +15,20 @@
 set -eu
 
 REPOSITORY="Anshulgada/brave-tab-manager"
-# TODO: switch back to "main" once the rebuild branch is merged.
-BRANCH="main"
+# Default to "main" for the published one-liner ("curl | sh"). When running
+# from the repository root (Detected by the sibling .git), use whatever branch
+# the checkout is on, so a feature branch never silently fetches main's
+# older copy.
+BRANCH="${TABMAN_BRANCH:-}"
+if [ -z "$BRANCH" ] && [ -d "$(dirname "$0")/../.git" ]; then
+    BRANCH="$(git -C "$(dirname "$0")/.." rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+fi
+: "${BRANCH:=main}"
 MINIMUM_VERSION="0.3.0"
 VERSION="${TABMAN_VERSION:-latest}"
+# Tabman requires Python 3.14 or newer. uv can download it, so the system
+# Python does not have to match.
+PYTHON_SPEC="${TABMAN_PYTHON:->=3.14}"
 
 ensure_uv() {
     if command -v uv >/dev/null 2>&1; then
@@ -60,7 +70,11 @@ install_cli() {
         spec="tabman==$VERSION"
     fi
     echo "Installing ${spec} ..."
-    if ! uv tool install --force "$spec"; then
+    # Tabman needs Python 3.14 or newer. Without this pin, uv resolves
+    # against the system Python and silently picks the last release that
+    # supports it -- 0.2.0 on Python 3.12, which is the old CLI and reports
+    # itself as 0.1.0.
+    if ! uv tool install --force --python "$PYTHON_SPEC" "$spec"; then
         echo "The published package could not be installed; using the Git branch."
     fi
     export PATH="$HOME/.local/bin:$PATH"
@@ -73,7 +87,7 @@ install_cli() {
 
     git_spec="git+https://github.com/${REPOSITORY}.git@${BRANCH}"
     echo "Installing ${git_spec} (current development build) ..."
-    if ! uv tool install --force "$git_spec"; then
+    if ! uv tool install --force --python "$PYTHON_SPEC" "$git_spec"; then
         echo "Tabman could not be installed. Check your network connection and retry." >&2
         exit 1
     fi
@@ -133,14 +147,62 @@ show_next_steps() {
     echo "  Open chrome://extensions, enable Developer mode,"
     echo "  choose Load unpacked, and select:"
     echo "    $extension_path"
+    if [ "$cdp_ready" = "1" ]; then
+        echo ""
+        echo "Live capture (CDP)"
+        echo "  The browser was set up to open the DevTools port on start."
+        echo "  Enable it for a session with:  tabman cdp enable"
+        echo "  Then capture the tabs with:    tabman capture --name \"Open tabs\""
+    fi
     echo ""
     echo "Docs: https://github.com/${REPOSITORY}"
+}
+
+install_cdp() {
+    # Linux only for now: the Windows and macOS browsers are started by hand.
+# Their desktop entries differ in format (Windows registry keys, macOS
+# Application Support), so wiring the DevTools port there is out of scope
+# for this script.
+    [ "$(uname -s)" = "Linux" ] || return 0
+    [ "${TABMAN_SKIP_CDP:-0}" = "1" ] && return 0
+
+    # The script sits next to this one in a checkout, but when this installer
+    # is piped straight from a URL ("curl ... | sh") there is no sibling
+    # file to run. Fetch it in that case.
+    cdp_script="$(dirname "$0")/install-cdp-linux.sh"
+    if [ ! -f "$cdp_script" ]; then
+        if ! command -v curl >/dev/null 2>&1; then
+            echo "curl is required to fetch the DevTools setup. Run scripts/install-cdp-linux.sh later." >&2
+            return 0
+        fi
+        cdp_script="$(mktemp "${TMPDIR:-/tmp}/tabman-cdp.XXXXXX.sh")"
+        url="https://raw.githubusercontent.com/${REPOSITORY}/${BRANCH}/scripts/install-cdp-linux.sh"
+        if ! curl -fsSL "$url" -o "$cdp_script" 2>/dev/null; then
+            rm -f "$cdp_script"
+            echo "The DevTools setup could not be downloaded. Run scripts/install-cdp-linux.sh later." >&2
+            return 0
+        fi
+    fi
+
+    echo ""
+    echo "Setting up the DevTools port for live capture ..."
+    if sh "$cdp_script" install; then
+        cdp_ready=1
+    else
+        echo "The DevTools setup was skipped. Run scripts/install-cdp-linux.sh later." >&2
+    fi
+
+    # Only the downloaded copy is temporary; a sibling script is left alone.
+    case "$cdp_script" in
+        "${TMPDIR:-/tmp}"/tabman-cdp.*) rm -f "$cdp_script" ;;
+    esac
 }
 
 ensure_uv
 install_cli
 
 extension_ready=0
+cdp_ready=0
 if [ "${TABMAN_SKIP_EXTENSION:-0}" != "1" ]; then
     answer="n"
     if [ "${TABMAN_ASSUME_YES:-0}" = "1" ]; then
@@ -157,6 +219,8 @@ if [ "${TABMAN_SKIP_EXTENSION:-0}" != "1" ]; then
             ;;
     esac
 fi
+
+install_cdp
 
 echo ""
 echo "Tabman is installed. If 'tabman' is not found, open a new terminal."
