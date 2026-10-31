@@ -81,6 +81,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
+"scripts/ai/*.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
