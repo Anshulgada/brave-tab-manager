@@ -30,21 +30,21 @@ EMBEDDINGGEMMA_2_VARIANTS: dict[str, dict[str, Any]] = {
     "270m": {
         "model_id": "google/embeddinggemma-2",
         "description": "Text & Code backbone (~270M parameters)",
-        "subfolder": "text",
+        "config_kwargs": {"vision_config": None, "audio_config": None},
         "recommended_batch_size": 128,
         "mrl_dims": [768, 512, 256, 128],
     },
     "440m": {
         "model_id": "google/embeddinggemma-2",
         "description": "Text + Vision (~440M parameters)",
-        "subfolder": "text_vision",
+        "config_kwargs": {"audio_config": None},
         "recommended_batch_size": 64,
         "mrl_dims": [768, 512, 256, 128],
     },
     "740m": {
         "model_id": "google/embeddinggemma-2",
         "description": "Full Multimodal (~740M parameters)",
-        "subfolder": "multimodal",
+        "config_kwargs": {},
         "recommended_batch_size": 64,
         "mrl_dims": [768, 512, 256, 128],
     },
@@ -79,6 +79,7 @@ def train_variant(
     try:
         import importlib
 
+        torch = importlib.import_module("torch")
         Dataset = importlib.import_module("datasets").Dataset
         st_mod = importlib.import_module("sentence_transformers")
         SentenceTransformer = st_mod.SentenceTransformer
@@ -86,7 +87,12 @@ def train_variant(
         SentenceTransformerTrainingArguments = (
             st_mod.SentenceTransformerTrainingArguments
         )
-        losses_mod = importlib.import_module("sentence_transformers.losses")
+        try:
+            losses_mod = importlib.import_module(
+                "sentence_transformers.sentence_transformer.losses"
+            )
+        except ImportError:
+            losses_mod = importlib.import_module("sentence_transformers.losses")
         MatryoshkaLoss = losses_mod.MatryoshkaLoss
         MultipleNegativesRankingLoss = losses_mod.MultipleNegativesRankingLoss
     except ImportError as exc:
@@ -105,8 +111,28 @@ def train_variant(
         variant_config["description"],
     )
 
-    # 1. Initialize SentenceTransformer
-    model = SentenceTransformer(variant_config["model_id"])
+    # 1. Initialize SentenceTransformer with precision and modular config
+    dtype = (
+        torch.bfloat16
+        if precision.lower() == "bf16"
+        else (torch.float16 if precision.lower() == "fp16" else torch.float32)
+    )
+    config_kwargs = variant_config.get("config_kwargs", {})
+    init_kwargs: dict[str, Any] = {
+        "model_kwargs": {"torch_dtype": dtype},
+    }
+    if config_kwargs:
+        init_kwargs["config_kwargs"] = config_kwargs
+
+    try:
+        model = SentenceTransformer(variant_config["model_id"], **init_kwargs)
+    except Exception as exc:
+        logger.warning(
+            "Modular config failed (%s), loading base model: %s",
+            exc,
+            variant_config["model_id"],
+        )
+        model = SentenceTransformer(variant_config["model_id"])
 
     # 2. Load and prepare datasets
     logger.info("Loading training and validation triplets from %s...", dataset_dir)
@@ -154,7 +180,7 @@ def train_variant(
         save_total_limit=2,
         bf16=use_bf16,
         fp16=use_fp16,
-        dataloader_num_workers=4,
+        dataloader_num_workers=0 if sys.platform == "win32" else 4,
         dataloader_pin_memory=True,
     )
 
