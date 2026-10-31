@@ -64,13 +64,20 @@ def export_to_onnx(
         logger.info("Quantizing ONNX model to INT8 in %s...", quantized_dir)
 
         quantizer = ORTQuantizer.from_pretrained(ort_model)
-        dqconfig = AutoQuantizationConfig.avx512_vnni(
-            is_static=False, per_channel=False
-        )
-        quantizer.quantize(
-            save_dir=str(quantized_dir),
-            quantization_config=dqconfig,
-        )
+        try:
+            dqconfig = AutoQuantizationConfig.avx2(is_static=False, per_channel=False)
+            quantizer.quantize(
+                save_dir=str(quantized_dir),
+                quantization_config=dqconfig,
+            )
+        except Exception:
+            dqconfig = AutoQuantizationConfig.avx512_vnni(
+                is_static=False, per_channel=False
+            )
+            quantizer.quantize(
+                save_dir=str(quantized_dir),
+                quantization_config=dqconfig,
+            )
         tokenizer.save_pretrained(str(quantized_dir))
         logger.info("INT8 Quantized ONNX model ready for browser WebGPU.")
         return quantized_dir
