@@ -66,9 +66,9 @@ MARKER="# Tabman: launched through brave-with-cdp so the DevTools port opens."
 # The system directories that may hold a Brave desktop entry, in priority
 # order. The first hit is the one that is shown in the app grid; the rest are
 # overridden too so the portal, the dock, and "Open with" all agree.
-SYSTEM_APP_DIRS="/usr/share/applications
+SYSTEM_APP_DIRS="${TABMAN_SYSTEM_APP_DIRS:-/usr/share/applications
 /var/lib/flatpak/exports/share/applications
-/var/lib/snapd/desktop/applications"
+/var/lib/snapd/desktop/applications}"
 
 # Autostart directories, in XDG priority order. A user file with the same
 # desktop file ID shadows the system one, so a system-wide Brave autostart
@@ -103,6 +103,10 @@ detect_desktop_sources() {
 # The command the wrapper actually execs. Native packages win, then flatpak,
 # then snap.
 detect_launch_command() {
+    if [ -n "${TABMAN_BRAVE_BIN:-}" ] && [ -x "$TABMAN_BRAVE_BIN" ]; then
+        printf '%s' "$TABMAN_BRAVE_BIN"
+        return 0
+    fi
     for candidate in /usr/bin/brave-browser-stable /usr/bin/brave-browser /usr/bin/brave; do
         if [ -x "$candidate" ]; then
             printf '%s' "$candidate"
