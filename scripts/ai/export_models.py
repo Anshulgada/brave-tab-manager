@@ -24,7 +24,7 @@ logger = logging.getLogger("export_models")
 
 
 def _patch_transformers_utils() -> None:
-    """Ensure transformers.utils exposes is_offline_mode."""
+    """Ensure transformers exposes legacy functions expected by Optimum."""
     import importlib
     import os
 
@@ -39,6 +39,39 @@ def _patch_transformers_utils() -> None:
     except Exception as exc:
         logger.debug("Could not patch transformers.utils: %s", exc)
 
+    try:
+        modeling_utils = importlib.import_module("transformers.modeling_utils")
+        if not hasattr(modeling_utils, "get_parameter_dtype"):
+            torch = importlib.import_module("torch")
+
+            def _get_parameter_dtype(parameter_or_module):
+                if hasattr(parameter_or_module, "parameters"):
+                    try:
+                        return next(parameter_or_module.parameters()).dtype
+                    except StopIteration:
+                        return torch.float32
+                return getattr(parameter_or_module, "dtype", torch.float32)
+
+            modeling_utils.get_parameter_dtype = _get_parameter_dtype
+    except Exception as exc:
+        logger.debug("Could not patch transformers.modeling_utils: %s", exc)
+
+
+def _ensure_onnxscript() -> None:
+    """Ensure onnxscript is installed for PyTorch ONNX exporter."""
+    import importlib
+
+    try:
+        importlib.import_module("onnxscript")
+    except ImportError:
+        logger.info("onnxscript is required for ONNX export. Installing...")
+        import subprocess
+
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "onnxscript"],
+            stdout=subprocess.DEVNULL,
+        )
+
 
 def export_via_torch_onnx(
     model_path: str,
@@ -47,6 +80,8 @@ def export_via_torch_onnx(
 ) -> Path:
     """Fallback: export SentenceTransformer model directly using PyTorch ONNX."""
     import importlib
+
+    _ensure_onnxscript()
 
     torch = importlib.import_module("torch")
     st_mod = importlib.import_module("sentence_transformers")
@@ -198,12 +233,15 @@ def create_ollama_modelfile(
     """Generate an Ollama Modelfile for serving via http://localhost:11434."""
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
+    abs_path = Path(model_name_or_path).resolve()
+    target_path = str(abs_path) if abs_path.exists() else model_name_or_path
+
     sys_instruction = (
         'SYSTEM """You are an expert embedding encoder optimized for '
         'browser tab organization and semantic clustering."""'
     )
     content = f"""# Ollama Modelfile for Tabman EmbeddingGemma 2
-FROM {model_name_or_path}
+FROM {target_path}
 
 # Set parameters for embedding inference
 PARAMETER num_ctx 4096

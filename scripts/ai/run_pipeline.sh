@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# Compatible with both bash and zsh
 set -eo pipefail
+[ -n "${ZSH_VERSION:-}" ] && setopt NO_NOMATCH 2>/dev/null || true
 
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
@@ -8,6 +10,15 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 START_TIME=$(date +%s)
+EXPORT_ONLY=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --export-only|--export)
+            EXPORT_ONLY=true
+            ;;
+    esac
+done
 
 # 1. Locate and cd into brave-tab-manager
 if [ -f "scripts/ai/dataset_builder.py" ]; then
@@ -32,14 +43,17 @@ else
     fi
 fi
 
-# 2. Select Python inside .venv-ai (Python 3.12 with CUDA RTX A6000)
-if [ -f "$REPO_DIR/.venv-ai/bin/python" ]; then
-    PY="$REPO_DIR/.venv-ai/bin/python"
-    source "$REPO_DIR/.venv-ai/bin/activate" 2>/dev/null || true
-elif [ -f "$REPO_DIR/.venv/bin/python" ]; then
-    PY="$REPO_DIR/.venv/bin/python"
-    source "$REPO_DIR/.venv/bin/activate" 2>/dev/null || true
-else
+# 2. Select Python inside tabman-ai or .venv-ai
+PY=""
+for env_dir in "$REPO_DIR/tabman-ai" "$REPO_DIR/.venv-ai" "$REPO_DIR/.venv"; do
+    if [ -f "$env_dir/bin/python" ]; then
+        PY="$env_dir/bin/python"
+        source "$env_dir/bin/activate" 2>/dev/null || true
+        break
+    fi
+done
+
+if [ -z "$PY" ]; then
     PY="python3"
 fi
 
@@ -48,34 +62,37 @@ echo -e "${CYAN} TABMAN AI PIPELINE: EMBEDDINGGEMMA 2 (270M, 440M, 740M)${NC}"
 echo -e "${CYAN} Target: Ubuntu 24.04 | RTX A6000 48GB VRAM | Pure BF16${NC}"
 echo -e "${CYAN} Workspace: $REPO_DIR${NC}"
 echo -e "${CYAN} Python:    $($PY --version) ($PY)${NC}"
+echo -e "${CYAN} Mode:      $([ "$EXPORT_ONLY" = true ] && echo "Export & Serve Only" || echo "Full Train & Export")${NC}"
 echo -e "${CYAN}==================================================================${NC}"
 
-# PRE-FLIGHT: Verify / Upgrade transformers for embedding_gemma2 architecture
-if ! $PY -c "import transformers.models.embedding_gemma2" 2>/dev/null; then
-    echo -e "\n${YELLOW}>>> Updating transformers & sentence-transformers to support embedding_gemma2 architecture...${NC}"
-    uv pip install --python "$PY" "git+https://github.com/huggingface/transformers.git" "sentence-transformers>=6.1.0" --torch-backend=auto
+# PRE-FLIGHT: Ensure onnxscript & transformers are available
+if ! $PY -c "import onnxscript, transformers.models.embedding_gemma2" 2>/dev/null; then
+    echo -e "\n${YELLOW}>>> Updating onnxscript & transformers with embedding_gemma2 support...${NC}"
+    uv pip install --python "$PY" onnxscript "git+https://github.com/huggingface/transformers.git" "sentence-transformers>=6.1.0" --torch-backend=auto
 fi
 
-$PY -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; print(f'CUDA Verified: {torch.cuda.get_device_name(0)}')"
+if [ "$EXPORT_ONLY" = false ]; then
+    $PY -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; print(f'CUDA Verified: {torch.cuda.get_device_name(0)}')"
 
-# STEP 1: Generate Dataset
-echo -e "\n${YELLOW}>>> STEP 1/5: Generating Contrastive Triplet Dataset...${NC}"
-$PY scripts/ai/dataset_builder.py --per-domain 1000
+    # STEP 1: Generate Dataset
+    echo -e "\n${YELLOW}>>> STEP 1/5: Generating Contrastive Triplet Dataset...${NC}"
+    $PY scripts/ai/dataset_builder.py --per-domain 1000
 
-# STEP 2: Fine-Tuning Sweep Across All Variants (270M, 440M, 740M)
-echo -e "\n${YELLOW}>>> STEP 2/5: Fine-Tuning EmbeddingGemma 2 Matrix (270M, 440M, 740M)...${NC}"
-$PY scripts/ai/train_matrix.py --variant all --epochs 3 --precision bf16
+    # STEP 2: Fine-Tuning Sweep Across All Variants (270M, 440M, 740M)
+    echo -e "\n${YELLOW}>>> STEP 2/5: Fine-Tuning EmbeddingGemma 2 Matrix (270M, 440M, 740M)...${NC}"
+    $PY scripts/ai/train_matrix.py --variant all --epochs 3 --precision bf16
 
-# STEP 3: Evaluation Benchmark Across MRL Dimensions (768d, 512d, 256d, 128d)
-echo -e "\n${YELLOW}>>> STEP 3/5: Evaluating Held-Out Accuracy Across MRL Dimensions...${NC}"
-for v in 270m 440m 740m; do
-    MODEL_PATH="models/embeddinggemma-2-${v}-finetuned/final"
-    EVAL_JSON="models/embeddinggemma-2-${v}-finetuned/eval.json"
-    if [ -d "$MODEL_PATH" ]; then
-        echo -e "\n${GREEN}--- Evaluating Variant: ${v} ---${NC}"
-        $PY scripts/ai/evaluate.py --model "$MODEL_PATH" --save-json "$EVAL_JSON"
-    fi
-done
+    # STEP 3: Evaluation Benchmark Across MRL Dimensions (768d, 512d, 256d, 128d)
+    echo -e "\n${YELLOW}>>> STEP 3/5: Evaluating Held-Out Accuracy Across MRL Dimensions...${NC}"
+    for v in 270m 440m 740m; do
+        MODEL_PATH="models/embeddinggemma-2-${v}-finetuned/final"
+        EVAL_JSON="models/embeddinggemma-2-${v}-finetuned/eval.json"
+        if [ -d "$MODEL_PATH" ]; then
+            echo -e "\n${GREEN}--- Evaluating Variant: ${v} ---${NC}"
+            $PY scripts/ai/evaluate.py --model "$MODEL_PATH" --save-json "$EVAL_JSON"
+        fi
+    done
+fi
 
 # STEP 4: Export to ONNX INT8 (WebGPU) and Generate Ollama Modelfiles
 echo -e "\n${YELLOW}>>> STEP 4/5: Exporting Models to ONNX INT8 and Ollama Modelfiles...${NC}"
@@ -114,7 +131,7 @@ MINS=$(( DIFF / 60 ))
 SECS=$(( DIFF % 60 ))
 
 echo -e "\n${CYAN}==================================================================${NC}"
-echo -e "${CYAN} PIPELINE COMPLETE IN ${MINS}m ${SECS}s${NC}"
+echo -e "${CYAN} PIPELINE FINISHED IN ${MINS}m ${SECS}s${NC}"
 echo -e "${CYAN}==================================================================${NC}"
 echo -e "To serve Ollama over LAN / Remote API:"
 echo -e "  ${YELLOW}OLLAMA_HOST=0.0.0.0:11434 ollama serve${NC}\n"
