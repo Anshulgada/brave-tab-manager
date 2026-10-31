@@ -1,34 +1,3 @@
----
-name: Tab Discovery Research
-overview: Research-backed assessment of Tabman's tab-enumeration, grouping, Raindrop feature parity, personal micro-classifier, and forward roadmap — extension-first, local models, human-in-the-loop tagging.
-todos:
-  - id: phase-7a-ext-ai
-    content: "Phase 7A: Wire batch AI organize into extension with preview→confirm→apply (mirror organize.py + Zod validation)"
-    status: pending
-  - id: phase-7b-heuristics
-    content: "Phase 7B: Build shared URL parser + content-type rules + TF-IDF/embedding clustering as zero-cost Smart Group"
-    status: pending
-  - id: phase-7c-ollama
-    content: "Phase 7C: Add OllamaProvider to CLI and extension; document local model setup in .env.example"
-    status: pending
-  - id: phase-8-metadata
-    content: "Phase 8: Platform-specific metadata extractors (YouTube, GitHub, etc.) + optional OG unfurl cache"
-    status: pending
-  - id: phase-9-vd-host
-    content: "Phase 9 (optional): Native messaging host for Windows virtual desktop labels via IVirtualDesktopManager"
-    status: pending
-  - id: phase-10-raindrop-parity
-    content: "Phase 10: Raindrop-like bookmark features — save-from-extension, tags auto-create, filters, duplicates, reminders, highlights (prioritized subset)"
-    status: pending
-  - id: phase-11-personal-model
-    content: "Phase 11: Personal micro-classifier — teacher labeling + user approve/reject feedback loop + optional tiny browser model"
-    status: pending
-  - id: phase-9b-vd-without-native
-    content: "Phase 9B (preferred over native host): Extension-only VD substitutes — user context labels, hostname fingerprint, AI topic detect, park-with-context"
-    status: pending
-isProject: false
----
-
 # Tab Discovery, Grouping & Architecture — Research Plan
 
 ## Executive verdict
@@ -888,41 +857,41 @@ Empirical fine-tuning results executed on an NVIDIA RTX A6000 (48GB VRAM) in pur
 
 ### Model Performance Matrix
 
-| Variant | Total Parameters | Precision | Train Steps (3 Epochs) | Train Time | 768d Acc | 512d Acc | 256d Acc | 128d Acc (Browser WebGPU) | Mean Cosine Margin |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **270M** *(Text & Code)* | ~270M | BF16 | 339 | 6m 19s | **98.50%** | **98.50%** | **98.44%** | **98.50%** | +0.6074 |
-| **440M** *(Text + Vision)* | ~440M | BF16 | 675 | 6m 41s | **98.61%** | **98.67%** | **98.78%** | **98.67%** | +0.6427 |
-| **740M** *(Full Multimodal)* | ~740M | BF16 | 675 | 6m 45s | **98.61%** | **98.67%** | **98.78%** | **98.67%** | +0.6427 |
+| Variant                      | Total Parameters | Precision | Train Steps (3 Epochs) | Train Time | 768d Acc   | 512d Acc   | 256d Acc   | 128d Acc (Browser WebGPU) | Mean Cosine Margin |
+| ---------------------------- | ---------------- | --------- | ---------------------- | ---------- | ---------- | ---------- | ---------- | ------------------------- | ------------------ |
+| **270M** _(Text & Code)_     | ~270M            | BF16      | 339                    | 6m 19s     | **98.50%** | **98.50%** | **98.44%** | **98.50%**                | +0.6074            |
+| **440M** _(Text + Vision)_   | ~440M            | BF16      | 675                    | 6m 41s     | **98.61%** | **98.67%** | **98.78%** | **98.67%**                | +0.6427            |
+| **740M** _(Full Multimodal)_ | ~740M            | BF16      | 675                    | 6m 45s     | **98.61%** | **98.67%** | **98.78%** | **98.67%**                | +0.6427            |
 
 ### Domain Breakdown at 128-Dimension (Target Browser Runtime)
 
-| Domain Vertical | 270M Accuracy (128d) | 440M / 740M Accuracy (128d) | Separation Quality |
-| :--- | :--- | :--- | :--- |
-| `api_docs` | **100.0%** | **100.0%** | Complete separation from frontend/backend |
-| `audio_podcasts` | **100.0%** | **100.0%** | Clean isolation from video tutorials |
-| `backend_systems` | **100.0%** | **100.0%** | Clean microservice/database isolation |
-| `career_jobs` | **100.0%** | **100.0%** | Complete separation |
-| `cloud_devops` | **100.0%** | **100.0%** | Complete separation from general docs |
-| `community_discussions` | **100.0%** | **100.0%** | Complete separation |
-| `design_ui` | **100.0%** | **100.0%** | Complete separation |
-| `finance_crypto` | **100.0%** | **100.0%** | Complete separation |
-| `frontend_dev` | **100.0%** | **100.0%** | Clean component/framework isolation |
-| `gaming_entertainment` | **100.0%** | **100.0%** | Complete separation |
-| `internal_localhost` | **100.0%** | **100.0%** | Zero bleed into external sites |
-| `ml_ai` | **100.0%** | **100.0%** | Clean separation |
-| `news_media` | **100.0%** | **100.0%** | Complete separation |
-| `productivity_tools` | **100.0%** | **100.0%** | Complete separation |
-| `research_papers` | 72.7% | 75.8% | Technical vocabulary overlap (arXiv math/cs) |
-| `shopping_hardware` | **100.0%** | **100.0%** | Complete separation |
-| `travel_navigation` | **100.0%** | **100.0%** | Complete separation |
-| `video_tutorials` | **100.0%** | **100.0%** | Complete separation |
+| Domain Vertical         | 270M Accuracy (128d) | 440M / 740M Accuracy (128d) | Separation Quality                           |
+| ----------------------- | -------------------- | --------------------------- | -------------------------------------------- |
+| `api_docs`              | **100.0%**           | **100.0%**                  | Complete separation from frontend/backend    |
+| `audio_podcasts`        | **100.0%**           | **100.0%**                  | Clean isolation from video tutorials         |
+| `backend_systems`       | **100.0%**           | **100.0%**                  | Clean microservice/database isolation        |
+| `career_jobs`           | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `cloud_devops`          | **100.0%**           | **100.0%**                  | Complete separation from general docs        |
+| `community_discussions` | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `design_ui`             | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `finance_crypto`        | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `frontend_dev`          | **100.0%**           | **100.0%**                  | Clean component/framework isolation          |
+| `gaming_entertainment`  | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `internal_localhost`    | **100.0%**           | **100.0%**                  | Zero bleed into external sites               |
+| `ml_ai`                 | **100.0%**           | **100.0%**                  | Clean separation                             |
+| `news_media`            | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `productivity_tools`    | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `research_papers`       | 72.7%                | 75.8%                       | Technical vocabulary overlap (arXiv math/cs) |
+| `shopping_hardware`     | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `travel_navigation`     | **100.0%**           | **100.0%**                  | Complete separation                          |
+| `video_tutorials`       | **100.0%**           | **100.0%**                  | Complete separation                          |
 
 ### Deployment & Serving Specifications
 
-| Target Environment | Model Tier | Runtime / Quantization | Memory / VRAM | Latency per Search | Recommended Usage |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Client Browser (WebGPU)** | **270M** | **INT8 ONNX** | **~270 MB RAM** | **8 – 15 ms** | Default client-side tab grouping (zero server needed) |
-| **Client Browser (WebGPU)** | **440M** | **INT8 ONNX** | **~440 MB RAM** | **25 – 35 ms** | Vision-enabled tab grouping (favicons & screenshot embeddings) |
-| **Client CPU (Fallback)** | **270M** | INT8 ONNX (ORT CPU) | ~280 MB RAM | 30 – 45 ms | Local fallback for devices lacking WebGPU |
-| **LAN / GPU Server** | **270M** | BF16 (Ollama) | **0.6 GB VRAM** | **< 2 ms** | Remote high-throughput server (>1,500 tabs/sec) |
-| **LAN / GPU Server** | **740M** | BF16 (Ollama) | **1.5 GB VRAM** | **< 4 ms** | Full multimodal server (>800 tabs/sec) |
+| Target Environment          | Model Tier | Runtime / Quantization | Memory / VRAM   | Latency per Search | Recommended Usage                                              |
+| --------------------------- | ---------- | ---------------------- | --------------- | ------------------ | -------------------------------------------------------------- |
+| **Client Browser (WebGPU)** | **270M**   | **INT8 ONNX**          | **~270 MB RAM** | **8 – 15 ms**      | Default client-side tab grouping (zero server needed)          |
+| **Client Browser (WebGPU)** | **440M**   | **INT8 ONNX**          | **~440 MB RAM** | **25 – 35 ms**     | Vision-enabled tab grouping (favicons & screenshot embeddings) |
+| **Client CPU (Fallback)**   | **270M**   | INT8 ONNX (ORT CPU)    | ~280 MB RAM     | 30 – 45 ms         | Local fallback for devices lacking WebGPU                      |
+| **LAN / GPU Server**        | **270M**   | BF16 (Ollama)          | **0.6 GB VRAM** | **< 2 ms**         | Remote high-throughput server (>1,500 tabs/sec)                |
+| **LAN / GPU Server**        | **740M**   | BF16 (Ollama)          | **1.5 GB VRAM** | **< 4 ms**         | Full multimodal server (>800 tabs/sec)                         |

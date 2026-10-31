@@ -43,6 +43,12 @@ vault/
 *.sqlite
 *.sqlite3
 *.db
+
+# AI models and environments
+models/
+.venv-ai/
+tabman-ai/
+
 # Tooling output that should never be committed
 .playwright-mcp/
 artifacts/

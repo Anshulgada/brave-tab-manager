@@ -15,7 +15,17 @@ if [ ! -d "$VENV_NAME" ]; then
 fi
 
 echo "Installing PyTorch CUDA and AI dependencies..."
-uv pip install -r scripts/ai/requirements.txt --python "$VENV_NAME" --torch-backend=auto
+uv pip install \
+    torch torchvision torchaudio \
+    "git+https://github.com/huggingface/transformers.git" \
+    "sentence-transformers>=6.1.0" \
+    "datasets>=5.0.0" \
+    "accelerate>=1.15.0" \
+    "onnx>=1.23.0" \
+    "onnxruntime>=1.31.0" \
+    onnxscript \
+    --python "$VENV_NAME" \
+    --torch-backend=auto
 
 echo "AI environment $VENV_NAME successfully configured!"
 echo "To activate: source $VENV_NAME/bin/activate"
