@@ -436,6 +436,48 @@ Version sync check:
 uv run python scripts/check_versions.py
 ```
 
+### AI Fine-Tuning (EmbeddingGemma 2)
+
+Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2` family (`270m` text backbone, `440m` vision, `740m` full multimodal), optimized for high-VRAM GPUs (e.g. NVIDIA RTX 6000 Ada 48GB):
+
+1. **Generate the Golden Triplet Dataset:**
+   ```bash
+   python scripts/ai/dataset_builder.py --per-domain 1000
+   ```
+   Generates 18,000 curated contrastive triplets across 18 web verticals (`train.jsonl`, `val.jsonl`, `test.jsonl` in `data/ai_dataset/`).
+
+2. **Launch the Automated Training Sweep:**
+   ```bash
+   python scripts/ai/train_matrix.py --variant all --precision bf16 --batch-size 64
+   ```
+   Or train a specific model variant:
+   ```bash
+   python scripts/ai/train_matrix.py --variant 270m --precision bf16 --batch-size 128
+   ```
+
+3. **Run the Evaluation Benchmark:**
+   ```bash
+   # Evaluate text/code backbone (270M)
+   python scripts/ai/evaluate.py --model ./models/embeddinggemma-2-270m-finetuned/final
+
+   # Evaluate text+vision model (440M)
+   python scripts/ai/evaluate.py --model ./models/embeddinggemma-2-440m-finetuned/final
+
+   # Evaluate full multimodal model (740M)
+   python scripts/ai/evaluate.py --model ./models/embeddinggemma-2-740m-finetuned/final
+   ```
+   Evaluates MRR@10, triplet margin, and Matryoshka dimension truncation (768d vs 512d vs 256d vs 128d).
+
+4. **Export to INT8 ONNX (Browser WebGPU/NPU) and Ollama:**
+   ```bash
+   # Export 270M for in-browser WebGPU/NPU execution
+   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-270m-finetuned/final --output-dir ./models/onnx_270m
+
+   # Export 440M or 740M for local Ollama serving
+   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-440m-finetuned/final --output-dir ./models/onnx_440m
+   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-740m-finetuned/final --output-dir ./models/onnx_740m
+   ```
+
 ## Documentation
 
 | File                                                         | What it covers                                                        |

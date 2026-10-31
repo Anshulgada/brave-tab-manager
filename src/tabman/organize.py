@@ -37,6 +37,7 @@ from tabman.models import (
 )
 from tabman.providers import (
     AnthropicCompatibleProvider,
+    OllamaProvider,
     OpenAICompatibleProvider,
     OpenAIResponsesProvider,
     Suggestion,
@@ -51,6 +52,7 @@ __all__ = [
     "DeterministicProvider",
     "GeminiProvider",
     "MistralProvider",
+    "OllamaProvider",
     "OpenAICompatibleProvider",
     "OpenAIResponsesProvider",
     "OrganizeError",
@@ -182,7 +184,12 @@ class GeminiProvider:
 
 def _provider_from_profile(
     profile: ProviderProfile, secret: str
-) -> OpenAICompatibleProvider | OpenAIResponsesProvider | AnthropicCompatibleProvider:
+) -> (
+    OpenAICompatibleProvider
+    | OpenAIResponsesProvider
+    | AnthropicCompatibleProvider
+    | OllamaProvider
+):
     return provider_for_profile(profile, secret)
 
 

@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -57,7 +59,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -84,11 +88,32 @@ jobs:
           XDG_DATA_HOME="$HOME/.local/share"
           export XDG_DATA_HOME
           mkdir -p "$XDG_DATA_HOME/applications" "$HOME/.local/bin"
+
+          MOCK_DIR="$(mktemp -d)"
+          mkdir -p "$MOCK_DIR/bin" "$MOCK_DIR/apps"
+          cat > "$MOCK_DIR/apps/brave-browser.desktop" << 'EOF'
+          [Desktop Entry]
+          Name=Brave Web Browser
+          Exec=/usr/bin/brave-browser %U
+          Type=Application
+          EOF
+          cat > "$MOCK_DIR/bin/brave-browser" << 'EOF'
+          #!/bin/sh
+          exit 0
+          EOF
+          chmod +x "$MOCK_DIR/bin/brave-browser"
+
+          TABMAN_BRAVE_BIN="$MOCK_DIR/bin/brave-browser"
+          export TABMAN_BRAVE_BIN
+          TABMAN_SYSTEM_APP_DIRS="$MOCK_DIR/apps"
+          export TABMAN_SYSTEM_APP_DIRS
+
           sh scripts/install-cdp-linux.sh install
           sh scripts/install-cdp-linux.sh status
           test -f "$XDG_DATA_HOME/applications/brave-browser.desktop"
           sh scripts/install-cdp-linux.sh uninstall
           test ! -f "$XDG_DATA_HOME/applications/brave-browser.desktop"
+          rm -rf "$MOCK_DIR"
 
 
   extension:

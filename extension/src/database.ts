@@ -9,7 +9,7 @@ import type {
   Tag,
 } from './schema';
 
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 export const DEFAULT_DATABASE_NAME = 'tabman';
 
 export const VERSION_ONE_STORES = {
@@ -23,6 +23,10 @@ export const VERSION_ONE_STORES = {
 
 export const VERSION_TWO_STORES = {
   tabs: '&id, collectionId, position, hostname, normalizedHostname',
+} as const;
+
+export const VERSION_THREE_STORES = {
+  corrections: '&id, url, collectionName, timestamp',
 } as const;
 
 export interface CollectionRecord extends Omit<Collection, 'tabs' | 'tags'> {
@@ -59,6 +63,18 @@ export interface SettingsRecord extends Settings {
   parkingCollectionIds?: string[];
 }
 
+export interface CorrectionRecord {
+  id: string;
+  url: string;
+  title: string;
+  hostname: string;
+  collectionName: string;
+  tags: string[];
+  action: 'approve' | 'edit';
+  timestamp: string;
+  embedding?: number[];
+}
+
 export function normalizeHostname(hostname: string): string {
   return hostname.trim().toLowerCase().replace(/\.$/, '');
 }
@@ -70,12 +86,13 @@ export class TabmanDatabase extends Dexie {
   sessions!: EntityTable<SessionRecord, 'id'>;
   proposals!: EntityTable<ProposalRecord, 'id'>;
   settings!: EntityTable<SettingsRecord, 'id'>;
+  corrections!: EntityTable<CorrectionRecord, 'id'>;
 
   constructor(databaseName = DEFAULT_DATABASE_NAME) {
     super(databaseName);
 
     this.version(1).stores(VERSION_ONE_STORES);
-    this.version(DATABASE_VERSION)
+    this.version(2)
       .stores(VERSION_TWO_STORES)
       .upgrade((transaction: Transaction) =>
         transaction
@@ -85,5 +102,6 @@ export class TabmanDatabase extends Dexie {
             tab.normalizedHostname = normalizeHostname(tab.hostname);
           }),
       );
+    this.version(DATABASE_VERSION).stores(VERSION_THREE_STORES);
   }
 }

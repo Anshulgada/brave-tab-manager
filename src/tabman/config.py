@@ -31,6 +31,7 @@ class ApiFormat(StrEnum):
     OPENAI = "openai"
     RESPONSES = "responses"
     ANTHROPIC = "anthropic"
+    OLLAMA = "ollama"
 
 
 def _slug(value: str) -> str:

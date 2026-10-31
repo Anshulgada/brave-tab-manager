@@ -58,6 +58,16 @@ describe('provider endpoints', () => {
       'https://gateway.example/v1/messages',
     );
   });
+
+  it('uses the api/chat path for the Ollama format', () => {
+    expect(
+      endpointFor({
+        ...PROFILE,
+        baseUrl: 'http://127.0.0.1:11434',
+        apiFormat: 'ollama',
+      }),
+    ).toBe('http://127.0.0.1:11434/api/chat');
+  });
 });
 
 describe('host permissions', () => {
@@ -239,6 +249,41 @@ describe('asking a provider', () => {
     try {
       const items = await requestSuggestions(PROFILE, 'key', TABS, false);
       expect(items).toHaveLength(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('reads the answer from an Ollama JSON response', async () => {
+    const originalFetch = globalThis.fetch;
+    const ollamaProfile: ProviderProfile = {
+      ...PROFILE,
+      apiFormat: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+    };
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          model: 'embeddinggemma:latest',
+          message: {
+            role: 'assistant',
+            content: JSON.stringify({
+              items: TABS.map((tab) => ({
+                tabId: tab.id,
+                collectionName: 'Ollama Group',
+                tags: ['local'],
+              })),
+            }),
+          },
+          done: true,
+        }),
+        { status: 200 },
+      )) as typeof fetch;
+    try {
+      const items = await requestSuggestions(ollamaProfile, '', TABS, false);
+      expect(items).toHaveLength(2);
+      expect(items[0]?.collectionName).toBe('Ollama Group');
+      expect(items[0]?.tags).toEqual(['local']);
     } finally {
       globalThis.fetch = originalFetch;
     }

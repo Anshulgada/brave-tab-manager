@@ -308,13 +308,82 @@ class AnthropicCompatibleProvider(_HttpProvider):
         return validate_complete_batch(extract_json_payload(content), tabs)
 
 
+class OllamaProvider:
+    """Ollama local server endpoint (http://localhost:11434/api/chat)."""
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        *,
+        model: str,
+        name: str = "Ollama",
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.base_url = validate_base_url(base_url)
+        self.model = model
+        self.name = name
+        self._client = client
+
+    @property
+    def chat_url(self) -> str:
+        return f"{self.base_url}/api/chat"
+
+    def suggest(
+        self,
+        tabs: tuple[Tab, ...],
+        *,
+        include_full_url: bool,
+    ) -> tuple[Suggestion, ...]:
+        prompt = build_prompt(tabs, include_full_url=include_full_url)
+        body = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.0},
+        }
+        headers = {"Content-Type": "application/json"}
+        if self._client is not None:
+            response = self._client.post(self.chat_url, headers=headers, json=body)
+        else:
+            with httpx.Client(timeout=DEFAULT_TIMEOUT) as client:
+                response = client.post(self.chat_url, headers=headers, json=body)
+        if not response.is_success:
+            detail = response.text[:MAX_ERROR_DETAIL]
+            raise OrganizeError(
+                f"{self.name} answered with HTTP {response.status_code}: {detail}"
+            )
+        try:
+            payload = response.json()
+        except ValueError as err:
+            raise OrganizeError(f"{self.name} returned a malformed response") from err
+        content = payload.get("message", {}).get("content", "")
+        if not isinstance(content, str) or not content.strip():
+            raise OrganizeError(f"{self.name} response did not include any text")
+        return validate_complete_batch(extract_json_payload(content), tabs)
+
+    organize = suggest
+
+
 def provider_for_profile(
     profile: ProviderProfile,
-    api_key: str,
+    api_key: str = "",
     *,
     client: httpx.Client | None = None,
-) -> OpenAICompatibleProvider | OpenAIResponsesProvider | AnthropicCompatibleProvider:
+) -> (
+    OpenAICompatibleProvider
+    | OpenAIResponsesProvider
+    | AnthropicCompatibleProvider
+    | OllamaProvider
+):
     """Return the adapter that matches ``profile``'s API format."""
+    if profile.api_format is ApiFormat.OLLAMA:
+        return OllamaProvider(
+            base_url=profile.base_url,
+            model=profile.model,
+            name=profile.name,
+            client=client,
+        )
     if profile.api_format is ApiFormat.ANTHROPIC:
         return AnthropicCompatibleProvider(
             api_key,

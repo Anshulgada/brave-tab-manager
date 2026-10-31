@@ -1,5 +1,10 @@
 import { motion } from 'framer-motion';
 import { useRef, useState } from 'react';
+import {
+  exportCorrectionsJsonl,
+  recordCorrection,
+} from '../../../src/corrections';
+import { TabmanDatabase } from '../../../src/database';
 import type { OrganizeProposal } from '../../../src/messages';
 import { sendSwitchboardRequest } from '../../../src/runtime';
 import { hostInitial, hostLabel } from '../../../src/ui/format';
@@ -7,6 +12,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CloseIcon,
+  DownloadIcon,
   FolderIcon,
   LayersIcon,
   PencilIcon,
@@ -27,6 +33,7 @@ export function OrganizePanel({
 }: OrganizePanelProps) {
   const [proposal, setProposal] = useState<OrganizeProposal>();
   const [busy, setBusy] = useState(false);
+  const [excludedTabIds, setExcludedTabIds] = useState<Set<string>>(new Set());
   const [destinationMode, setDestinationMode] = useState<'multiple' | 'single'>(
     () => {
       try {
@@ -97,6 +104,7 @@ export function OrganizePanel({
         throw new Error('The organizer did not return a proposal');
       }
       setProposal(response.proposal);
+      setExcludedTabIds(new Set());
       setCustomGroups([]);
       setCollapsedGroups(new Set());
       onNotify(
@@ -113,17 +121,70 @@ export function OrganizePanel({
     }
   };
 
+  const toggleTabApproval = (tabId: string) => {
+    setExcludedTabIds((curr) => {
+      const next = new Set(curr);
+      if (next.has(tabId)) {
+        next.delete(tabId);
+      } else {
+        next.add(tabId);
+      }
+      return next;
+    });
+  };
+
+  const approveAll = () => {
+    setExcludedTabIds(new Set());
+  };
+
+  const rejectAll = () => {
+    setProposal(undefined);
+    setExcludedTabIds(new Set());
+  };
+
+  const handleExportTrainingData = async () => {
+    try {
+      const db = new TabmanDatabase();
+      const jsonl = await exportCorrectionsJsonl(db);
+      if (!jsonl.trim()) {
+        onNotify(
+          'No training feedback recorded yet. Organizing and approving tabs creates training signal!',
+          'info',
+        );
+        return;
+      }
+      const blob = new Blob([jsonl], { type: 'application/x-jsonlines' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tabman_corrections_${Date.now()}.jsonl`;
+      a.click();
+      URL.revokeObjectURL(url);
+      onNotify('Exported training feedback JSONL successfully!', 'success');
+    } catch {
+      onNotify('Failed to export training data', 'danger');
+    }
+  };
+
   const apply = async () => {
     if (!proposal || busy) {
       return;
     }
+    const activeItems = proposal.items.filter(
+      (item) => !excludedTabIds.has(item.tabId),
+    );
+    if (activeItems.length === 0) {
+      onNotify('No tabs selected in proposal', 'danger');
+      return;
+    }
+
     setBusy(true);
     try {
       const effectiveProposal: OrganizeProposal =
         destinationMode === 'single'
           ? {
               ...proposal,
-              items: proposal.items.map((item) => ({
+              items: activeItems.map((item) => ({
                 ...item,
                 collectionName: `Organized Tabs (${new Date().toLocaleDateString()})`,
                 tags: item.collectionName
@@ -131,7 +192,7 @@ export function OrganizePanel({
                   : item.tags,
               })),
             }
-          : proposal;
+          : { ...proposal, items: activeItems };
 
       const response = await sendSwitchboardRequest({
         type: 'library/organize/apply',
@@ -143,11 +204,30 @@ export function OrganizePanel({
       if (!('applied' in response)) {
         throw new Error('The proposal was not applied');
       }
+
+      // Record human-in-the-loop corrections to IndexedDB for continuous kNN learning!
+      try {
+        const db = new TabmanDatabase();
+        for (const item of activeItems) {
+          void recordCorrection(db, {
+            url: item.url || '',
+            title: item.title || '',
+            hostname: item.hostname || '',
+            collectionName: item.collectionName,
+            tags: item.tags || [],
+            action: 'approve',
+          });
+        }
+      } catch {
+        // non-blocking
+      }
+
       onNotify(
         `${response.applied.tabs} tabs saved in ${response.applied.collections} collections.`,
         'success',
       );
       setProposal(undefined);
+      setExcludedTabIds(new Set());
       onApplied();
     } catch (error) {
       onNotify(
@@ -408,10 +488,15 @@ export function OrganizePanel({
         >
           <header className="proposal-head">
             <div className="proposal-meta">
-              <strong>{proposal.items.length} tabs</strong>
+              <strong>
+                {proposal.items.length - excludedTabIds.size} of{' '}
+                {proposal.items.length} tabs
+              </strong>
               <span>
                 organized by <em>{proposal.provider}</em> into {groups.size}{' '}
                 {destinationMode === 'single' ? 'tags' : 'collections'}
+                {excludedTabIds.size > 0 &&
+                  ` (${excludedTabIds.size} excluded)`}
               </span>
             </div>
             <div className="proposal-toolbar">
@@ -460,6 +545,23 @@ export function OrganizePanel({
                 </button>
               </div>
 
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={handleExportTrainingData}
+                title="Export human-in-the-loop corrections as JSONL for GPU training"
+              >
+                <DownloadIcon size={14} />
+                Export Training Data
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={approveAll}
+                title="Approve and include all tabs"
+              >
+                Approve all
+              </button>
               <button
                 className="btn btn-ghost btn-sm"
                 type="button"
@@ -513,19 +615,23 @@ export function OrganizePanel({
               <button
                 className="btn btn-primary"
                 type="button"
-                disabled={busy || proposal.items.length === 0}
+                disabled={
+                  busy ||
+                  proposal.items.length === 0 ||
+                  proposal.items.length === excludedTabIds.size
+                }
                 onClick={() => void apply()}
               >
                 <CheckIcon size={15} />
-                Save to the library
+                Save {proposal.items.length - excludedTabIds.size} tabs
               </button>
               <button
                 className="btn btn-ghost"
                 type="button"
                 disabled={busy}
-                onClick={() => setProposal(undefined)}
+                onClick={rejectAll}
               >
-                Discard
+                Reject all
               </button>
             </div>
           </header>
@@ -660,6 +766,7 @@ export function OrganizePanel({
                         const isOver = dragOverTabId === item.tabId;
                         const isBefore = isOver && dropPosition === 'before';
                         const isAfter = isOver && dropPosition === 'after';
+                        const isExcluded = excludedTabIds.has(item.tabId);
                         return (
                           // biome-ignore lint/a11y/noStaticElementInteractions: Kanban card draggable element
                           <div
@@ -667,7 +774,7 @@ export function OrganizePanel({
                               isBefore ? 'drop-before' : ''
                             } ${isAfter ? 'drop-after' : ''} ${
                               draggingTabId === item.tabId ? 'is-dragging' : ''
-                            }`}
+                            } ${isExcluded ? 'is-excluded' : ''}`}
                             key={item.tabId}
                             draggable
                             onDragStart={(e) => {
@@ -721,6 +828,22 @@ export function OrganizePanel({
                             }}
                           >
                             <div className="kanban-card-main">
+                              {/* biome-ignore lint/a11y/useKeyWithClickEvents: Card checkbox click isolation */}
+                              <label
+                                className="kanban-card-check"
+                                title={
+                                  isExcluded
+                                    ? 'Excluded from organization (click to approve)'
+                                    : 'Approved for organization (click to exclude)'
+                                }
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!isExcluded}
+                                  onChange={() => toggleTabApproval(item.tabId)}
+                                />
+                              </label>
                               <span
                                 className="tab-favicon fallback"
                                 aria-hidden="true"

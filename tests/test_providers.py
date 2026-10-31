@@ -12,6 +12,7 @@ from tabman.errors import OrganizeError
 from tabman.models import Tab
 from tabman.providers import (
     AnthropicCompatibleProvider,
+    OllamaProvider,
     OpenAICompatibleProvider,
     OpenAIResponsesProvider,
     extract_json_payload,
@@ -431,3 +432,41 @@ def test_provider_for_profile_selects_the_matching_adapter() -> None:
     assert isinstance(
         provider_for_profile(anthropic_profile, "key"), AnthropicCompatibleProvider
     )
+
+    ollama_profile = ProviderProfile(
+        name="local-ollama",
+        base_url="http://localhost:11434",
+        model="gemma2:9b",
+        api_format=ApiFormat.OLLAMA,
+    )
+    assert isinstance(provider_for_profile(ollama_profile), OllamaProvider)
+
+
+def test_ollama_provider_posts_the_expected_request() -> None:
+    tabs = fixture_tabs()
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps(batch_payload(tabs)),
+                }
+            },
+        )
+
+    provider = OllamaProvider(
+        base_url="http://localhost:11434",
+        model="embeddinggemma-2",
+        client=mock_client(handler, captured),
+    )
+    suggestions = provider.organize(tabs, include_full_url=False)
+
+    assert len(suggestions) == len(tabs)
+    assert captured["url"] == "http://localhost:11434/api/chat"
+    assert captured["body"]["model"] == "embeddinggemma-2"
+    assert captured["body"]["format"] == "json"
+    assert captured["body"]["stream"] is False
+    assert captured["body"]["options"] == {"temperature": 0.0}
