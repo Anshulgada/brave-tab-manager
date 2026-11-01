@@ -65,13 +65,17 @@ def _ensure_onnxscript() -> None:
     try:
         importlib.import_module("onnxscript")
     except ImportError:
-        logger.info("onnxscript is required for ONNX export. Installing...")
+        logger.info(
+            "onnxscript is required for PyTorch ONNX exporter. Installing via uv/pip..."
+        )
         import subprocess
 
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "onnxscript"],
-            stdout=subprocess.DEVNULL,
-        )
+        try:
+            subprocess.check_call(["uv", "pip", "install", "onnxscript"])
+        except Exception:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "onnxscript"]
+            )
 
 
 def export_via_torch_onnx(
@@ -164,72 +168,12 @@ def export_to_onnx(
     output_dir: Path,
     quantize_int8: bool = True,
 ) -> Path:
-    """Export SentenceTransformer/HuggingFace model to ONNX with INT8 quantization."""
-    _patch_transformers_utils()
-
-    try:
-        import importlib
-
-        ort = importlib.import_module("optimum.onnxruntime")
-        ORTModelForFeatureExtraction = ort.ORTModelForFeatureExtraction
-        ORTQuantizer = ort.ORTQuantizer
-        ort_cfg = importlib.import_module("optimum.onnxruntime.configuration")
-        AutoQuantizationConfig = ort_cfg.AutoQuantizationConfig
-        transformers_mod = importlib.import_module("transformers")
-        AutoTokenizer = transformers_mod.AutoTokenizer
-
-        output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Exporting %s to ONNX in %s...", model_path, output_dir)
-
-        # 1. Export base ONNX model
-        ort_model = ORTModelForFeatureExtraction.from_pretrained(
-            model_path, export=True
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-        ort_model.save_pretrained(str(output_dir))
-        tokenizer.save_pretrained(str(output_dir))
-        logger.info("Base ONNX model exported.")
-
-        # 2. Quantize to INT8 for WebGPU / Browser performance
-        if quantize_int8:
-            quantized_dir = output_dir / "quantized_int8"
-            quantized_dir.mkdir(parents=True, exist_ok=True)
-            logger.info("Quantizing ONNX model to INT8 in %s...", quantized_dir)
-
-            quantizer = ORTQuantizer.from_pretrained(ort_model)
-            try:
-                dqconfig = AutoQuantizationConfig.avx2(
-                    is_static=False, per_channel=False
-                )
-                quantizer.quantize(
-                    save_dir=str(quantized_dir),
-                    quantization_config=dqconfig,
-                )
-            except Exception:
-                dqconfig = AutoQuantizationConfig.avx512_vnni(
-                    is_static=False, per_channel=False
-                )
-                quantizer.quantize(
-                    save_dir=str(quantized_dir),
-                    quantization_config=dqconfig,
-                )
-            tokenizer.save_pretrained(str(quantized_dir))
-            logger.info("INT8 Quantized ONNX model ready for browser WebGPU.")
-            return quantized_dir
-
-        return output_dir
-
-    except Exception as exc:
-        logger.warning(
-            "Optimum export failed (%s). Falling back to direct PyTorch ONNX export...",
-            exc,
-        )
-        return export_via_torch_onnx(
-            model_path=model_path,
-            output_dir=output_dir,
-            quantize_int8=quantize_int8,
-        )
+    """Export SentenceTransformer model to ONNX and model_int8.onnx with dynamic INT8 quantization."""
+    return export_via_torch_onnx(
+        model_path=model_path,
+        output_dir=output_dir,
+        quantize_int8=quantize_int8,
+    )
 
 
 def create_ollama_modelfile(
