@@ -800,8 +800,7 @@ export async function runWasmVsJsBenchmark(): Promise<WasmBenchmarkReport> {
     const jsLatency = (performance.now() - jsT0) / 5;
 
     const wasmT0 = performance.now();
-    for (let r = 0; r < 10; r++)
-      matryoshkaSlice(bigEmbeddings, 128, bigDim);
+    for (let r = 0; r < 10; r++) matryoshkaSlice(bigEmbeddings, 128, bigDim);
     const wasmLatency = (performance.now() - wasmT0) / 10;
 
     entries.push({
