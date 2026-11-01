@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 import sys
 from pathlib import Path
 
@@ -92,6 +93,8 @@ def export_via_torch_onnx(
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Loading model on CPU for ONNX export: %s...", model_path)
     model = SentenceTransformer(model_path, device="cpu")
+    # Ensure all parameters and computation graph are pure float32, removing any bfloat16 tensors
+    model = model.float()
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     tokenizer.save_pretrained(str(output_dir))
 
@@ -105,7 +108,7 @@ def export_via_torch_onnx(
         ) -> torch.Tensor:
             features = {"input_ids": input_ids, "attention_mask": attention_mask}
             out = self.st(features)
-            return out["sentence_embedding"]
+            return out["sentence_embedding"].float()
 
     wrapper = SentenceEmbeddingWrapper(model).eval()
     dummy = tokenizer(["sample search query for tab discovery"], return_tensors="pt")
@@ -129,26 +132,29 @@ def export_via_torch_onnx(
     logger.info("Base ONNX model successfully exported: %s", onnx_path)
 
     if quantize_int8:
-        quantized_dir = output_dir / "quantized_int8"
-        quantized_dir.mkdir(parents=True, exist_ok=True)
-        tokenizer.save_pretrained(str(quantized_dir))
-        quantized_onnx_path = quantized_dir / "model_quantized.onnx"
+        int8_dir = output_dir / "int8"
+        int8_dir.mkdir(parents=True, exist_ok=True)
+        tokenizer.save_pretrained(str(int8_dir))
+        int8_onnx_path = int8_dir / "model_int8.onnx"
 
         ort_quant = importlib.import_module("onnxruntime.quantization")
         quantize_dynamic = ort_quant.quantize_dynamic
         QuantType = ort_quant.QuantType
 
-        logger.info("Applying dynamic INT8 quantization to %s...", quantized_onnx_path)
+        logger.info("Applying dynamic INT8 quantization to %s...", int8_onnx_path)
         quantize_dynamic(
             model_input=str(onnx_path),
-            model_output=str(quantized_onnx_path),
+            model_output=str(int8_onnx_path),
             weight_type=QuantType.QInt8,
         )
         logger.info(
-            "INT8 Quantized ONNX model ready for browser WebGPU: %s",
-            quantized_onnx_path,
+            "INT8 ONNX model ready for WebGPU / NPU / CPU: %s",
+            int8_onnx_path,
         )
-        return quantized_dir
+        shutil.copy2(int8_onnx_path, output_dir / "model_int8.onnx")
+        # Also copy as model_quantized.onnx for full backward compatibility
+        shutil.copy2(int8_onnx_path, output_dir / "model_quantized.onnx")
+        return int8_dir
 
     return output_dir
 

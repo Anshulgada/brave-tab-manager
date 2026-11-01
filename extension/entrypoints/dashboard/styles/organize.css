@@ -744,3 +744,295 @@
   width: 100%;
   z-index: 10;
 }
+
+/* Tabman Official Hugging Face Models & Storage ---------------------------- */
+
+@keyframes hfFadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hf-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hf-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hf-section-head h2 {
+  align-items: center;
+  display: flex;
+  font-family: var(--font-display);
+  font-size: 16px;
+  gap: 8px;
+  margin: 0;
+}
+
+.hf-section-head p {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.hf-models-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.hf-model-card {
+  animation: hfFadeSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  transition:
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.hf-model-card:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.hf-model-card:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.hf-model-card:nth-child(3) {
+  animation-delay: 0.19s;
+}
+
+.hf-model-card:hover {
+  border-color: var(--brand);
+  box-shadow: 0 8px 24px -6px color-mix(in srgb, var(--brand) 18%, transparent);
+  transform: translateY(-2px);
+}
+
+.hf-model-card.active {
+  border-color: var(--brand);
+  box-shadow:
+    0 0 0 2px var(--brand),
+    0 8px 20px -4px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.hf-model-card-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.hf-model-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hf-model-title strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+}
+
+.hf-model-title span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hf-model-desc {
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.hf-model-foot {
+  align-items: center;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.hf-model-link {
+  align-items: center;
+  color: var(--brand-text);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 4px;
+  text-decoration: none;
+}
+
+.hf-model-link:hover {
+  text-decoration: underline;
+}
+
+.storage-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.storage-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.storage-card-head strong {
+  font-family: var(--font-display);
+  font-size: 14px;
+}
+
+.storage-card-head span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.storage-input-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.storage-input-row .input {
+  flex: 1;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 12.5px;
+  min-width: 240px;
+}
+
+.storage-scan-result {
+  align-items: center;
+  color: var(--brand-text);
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.hf-badge {
+  align-items: center;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 500;
+  gap: 4px;
+  padding: 2px 7px;
+}
+
+.provider-preset-full {
+  grid-column: 1 / -1;
+}
+
+.hardware-advisor {
+  animation: hfFadeSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.hardware-advisor:hover {
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--border));
+}
+
+.hardware-advisor-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.hardware-advisor-title {
+  align-items: center;
+  display: inline-flex;
+  font-size: 13.5px;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.hardware-advisor-specs {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hardware-advisor-reason {
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.precision-toggle-group {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.precision-toggle-btn {
+  align-items: center;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 6px;
+  padding: 6px 12px;
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.precision-toggle-btn:hover {
+  border-color: var(--brand);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.precision-toggle-btn.active {
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  border-color: var(--brand);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--brand) 18%, transparent);
+  color: var(--brand-text);
+  font-weight: 600;
+}

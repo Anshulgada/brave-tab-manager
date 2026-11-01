@@ -441,21 +441,27 @@ uv run python scripts/check_versions.py
 Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2` family (`270m` text backbone, `440m` vision, `740m` full multimodal), optimized for high-VRAM GPUs (e.g. NVIDIA RTX 6000 Ada 48GB):
 
 1. **Generate the Golden Triplet Dataset:**
+
    ```bash
    python scripts/ai/dataset_builder.py --per-domain 1000
    ```
+
    Generates 18,000 curated contrastive triplets across 18 web verticals (`train.jsonl`, `val.jsonl`, `test.jsonl` in `data/ai_dataset/`).
 
 2. **Launch the Automated Training Sweep:**
+
    ```bash
    python scripts/ai/train_matrix.py --variant all --precision bf16 --batch-size 64
    ```
+
    Or train a specific model variant:
+
    ```bash
    python scripts/ai/train_matrix.py --variant 270m --precision bf16 --batch-size 128
    ```
 
 3. **Run the Evaluation Benchmark:**
+
    ```bash
    # Evaluate text/code backbone (270M)
    python scripts/ai/evaluate.py --model ./models/embeddinggemma-2-270m-finetuned/final
@@ -466,9 +472,11 @@ Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2
    # Evaluate full multimodal model (740M)
    python scripts/ai/evaluate.py --model ./models/embeddinggemma-2-740m-finetuned/final
    ```
+
    Evaluates MRR@10, triplet margin, and Matryoshka dimension truncation (768d vs 512d vs 256d vs 128d).
 
 4. **Export to INT8 ONNX (Browser WebGPU/NPU) and Ollama:**
+
    ```bash
    # Export 270M for in-browser WebGPU/NPU execution
    python scripts/ai/export_models.py --model ./models/embeddinggemma-2-270m-finetuned/final --output-dir ./models/onnx_270m
@@ -477,6 +485,22 @@ Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2
    python scripts/ai/export_models.py --model ./models/embeddinggemma-2-440m-finetuned/final --output-dir ./models/onnx_440m
    python scripts/ai/export_models.py --model ./models/embeddinggemma-2-740m-finetuned/final --output-dir ./models/onnx_740m
    ```
+
+5. **Serve via High-Throughput GPU Server:**
+
+   ```bash
+   python scripts/ai/serve_embeddings.py --port 11434 --variant 270m
+   ```
+
+   Provides sub-2ms embedding inference over OpenAI (`/v1/embeddings`) and Ollama (`/api/embeddings`) endpoints.
+
+6. **Published Hugging Face Models:**
+   - [`Anshulgada/tabman-embeddinggemma-2-270m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-270m) — Fine-tuned (Text & Code) with WebGPU INT8 ONNX
+   - [`Anshulgada/tabman-embeddinggemma-2-440m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-440m) — Fine-tuned (Text + Vision) with WebGPU INT8 ONNX
+   - [`Anshulgada/tabman-embeddinggemma-2-740m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-740m) — Fine-tuned (Full Multimodal) with WebGPU INT8 ONNX
+   - [`Anshulgada/embeddinggemma-2-270m`](https://huggingface.co/Anshulgada/embeddinggemma-2-270m) — Base Text & Code Backbone
+   - [`Anshulgada/embeddinggemma-2-440m`](https://huggingface.co/Anshulgada/embeddinggemma-2-440m) — Base Text + Vision Backbone
+   - [`Anshulgada/embeddinggemma-2-740m`](https://huggingface.co/Anshulgada/embeddinggemma-2-740m) — Base Full Multimodal Backbone
 
 ## Documentation
 

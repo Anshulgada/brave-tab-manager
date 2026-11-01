@@ -243,7 +243,7 @@ import numpy as np
 import onnxruntime as ort
 from transformers import AutoTokenizer
 
-session = ort.InferenceSession("onnx/model_quantized.onnx")
+session = ort.InferenceSession("onnx/model_int8.onnx")
 tokenizer = AutoTokenizer.from_pretrained("{repo_id}")
 
 inputs = tokenizer(["Brave Browser: Tab Groups API"], return_tensors="np")
@@ -563,17 +563,10 @@ def upload_finetuned(
     username: str,
     variant: str,
     private: bool = False,
+    onnx_only: bool = False,
 ) -> None:
     """Upload fine-tuned model checkpoint and staged ONNX WebGPU bundle."""
-    finetuned_dir = ROOT / "models" / f"embeddinggemma-2-{variant}-finetuned" / "final"
-    if not finetuned_dir.exists():
-        msg = f"Fine-tuned model checkpoint not found at: {finetuned_dir}"
-        raise FileNotFoundError(msg)
-
-    # Copy evaluation metrics if available
-    eval_file = ROOT / "models" / f"embeddinggemma-2-{variant}-finetuned" / "eval.json"
-    if eval_file.exists():
-        shutil.copy2(eval_file, finetuned_dir / "eval.json")
+    repo_id = f"{username}/tabman-embeddinggemma-2-{variant}"
 
     # Stage ONNX files cleanly so onnx/ contains model.onnx and model_quantized.onnx
     exported_variant_dir = ROOT / "models" / f"exported-{variant}"
@@ -586,14 +579,17 @@ def upload_finetuned(
         base_onnx = exported_variant_dir / "model.onnx"
         if base_onnx.exists():
             shutil.copy2(base_onnx, onnx_stage_dir / "model.onnx")
-        # 2. Quantized INT8 model
-        quant_candidates = [
+        # 2. INT8 model (staged as model_int8.onnx and model_quantized.onnx)
+        int8_candidates = [
+            exported_variant_dir / "int8" / "model_int8.onnx",
+            exported_variant_dir / "model_int8.onnx",
             exported_variant_dir / "quantized_int8" / "model_quantized.onnx",
             exported_variant_dir / "model_quantized.onnx",
         ]
-        for qc in quant_candidates:
-            if qc.exists():
-                shutil.copy2(qc, onnx_stage_dir / "model_quantized.onnx")
+        for c in int8_candidates:
+            if c.exists():
+                shutil.copy2(c, onnx_stage_dir / "model_int8.onnx")
+                shutil.copy2(c, onnx_stage_dir / "model_quantized.onnx")
                 break
         # 3. Tokenizer files
         for f in exported_variant_dir.glob("tokenizer*.*"):
@@ -603,6 +599,38 @@ def upload_finetuned(
 
         if any(onnx_stage_dir.glob("*.onnx")):
             onnx_upload_dir = onnx_stage_dir
+
+    if onnx_only:
+        if onnx_upload_dir and onnx_upload_dir.exists():
+            import importlib
+
+            huggingface_hub = importlib.import_module("huggingface_hub")
+            api = huggingface_hub.HfApi()
+            logger.info("Uploading updated INT8 ONNX bundle to %s/onnx...", repo_id)
+            api.upload_folder(
+                folder_path=str(onnx_upload_dir),
+                path_in_repo="onnx",
+                repo_id=repo_id,
+                commit_message="fix(onnx): export with float32 weights and dynamic INT8 quantization for CPU/WebGPU",
+            )
+            logger.info("ONNX WebGPU bundle updated for %s", repo_id)
+            return
+        logger.error(
+            "No ONNX artifacts found in %s to upload for %s. Run export_models.py first!",
+            exported_variant_dir,
+            repo_id,
+        )
+        return
+
+    finetuned_dir = ROOT / "models" / f"embeddinggemma-2-{variant}-finetuned" / "final"
+    if not finetuned_dir.exists():
+        msg = f"Fine-tuned model checkpoint not found at: {finetuned_dir}"
+        raise FileNotFoundError(msg)
+
+    # Copy evaluation metrics if available
+    eval_file = ROOT / "models" / f"embeddinggemma-2-{variant}-finetuned" / "eval.json"
+    if eval_file.exists():
+        shutil.copy2(eval_file, finetuned_dir / "eval.json")
 
     params_map = {
         "270m": "~270M parameters",
@@ -657,6 +685,11 @@ def main() -> int:
         help="Only upload fine-tuned models (3 models)",
     )
     parser.add_argument(
+        "--onnx-only",
+        action="store_true",
+        help="Only upload / update the ONNX WebGPU artifacts in the repos",
+    )
+    parser.add_argument(
         "--private",
         action="store_true",
         help="Make repositories private",
@@ -679,14 +712,16 @@ def main() -> int:
     for v in variants:
         logger.info(">>> Processing Fine-Tuned Model: %s...", v)
         try:
-            upload_finetuned(args.username, v, private=args.private)
+            upload_finetuned(
+                args.username, v, private=args.private, onnx_only=args.onnx_only
+            )
         except Exception as e:
             logger.error(
                 "Failed to upload fine-tuned variant %s: %s", v, e, exc_info=True
             )
 
     # 2. Upload Raw Base Models if requested
-    if upload_raw:
+    if upload_raw and not args.onnx_only:
         for v in variants:
             logger.info(">>> Processing Base/Raw Model: %s...", v)
             try:

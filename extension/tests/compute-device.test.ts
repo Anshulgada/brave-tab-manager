@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   detectBestComputeDevice,
+  detectHardwareProfile,
   PINNED_EMBEDDING_MODELS,
+  TABMAN_OFFICIAL_MODELS,
   verifySha256,
 } from '../src/compute-device';
 
@@ -51,7 +53,26 @@ describe('hardware acceleration detection', () => {
     });
   });
 
-  it('detects NPU when WebNN ml.createContext succeeds', async () => {
+  it('detects WebGPU as primary when navigator.gpu is available', async () => {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        gpu: {
+          requestAdapter: vi.fn().mockResolvedValue({}),
+        },
+        ml: {
+          createContext: vi.fn().mockResolvedValue({ deviceType: 'npu' }),
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const result = await detectBestComputeDevice();
+    expect(result.device).toBe('webgpu');
+    expect(result.label).toContain('GPU');
+  });
+
+  it('detects NPU when WebGPU is absent but WebNN ml.createContext succeeds', async () => {
     Object.defineProperty(globalThis, 'navigator', {
       value: {
         ml: {
@@ -67,23 +88,7 @@ describe('hardware acceleration detection', () => {
     expect(result.label).toContain('NPU');
   });
 
-  it('detects WebGPU when WebNN is absent but navigator.gpu is available', async () => {
-    Object.defineProperty(globalThis, 'navigator', {
-      value: {
-        gpu: {
-          requestAdapter: vi.fn().mockResolvedValue({}),
-        },
-      },
-      configurable: true,
-      writable: true,
-    });
-
-    const result = await detectBestComputeDevice();
-    expect(result.device).toBe('webgpu');
-    expect(result.label).toContain('GPU');
-  });
-
-  it('falls back to CPU WASM SIMD when neither NPU nor WebGPU is available', async () => {
+  it('falls back to CPU WASM SIMD when neither GPU nor NPU is available', async () => {
     Object.defineProperty(globalThis, 'navigator', {
       value: {},
       configurable: true,
@@ -93,5 +98,40 @@ describe('hardware acceleration detection', () => {
     const result = await detectBestComputeDevice();
     expect(result.device).toBe('cpu');
     expect(result.label).toContain('CPU');
+  });
+
+  it('detects hardware profile and generates recommendations', async () => {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        hardwareConcurrency: 16,
+        deviceMemory: 32,
+        gpu: {
+          requestAdapter: vi.fn().mockResolvedValue({
+            requestAdapterInfo: vi
+              .fn()
+              .mockResolvedValue({ description: 'NVIDIA RTX 4080' }),
+          }),
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const profile = await detectHardwareProfile();
+    expect(profile.device).toBe('webgpu');
+    expect(profile.gpuName).toBe('NVIDIA RTX 4080');
+    expect(profile.cpuThreads).toBe(16);
+    expect(profile.ramGb).toBe(32);
+    expect(profile.recommendedPrecision).toBe('int8');
+    expect(profile.recommendationReason).toContain('NVIDIA RTX 4080');
+  });
+
+  it('official models include both INT8 and FP32 size specs', () => {
+    expect(TABMAN_OFFICIAL_MODELS.length).toBe(3);
+    for (const model of TABMAN_OFFICIAL_MODELS) {
+      expect(model.sizeInt8).toMatch(/MB|GB/);
+      expect(model.sizeFp32).toMatch(/MB|GB/);
+      expect(model.repo).toMatch(/^Anshulgada\/tabman-embeddinggemma-2-/);
+    }
   });
 });

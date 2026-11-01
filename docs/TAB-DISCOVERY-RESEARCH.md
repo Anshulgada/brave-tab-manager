@@ -895,3 +895,70 @@ Empirical fine-tuning results executed on an NVIDIA RTX A6000 (48GB VRAM) in pur
 | **Client CPU (Fallback)**   | **270M**   | INT8 ONNX (ORT CPU)    | ~280 MB RAM     | 30 – 45 ms         | Local fallback for devices lacking WebGPU                      |
 | **LAN / GPU Server**        | **270M**   | BF16 (Ollama)          | **0.6 GB VRAM** | **< 2 ms**         | Remote high-throughput server (>1,500 tabs/sec)                |
 | **LAN / GPU Server**        | **740M**   | BF16 (Ollama)          | **1.5 GB VRAM** | **< 4 ms**         | Full multimodal server (>800 tabs/sec)                         |
+
+---
+
+## Part 15 — Hugging Face Model Registry & Deployment Architecture
+
+All 6 models (3 fine-tuned domain models with WebGPU INT8 ONNX artifacts and 3 raw base checkpoints) are publicly published on the Hugging Face Hub under the Apache 2.0 license:
+
+### 15.1 Published Model Registry
+
+| Model Repository                                                                                            | Tier           | Parameters | Checkpoint Contents                                                                   | Primary Target                            |
+| :---------------------------------------------------------------------------------------------------------- | :------------- | :--------- | :------------------------------------------------------------------------------------ | :---------------------------------------- |
+| [`Anshulgada/tabman-embeddinggemma-2-270m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-270m) | **Fine-Tuned** | ~270M      | Pure BF16 `safetensors`, INT8 WebGPU ONNX (`/onnx/model_quantized.onnx`), `eval.json` | **In-Browser WebGPU Extension (8–15 ms)** |
+| [`Anshulgada/tabman-embeddinggemma-2-440m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-440m) | **Fine-Tuned** | ~440M      | Pure BF16 `safetensors`, INT8 WebGPU ONNX (`/onnx/model_quantized.onnx`), `eval.json` | Multimodal Text + Vision Tab Grouping     |
+| [`Anshulgada/tabman-embeddinggemma-2-740m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-740m) | **Fine-Tuned** | ~740M      | Pure BF16 `safetensors`, INT8 WebGPU ONNX (`/onnx/model_quantized.onnx`), `eval.json` | Full Multimodal Hub (>800 tabs/sec)       |
+| [`Anshulgada/embeddinggemma-2-270m`](https://huggingface.co/Anshulgada/embeddinggemma-2-270m)               | **Raw Base**   | ~270M      | Standalone Text & Code base backbone                                                  | Custom RAG / General Text Embeddings      |
+| [`Anshulgada/embeddinggemma-2-440m`](https://huggingface.co/Anshulgada/embeddinggemma-2-440m)               | **Raw Base**   | ~440M      | Standalone Text + Vision base backbone                                                | General Multimodal Similarity             |
+| [`Anshulgada/embeddinggemma-2-740m`](https://huggingface.co/Anshulgada/embeddinggemma-2-740m)               | **Raw Base**   | ~740M      | Standalone Full Multimodal base backbone                                              | Multimodal Base Foundation                |
+
+### 15.2 Repository Granularity: Why Separate Repositories?
+
+On Hugging Face Hub, separate repositories per architecture/size are the standard industry practice (e.g., `google/gemma-2-2b`, `BAAI/bge-small-en-v1.5`, `Xenova/all-MiniLM-L6-v2`) for several critical reasons:
+
+1. **In-Browser Transformers.js Compatibility:** Transformers.js (`@huggingface/transformers`) resolves models via `https://huggingface.co/{repo_id}/resolve/main/onnx/model_quantized.onnx`. Having dedicated repositories guarantees standard URL resolution without fragile subfolder overrides.
+2. **Package Footprint & Bandwidth:** A client extension loading the 270M model only downloads the ~270 MB INT8 ONNX file. In a single monorepo containing all 6 models, any `git clone` or bulk cache would pull down 2+ GB of unnecessary weights.
+3. **Independent Discovery & Model Cards:** Each model has a unique parameter scale, accuracy profile (98.50% vs 98.67%), and modality scope. Separate repositories allow dedicated Hugging Face tags, interactive widgets, download metrics, and publication-grade Model Cards.
+
+### 15.3 Deployment Consumption Modes
+
+#### A. In-Browser WebGPU (Transformers.js)
+
+```javascript
+import { pipeline } from "@huggingface/transformers";
+
+const extractor = await pipeline(
+  "feature-extraction",
+  "Anshulgada/tabman-embeddinggemma-2-270m",
+  { dtype: "q8", device: "webgpu" },
+);
+
+const output = await extractor("GitHub PR #123: Fix React memory leak", {
+  pooling: "mean",
+  normalize: true,
+});
+// 128-dimensional Matryoshka slice:
+const embedding128 = Array.from(output.data).slice(0, 128);
+```
+
+#### B. LAN GPU Embedding Server (OpenAI / Ollama API)
+
+Run the server on the GPU workstation:
+
+```bash
+python scripts/ai/serve_embeddings.py --port 11434 --variant 270m
+```
+
+Consume via standard OpenAI client:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="not-needed")
+res = client.embeddings.create(
+    input=["MDN: WebGPU API", "StackOverflow: useEffect cleanup"],
+    model="Anshulgada/tabman-embeddinggemma-2-270m",
+)
+vec_128 = res.data[0].embedding  # 128 dimensions returned natively
+```
