@@ -586,8 +586,8 @@ Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2
 3. Commit and tag the release:
 
    ```powershell
-   git tag v0.5.8
-   git push origin v0.5.8
+   git tag v0.6.0
+   git push origin v0.6.0
    ```
 
 4. `.github/workflows/release.yml` builds the wheel/sdist and extension zip, publishes to PyPI, and creates a GitHub Release with the install scripts.
