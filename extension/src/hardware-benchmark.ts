@@ -13,6 +13,7 @@
  */
 
 import type { ComputeDeviceChoice } from './compute-device';
+import { isWasmAvailable, matryoshkaSlice } from './rust-wasm';
 
 export interface BenchmarkDeviceResult {
   id: ComputeDeviceChoice;
@@ -46,6 +47,28 @@ const MAP_MODE_READ = 0x0001;
  * Represents a Matryoshka / sentence embedding projection pass.
  */
 export function benchmarkCpuWorkload(passes = 5): number {
+  if (isWasmAvailable()) {
+    const M = 128;
+    const K = 768;
+    const embeddings: Float32Array[] = [];
+    for (let i = 0; i < M; i++) {
+      const v = new Float32Array(K);
+      for (let j = 0; j < K; j++) {
+        v[j] = ((i + j) % 23) * 0.04 - 0.5;
+      }
+      embeddings.push(v);
+    }
+    // Warmup pass
+    matryoshkaSlice(embeddings, 128, K);
+    // Timed passes
+    const t0 = performance.now();
+    for (let p = 0; p < passes; p++) {
+      matryoshkaSlice(embeddings, 128, K);
+    }
+    const total = performance.now() - t0;
+    return Math.max(0.1, Math.round((total / passes) * 100) / 100);
+  }
+
   const M = 128;
   const K = 768;
   const a = new Float32Array(M * K);
@@ -696,9 +719,12 @@ export async function runHardwareBenchmark(
   const cpuLatency = benchmarkCpuWorkload();
   const cpuThreads =
     typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
+  const cpuDeviceName = isWasmAvailable()
+    ? `CPU Rust WASM SIMD (${cpuThreads} Threads)`
+    : `CPU SIMD (${cpuThreads} Threads)`;
   results.push({
     id: 'cpu',
-    name: `CPU SIMD (${cpuThreads} Threads)`,
+    name: cpuDeviceName,
     category: 'cpu',
     latencyMs: cpuLatency,
     available: true,
@@ -708,7 +734,7 @@ export async function runHardwareBenchmark(
   const sorted = [...results].sort((a, b) => a.latencyMs - b.latencyMs);
   const cpuFallback: BenchmarkDeviceResult = {
     id: 'cpu',
-    name: `CPU SIMD (${cpuThreads} Threads)`,
+    name: cpuDeviceName,
     category: 'cpu',
     latencyMs: cpuLatency,
     available: true,
