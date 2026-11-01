@@ -8,6 +8,7 @@
 
 import {
   deterministicSuggestions,
+  localSemanticSuggestions,
   type OrganizeTab,
   originPattern,
   type ProviderProfile,
@@ -109,6 +110,26 @@ export async function buildProposal(
   if (!profile) {
     throw new OrganizeError('Add and activate a provider first');
   }
+
+  if (profile.apiFormat === 'tabman-local') {
+    const suggestions = localSemanticSuggestions(tabs, profile.model);
+    return {
+      provider: profile.name,
+      createdAt,
+      items: suggestions.map((suggestion): OrganizeProposalItem => {
+        const tab = tabs.find((candidate) => candidate.id === suggestion.tabId);
+        return {
+          tabId: suggestion.tabId,
+          title: tab?.title ?? '',
+          url: tab?.url ?? '',
+          hostname: tab?.hostname ?? '',
+          collectionName: suggestion.collectionName,
+          tags: suggestion.tags,
+        };
+      }),
+    };
+  }
+
   const apiKey = await loadApiKey(settings.rememberKey);
   if (!apiKey) {
     throw new OrganizeError(`No API key is stored for ${profile.name}`);
@@ -145,6 +166,9 @@ export function activeProfile(
 export async function grantHostPermission(
   profile: ProviderProfile,
 ): Promise<void> {
+  if (profile.apiFormat === 'tabman-local') {
+    return;
+  }
   const pattern = originPattern(profile.baseUrl);
   const granted = await browser.permissions.contains({ origins: [pattern] });
   if (granted) {
@@ -164,7 +188,12 @@ export async function readProviderSettings(): Promise<{
   hasKey: boolean;
 }> {
   const settings = await loadProviderSettings();
-  return { settings, hasKey: await hasApiKey(settings.rememberKey) };
+  const profile = activeProfile(settings);
+  const hasKey =
+    profile?.apiFormat === 'tabman-local'
+      ? true
+      : await hasApiKey(settings.rememberKey);
+  return { settings, hasKey };
 }
 
 /** Add or update a provider profile. */

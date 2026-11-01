@@ -5,7 +5,68 @@
  * with SHA-256 cryptographic verification for Hugging Face weights.
  */
 
+import {
+  getCachedBenchmarkReport,
+  type HardwareBenchmarkReport,
+  inspectSystemHardwareTargets,
+} from './hardware-benchmark';
+
 export type ComputeDevice = 'npu' | 'webgpu' | 'cpu';
+export type ComputeDeviceChoice =
+  | 'auto'
+  | 'webgpu'
+  | 'webgpu-discrete'
+  | 'webgpu-integrated'
+  | 'npu'
+  | 'cpu';
+
+export function resolveEffectiveDevice(
+  choice: ComputeDeviceChoice,
+  detected: ComputeDevice,
+  benchmarkReport?: HardwareBenchmarkReport | null,
+): ComputeDevice {
+  if (choice === 'auto') {
+    if (benchmarkReport?.fastestChoice) {
+      if (
+        benchmarkReport.fastestChoice === 'webgpu-discrete' ||
+        benchmarkReport.fastestChoice === 'webgpu-integrated' ||
+        benchmarkReport.fastestChoice === 'webgpu'
+      ) {
+        return 'webgpu';
+      }
+      if (benchmarkReport.fastestChoice === 'npu') {
+        return 'npu';
+      }
+      return 'cpu';
+    }
+    return detected;
+  }
+  if (choice === 'webgpu-discrete' || choice === 'webgpu-integrated') {
+    return 'webgpu';
+  }
+  if (choice === 'npu') {
+    return 'npu';
+  }
+  if (choice === 'webgpu') {
+    return 'webgpu';
+  }
+  return 'cpu';
+}
+
+export function resolveGpuPowerPreference(
+  choice: ComputeDeviceChoice,
+  benchmarkReport?: HardwareBenchmarkReport | null,
+): 'high-performance' | 'low-power' | undefined {
+  if (choice === 'webgpu-discrete') return 'high-performance';
+  if (choice === 'webgpu-integrated') return 'low-power';
+  if (choice === 'auto' && benchmarkReport?.fastestChoice) {
+    if (benchmarkReport.fastestChoice === 'webgpu-discrete')
+      return 'high-performance';
+    if (benchmarkReport.fastestChoice === 'webgpu-integrated')
+      return 'low-power';
+  }
+  return undefined;
+}
 
 export interface ModelSpec {
   id: string;
@@ -193,12 +254,16 @@ export interface HardwareProfile {
   device: ComputeDevice;
   deviceLabel: string;
   gpuName?: string;
+  hasDualGpu?: boolean;
+  dGpuName?: string;
+  iGpuName?: string;
   cpuThreads: number;
   ramGb?: number;
   hasNpu: boolean;
   recommendedPrecision: ModelPrecision;
   recommendedModelId: string;
   recommendationReason: string;
+  benchmarkReport?: HardwareBenchmarkReport | null;
 }
 
 /**
@@ -210,6 +275,9 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
   let deviceLabel = 'CPU (WebAssembly SIMD)';
   let gpuName: string | undefined;
   let hasNpu = false;
+  let hasDualGpu = false;
+  let dGpuName: string | undefined;
+  let iGpuName: string | undefined;
 
   const cpuThreads =
     typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
@@ -218,70 +286,81 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
       ? (navigator as unknown as { deviceMemory?: number }).deviceMemory
       : undefined;
 
-  // 1. Check for WebGPU (GPU Primary)
-  try {
-    if (
-      typeof navigator !== 'undefined' &&
-      'gpu' in navigator &&
-      navigator.gpu
-    ) {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (adapter) {
-        device = 'webgpu';
-        deviceLabel = 'GPU (Hardware Acceleration via WebGPU)';
-        const info =
-          typeof (
-            adapter as unknown as {
-              requestAdapterInfo?: () => Promise<Record<string, string>>;
-            }
-          ).requestAdapterInfo === 'function'
-            ? await (
-                adapter as unknown as {
-                  requestAdapterInfo: () => Promise<Record<string, string>>;
-                }
-              ).requestAdapterInfo()
-            : undefined;
-        if (info?.description) {
-          gpuName = info.description;
-        } else if (info?.vendor) {
-          gpuName = `${info.vendor} ${info.architecture || ''}`.trim();
+  // 1. Inspect GPUs (High-Performance dGPU vs Low-Power iGPU)
+  const hardware = await inspectSystemHardwareTargets();
+  hasDualGpu = hardware.hasDualGpu;
+  dGpuName = hardware.dGpuName;
+  iGpuName = hardware.iGpuName;
+  hasNpu = hardware.hasNpu;
+
+  if (hasDualGpu) {
+    device = 'webgpu';
+    gpuName = `${dGpuName} + ${iGpuName}`;
+    deviceLabel = `Dual GPU: ${dGpuName} (Discrete) + ${iGpuName} (Integrated)`;
+  } else if (hardware.singleGpuName) {
+    device = 'webgpu';
+    gpuName = hardware.singleGpuName;
+    deviceLabel = `${gpuName} (WebGPU)`;
+  } else {
+    // Fallback single adapter check
+    try {
+      if (
+        typeof navigator !== 'undefined' &&
+        'gpu' in navigator &&
+        navigator.gpu
+      ) {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (adapter) {
+          device = 'webgpu';
+          deviceLabel = 'GPU (Hardware Acceleration via WebGPU)';
+          const info =
+            typeof (
+              adapter as unknown as {
+                requestAdapterInfo?: () => Promise<Record<string, string>>;
+              }
+            ).requestAdapterInfo === 'function'
+              ? await (
+                  adapter as unknown as {
+                    requestAdapterInfo: () => Promise<Record<string, string>>;
+                  }
+                ).requestAdapterInfo()
+              : (adapter as unknown as { info?: Record<string, string> }).info;
+          if (info?.description) {
+            gpuName = info.description;
+          } else if (info?.vendor) {
+            gpuName = `${info.vendor} ${info.architecture || ''}`.trim();
+          }
+          if (gpuName) {
+            deviceLabel = `${gpuName} (WebGPU)`;
+          }
         }
       }
+    } catch {
+      // WebGPU not available
     }
-  } catch {
-    // WebGPU not available
   }
 
-  // 2. Check for WebNN DirectML NPU (NPU Secondary)
-  try {
-    const nav = navigator as unknown as {
-      ml?: {
-        createContext?: (options?: {
-          deviceType?: 'npu' | 'gpu' | 'cpu';
-        }) => Promise<unknown>;
-      };
-    };
-    if (nav.ml && typeof nav.ml.createContext === 'function') {
-      const npu = await nav.ml.createContext({ deviceType: 'npu' });
-      if (npu) {
-        hasNpu = true;
-        if (device === 'cpu') {
-          device = 'npu';
-          deviceLabel = 'NPU (WebNN Neural Processing Unit)';
-        }
-      }
-    }
-  } catch {
-    // WebNN not present
+  // 2. Check for NPU
+  if (hasNpu && device === 'cpu') {
+    device = 'npu';
+    deviceLabel = 'NPU (WebNN Neural Processing Unit)';
   }
+
+  // Check cached empirical benchmark
+  const benchmarkReport = getCachedBenchmarkReport();
 
   const isHighEnd =
+    hasDualGpu ||
     (gpuName && !/intel/i.test(gpuName)) ||
     (ramGb && ramGb >= 16) ||
     cpuThreads >= 16;
 
   let recommendationReason: string;
-  if (device === 'npu') {
+  if (benchmarkReport) {
+    recommendationReason = `Empirical benchmark measured ${benchmarkReport.fastestName} as the fastest engine (${benchmarkReport.fastestLatencyMs} ms). Auto mode defaults to this measured hardware.`;
+  } else if (hasDualGpu) {
+    recommendationReason = `Dual GPUs detected (${dGpuName} discrete + ${iGpuName} integrated). Auto mode will benchmark both to select the optimal engine.`;
+  } else if (device === 'npu') {
     recommendationReason =
       'Dedicated NPU detected. INT8 Quantized delivers highest efficiency and battery savings.';
   } else if (device === 'webgpu' && isHighEnd) {
@@ -299,14 +378,18 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
 
   return {
     device,
-    deviceLabel: gpuName ? `${gpuName} (${deviceLabel})` : deviceLabel,
+    deviceLabel,
     gpuName,
+    hasDualGpu,
+    dGpuName,
+    iGpuName,
     cpuThreads,
     ramGb,
     hasNpu,
     recommendedPrecision: 'int8',
     recommendedModelId,
     recommendationReason,
+    benchmarkReport,
   };
 }
 

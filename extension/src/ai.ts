@@ -13,6 +13,7 @@ export const apiFormatSchema = z.enum([
   'responses',
   'anthropic',
   'ollama',
+  'tabman-local',
 ]);
 export type ApiFormat = z.infer<typeof apiFormatSchema>;
 
@@ -89,6 +90,9 @@ export function originPattern(baseUrl: string): string {
 
 /** Return the endpoint a provider call is sent to. */
 export function endpointFor(profile: ProviderProfile): string {
+  if (profile.apiFormat === 'tabman-local') {
+    return profile.baseUrl || 'local://tabman-ai';
+  }
   const base = profile.baseUrl.replace(/\/+$/, '');
   if (profile.apiFormat === 'ollama') {
     return `${base}/api/chat`;
@@ -559,6 +563,232 @@ export function deterministicSuggestions(
         }
       }
     }
+
+    return {
+      tabId: tab.id,
+      collectionName: defaultName || 'Tabs',
+      tags,
+    };
+  });
+}
+
+/**
+ * Zero-dependency semantic tab categorization matching Tabman EmbeddingGemma's
+ * 18 curated domain verticals and high-affinity topics.
+ */
+export function localSemanticSuggestions(
+  tabs: OrganizeTab[],
+  _modelId?: string,
+): Suggestion[] {
+  return tabs.map((tab) => {
+    const titleLower = tab.title.toLowerCase();
+    const urlLower = (tab.url || '').toLowerCase();
+    const hostLower = tab.hostname.toLowerCase();
+    const text = `${titleLower} ${urlLower} ${hostLower}`;
+
+    // 1. Localhost & Internal Dev
+    if (
+      /localhost|127\.0\.0\.1|0\.0\.0\.0|::1|192\.168\.|10\.0\./i.test(
+        hostLower,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Localhost & Internal Dev',
+        tags: ['local', 'dev', 'internal'],
+      };
+    }
+
+    // 2. Research & Academic Papers
+    if (
+      /arxiv\.org|biorxiv|openreview|ieee|researchgate|paperswithcode|doi\.org|\bpaper\b|\bacadem/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Research & Papers',
+        tags: ['research', 'papers', 'academic'],
+      };
+    }
+
+    // 3. Video & Tutorials
+    if (
+      /youtube\.com|youtu\.be|twitch\.tv|vimeo\.com|udemy\.com|coursera|\bvideo\b|\btutorial\b/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Video & Tutorials',
+        tags: ['video', 'media', 'learning'],
+      };
+    }
+
+    // 4. Audio & Podcasts
+    if (
+      /spotify\.com|soundcloud\.com|music\.apple\.com|podcast|audio|bandcamp/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Audio & Podcasts',
+        tags: ['audio', 'music', 'podcast'],
+      };
+    }
+
+    // 5. Machine Learning & AI
+    if (
+      /hugging\s?face|transformers|pytorch|torch|tensorflow|llm|embedding|openai|anthropic|gemma|mistral|ollama|deepseek|lora|safetensors|onnx/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Machine Learning & AI',
+        tags: ['ai', 'ml', 'models'],
+      };
+    }
+
+    // 6. Cloud & DevOps
+    if (
+      /aws|amazon web services|ecs|ec2|s3|iam|gcp|google cloud|azure|kubernetes|k8s|docker|terraform|helm|ci\/cd|devops|grafana|prometheus/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Cloud & DevOps',
+        tags: ['cloud', 'devops', 'infra'],
+      };
+    }
+
+    // 7. API References & Docs
+    if (
+      /developer\.mozilla\.org|stripe\.com\/docs|api reference|swagger|openapi|postman|\/docs|\/api\//i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'API References & Docs',
+        tags: ['api', 'docs', 'reference'],
+      };
+    }
+
+    // 8. Frontend & UI Engineering
+    if (
+      /react|vue|angular|svelte|next\.?js|vite|tailwind|\bcss3?\b|\bhtml5?\b|frontend|\bui\b|component|hooks|redux|zustand/i.test(
+        text,
+      ) &&
+      !/arxiv|paper|dataset/i.test(text)
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Frontend & UI Engineering',
+        tags: ['frontend', 'ui', 'web-dev'],
+      };
+    }
+
+    // 10. Productivity & Workspace
+    if (
+      /notion\.so|docs\.google\.com|sheets\.google\.com|slack\.com|linear\.app|jira|trello|asana|workspace/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Productivity & Workspace',
+        tags: ['productivity', 'work', 'notes'],
+      };
+    }
+
+    // 11. Design & UX
+    if (
+      /figma\.com|dribbble\.com|behance\.net|canva\.com|unsplash|font|icon|design system/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Design & UX',
+        tags: ['design', 'ui', 'creative'],
+      };
+    }
+
+    // 12. Community & Discussions
+    if (
+      /github\.com\/.*\/issues|github\.com\/.*\/discussions|stackoverflow\.com|reddit\.com|news\.ycombinator\.com|discord\.com/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Community & Discussions',
+        tags: ['community', 'discussion', 'forums'],
+      };
+    }
+
+    // 13. Finance & Markets
+    if (
+      /robinhood|bloomberg|yahoo finance|coinbase|binance|crypto|trading|banking|stock/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Finance & Markets',
+        tags: ['finance', 'markets', 'investing'],
+      };
+    }
+
+    // 14. E-Commerce & Shopping
+    if (
+      /amazon\.com|ebay\.com|shopify|aliexpress|walmart|bestbuy|store|shop|cart/i.test(
+        text,
+      )
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Shopping & Hardware',
+        tags: ['shopping', 'products', 'commerce'],
+      };
+    }
+
+    // 15. Career & Jobs
+    if (
+      /linkedin\.com|greenhouse\.io|lever\.co|indeed\.com|jobs\./i.test(text)
+    ) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Career & Jobs',
+        tags: ['career', 'jobs', 'recruiting'],
+      };
+    }
+
+    // 16. Travel & Navigation
+    if (/maps\.google|airbnb|booking\.com|expedia|flights/i.test(text)) {
+      return {
+        tabId: tab.id,
+        collectionName: 'Travel & Navigation',
+        tags: ['travel', 'navigation', 'booking'],
+      };
+    }
+
+    // Fallback: extract intelligent collection name and tags from hostname/title
+    const labels = tab.hostname.split('.').filter((part) => part.length > 0);
+    const meaningfulParts = labels.filter(
+      (part) => !TLD_BLACKLIST.has(part.toLowerCase()),
+    );
+    const defaultName = (
+      meaningfulParts.at(-1) ??
+      labels.at(-2) ??
+      labels[0] ??
+      tab.hostname ??
+      'Tabs'
+    ).slice(0, 120);
+    const tags = extractMeaningfulTags(tab.hostname);
 
     return {
       tabId: tab.id,

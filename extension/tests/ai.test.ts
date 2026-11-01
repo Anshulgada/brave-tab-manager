@@ -289,3 +289,65 @@ describe('asking a provider', () => {
     }
   });
 });
+
+describe('local semantic tab clustering (tabman-local)', () => {
+  it('correctly maps diverse tabs across trained domain verticals without external services', async () => {
+    const { localSemanticSuggestions } = await import('../src/ai');
+    const testTabs: OrganizeTab[] = [
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        title: 'Synchronizing with Effects - React Official Documentation',
+        hostname: 'react.dev',
+        url: 'https://react.dev/learn/synchronizing-with-effects',
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        title:
+          'What is Amazon Elastic Container Service? - Amazon ECS Documentation',
+        hostname: 'docs.aws.amazon.com',
+        url: 'https://docs.aws.amazon.com/AmazonECS/latest/developerguide/welcome.html',
+      },
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        title: 'google/embeddinggemma-2 · Hugging Face Model Card',
+        hostname: 'huggingface.co',
+        url: 'https://huggingface.co/google/embeddinggemma-2',
+      },
+      {
+        id: '44444444-4444-4444-8444-444444444444',
+        title: 'Matryoshka Representation Learning in Multimodal Transformers',
+        hostname: 'arxiv.org',
+        url: 'https://arxiv.org/abs/2402.12345',
+      },
+      {
+        id: '55555555-5555-4555-8555-555555555555',
+        title: 'Rick Astley - Never Gonna Give You Up (Official Music Video)',
+        hostname: 'youtube.com',
+        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      },
+      {
+        id: '66666666-6666-4666-8666-666666666666',
+        title: 'Today Top Hits - Spotify Music Playlist',
+        hostname: 'open.spotify.com',
+        url: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M',
+      },
+      {
+        id: '77777777-7777-4777-8777-777777777777',
+        title: 'Vite Development Server - Localhost:5173',
+        hostname: 'localhost',
+        url: 'http://localhost:5173/',
+      },
+    ];
+
+    const suggestions = localSemanticSuggestions(testTabs);
+    expect(suggestions).toHaveLength(7);
+
+    expect(suggestions[0]?.collectionName).toBe('Frontend & UI Engineering');
+    expect(suggestions[1]?.collectionName).toBe('Cloud & DevOps');
+    expect(suggestions[2]?.collectionName).toBe('Machine Learning & AI');
+    expect(suggestions[3]?.collectionName).toBe('Research & Papers');
+    expect(suggestions[4]?.collectionName).toBe('Video & Tutorials');
+    expect(suggestions[5]?.collectionName).toBe('Audio & Podcasts');
+    expect(suggestions[6]?.collectionName).toBe('Localhost & Internal Dev');
+  });
+});

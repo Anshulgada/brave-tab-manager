@@ -5,6 +5,7 @@ import type {
   ProviderSettings,
 } from '../../../src/ai';
 import {
+  type ComputeDeviceChoice,
   detectHardwareProfile,
   getDefaultModelStorageLocations,
   type HardwareProfile,
@@ -12,12 +13,18 @@ import {
   TABMAN_OFFICIAL_MODELS,
   type TabmanOfficialModel,
 } from '../../../src/compute-device';
+import {
+  getCachedBenchmarkReport,
+  type HardwareBenchmarkReport,
+  runHardwareBenchmark,
+} from '../../../src/hardware-benchmark';
 import { sendSwitchboardRequest } from '../../../src/runtime';
 import {
   CheckIcon,
   CloseIcon,
   HuggingFaceIcon,
   PlusIcon,
+  RefreshIcon,
   SearchIcon,
   ShieldIcon,
   SparkIcon,
@@ -26,6 +33,11 @@ import {
 import type { PanelProps } from '../types';
 
 const FORMATS: { value: ApiFormat; label: string; hint: string }[] = [
+  {
+    value: 'tabman-local',
+    label: 'Tabman AI Engine (Local In-Browser)',
+    hint: 'Zero external requests · WebGPU / WebNN / WASM SIMD execution',
+  },
   {
     value: 'ollama',
     label: 'Ollama (Localhost)',
@@ -76,6 +88,54 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     }
   });
 
+  const [benchmarkReport, setBenchmarkReport] =
+    useState<HardwareBenchmarkReport | null>(() => getCachedBenchmarkReport());
+  const [isBenchmarking, setIsBenchmarking] = useState(false);
+
+  const [deviceChoice, setDeviceChoice] = useState<ComputeDeviceChoice>(() => {
+    try {
+      return (
+        (localStorage.getItem('tabman.computeDevice') as ComputeDeviceChoice) ||
+        'auto'
+      );
+    } catch {
+      return 'auto';
+    }
+  });
+
+  const handleSelectDeviceChoice = (choice: ComputeDeviceChoice) => {
+    setDeviceChoice(choice);
+    try {
+      localStorage.setItem('tabman.computeDevice', choice);
+      const label =
+        choice === 'auto'
+          ? `Auto (${benchmarkReport ? `${benchmarkReport.fastestName} (${benchmarkReport.fastestLatencyMs} ms)` : hardwareProfile?.deviceLabel || 'Empirical Fastest'})`
+          : choice.toUpperCase();
+      onNotify(`Compute acceleration set to: ${label}.`, 'success');
+    } catch {
+      // storage unavailable
+    }
+  };
+
+  const handleTriggerBenchmark = async () => {
+    setIsBenchmarking(true);
+    try {
+      const report = await runHardwareBenchmark(true);
+      setBenchmarkReport(report);
+      onNotify(
+        `Hardware benchmark complete: ${report.fastestName} is fastest (${report.fastestLatencyMs} ms).`,
+        'success',
+      );
+    } catch (err) {
+      onNotify(
+        err instanceof Error ? err.message : 'Hardware benchmark failed',
+        'danger',
+      );
+    } finally {
+      setIsBenchmarking(false);
+    }
+  };
+
   // Model storage configuration & scan state
   const storageLocations = getDefaultModelStorageLocations();
   const [modelStoragePath, setModelStoragePath] = useState<string>(() => {
@@ -104,6 +164,23 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
         setHardwareProfile(profile);
       }
     });
+
+    // Run benchmark once on first launch if not cached yet
+    if (!getCachedBenchmarkReport()) {
+      setIsBenchmarking(true);
+      void runHardwareBenchmark(false)
+        .then((report) => {
+          if (active) {
+            setBenchmarkReport(report);
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setIsBenchmarking(false);
+          }
+        });
+    }
+
     return () => {
       active = false;
     };
@@ -243,9 +320,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
         targetProfile = {
           id: crypto.randomUUID(),
           name: `${hfModel.name} (${precision.toUpperCase()})`,
-          baseUrl: 'http://127.0.0.1:11434',
+          baseUrl: modelStoragePath || storageLocations.current,
           model: hfModel.repo,
-          apiFormat: 'ollama',
+          apiFormat: 'tabman-local',
         };
         const saveRes = await sendSwitchboardRequest({
           type: 'providers/save',
@@ -263,7 +340,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       if (!actRes.ok) {
         throw new Error(actRes.error);
       }
-    }, `${hfModel.name} is now the active provider.`);
+    }, `${hfModel.name} activated with local zero-dependency engine.`);
 
   const handleSelectPreset = (val: string) => {
     setSelectedHfPreset(val);
@@ -272,9 +349,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     if (found) {
       const isFp32 = prec === 'fp32';
       setName(`${found.name} (${isFp32 ? 'FP32' : 'INT8'})`);
-      setBaseUrl('http://127.0.0.1:11434');
+      setBaseUrl(modelStoragePath || storageLocations.current);
       setModel(found.repo);
-      setApiFormat('ollama');
+      setApiFormat('tabman-local');
       if (prec === 'fp32' || prec === 'int8') {
         handleSelectPrecision(prec as ModelPrecision);
       }
@@ -362,7 +439,149 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 FP32 Full Precision
               </button>
             </div>
+
+            <div
+              className="precision-toggle-group"
+              style={{ marginTop: '8px' }}
+            >
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Target Device:
+              </span>
+              <button
+                type="button"
+                className={
+                  deviceChoice === 'auto'
+                    ? 'precision-toggle-btn active'
+                    : 'precision-toggle-btn'
+                }
+                onClick={() => handleSelectDeviceChoice('auto')}
+                title="Auto scheduler: empirically benchmarks your hardware on first use and selects the fastest backend"
+              >
+                {deviceChoice === 'auto' && <CheckIcon size={13} />}⚡ Auto (
+                {benchmarkReport
+                  ? `${benchmarkReport.fastestName} · ${benchmarkReport.fastestLatencyMs} ms`
+                  : hardwareProfile
+                    ? hardwareProfile.device.toUpperCase()
+                    : 'Recommended'}
+                )
+              </button>
+
+              {hardwareProfile?.hasDualGpu ? (
+                <>
+                  <button
+                    type="button"
+                    className={
+                      deviceChoice === 'webgpu-discrete'
+                        ? 'precision-toggle-btn active'
+                        : 'precision-toggle-btn'
+                    }
+                    onClick={() => handleSelectDeviceChoice('webgpu-discrete')}
+                    title={`Discrete GPU: ${hardwareProfile.dGpuName || 'High-Performance'}`}
+                  >
+                    {deviceChoice === 'webgpu-discrete' && (
+                      <CheckIcon size={13} />
+                    )}
+                    dGPU ({hardwareProfile.dGpuName || 'High-Perf'})
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      deviceChoice === 'webgpu-integrated'
+                        ? 'precision-toggle-btn active'
+                        : 'precision-toggle-btn'
+                    }
+                    onClick={() =>
+                      handleSelectDeviceChoice('webgpu-integrated')
+                    }
+                    title={`Integrated GPU: ${hardwareProfile.iGpuName || 'Low-Power'}`}
+                  >
+                    {deviceChoice === 'webgpu-integrated' && (
+                      <CheckIcon size={13} />
+                    )}
+                    iGPU ({hardwareProfile.iGpuName || 'Low-Power'})
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className={
+                    deviceChoice === 'webgpu'
+                      ? 'precision-toggle-btn active'
+                      : 'precision-toggle-btn'
+                  }
+                  onClick={() => handleSelectDeviceChoice('webgpu')}
+                  title="Force GPU (WebGPU): Fastest inference on discrete and integrated graphics"
+                >
+                  {deviceChoice === 'webgpu' && <CheckIcon size={13} />}
+                  GPU (WebGPU)
+                </button>
+              )}
+
+              {hardwareProfile?.hasNpu && (
+                <button
+                  type="button"
+                  className={
+                    deviceChoice === 'npu'
+                      ? 'precision-toggle-btn active'
+                      : 'precision-toggle-btn'
+                  }
+                  onClick={() => handleSelectDeviceChoice('npu')}
+                  title="Force NPU (WebNN): Dedicated neural processing unit for low-power background clustering"
+                >
+                  {deviceChoice === 'npu' && <CheckIcon size={13} />}
+                  NPU (WebNN)
+                </button>
+              )}
+
+              <button
+                type="button"
+                className={
+                  deviceChoice === 'cpu'
+                    ? 'precision-toggle-btn active'
+                    : 'precision-toggle-btn'
+                }
+                onClick={() => handleSelectDeviceChoice('cpu')}
+                title="Force CPU (WASM SIMD): Universal low-overhead fallback across all machines"
+              >
+                {deviceChoice === 'cpu' && <CheckIcon size={13} />}
+                CPU (SIMD)
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                style={{ marginLeft: 'auto', gap: '5px' }}
+                onClick={() => void handleTriggerBenchmark()}
+                disabled={isBenchmarking}
+                title="Run empirical benchmark across your GPUs, NPU, and CPU to verify fastest option"
+              >
+                <RefreshIcon
+                  size={12}
+                  className={isBenchmarking ? 'benchmark-spin' : ''}
+                />
+                {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
+              </button>
+            </div>
           </div>
+
+          {benchmarkReport && (
+            <div className="benchmark-results-strip">
+              <span className="benchmark-strip-title">
+                ⚡ Empirical Benchmark:
+              </span>
+              {benchmarkReport.results.map((res) => (
+                <span
+                  key={res.id}
+                  className={`benchmark-badge ${
+                    res.id === benchmarkReport.fastestChoice ? 'fastest' : ''
+                  }`}
+                >
+                  {res.id === benchmarkReport.fastestChoice && '🏆 '}
+                  <strong>{res.name}:</strong> {res.latencyMs} ms
+                </span>
+              ))}
+            </div>
+          )}
 
           {hardwareProfile && (
             <p className="hardware-advisor-reason">
@@ -601,67 +820,132 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 )}
               </header>
 
-              <div className="provider-key">
-                <span
-                  className={
-                    hasKey && active ? 'chip chip-success' : 'chip chip-warning'
-                  }
+              {profile.apiFormat === 'tabman-local' ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-subtle, rgba(255, 255, 255, 0.03))',
+                    border:
+                      '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+                  }}
                 >
-                  {hasKey && active ? 'Key ready' : 'No key stored'}
-                </span>
-                <input
-                  className="input"
-                  type="password"
-                  placeholder="Paste the API key"
-                  autoComplete="off"
-                  value={keyDraft}
-                  onChange={(event) => setKeyDraft(event.target.value)}
-                />
-                <button
-                  className="btn btn-sm"
-                  type="button"
-                  disabled={busy || !keyDraft.trim()}
-                  onClick={() => void saveKey()}
-                >
-                  Save key
-                </button>
-                <button
-                  className="btn btn-ghost btn-icon btn-sm"
-                  type="button"
-                  title="Forget the stored key"
-                  aria-label="Forget the stored key"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const response = await sendSwitchboardRequest({
-                        type: 'providers/forget-key',
-                      });
-                      if (!response.ok) {
-                        throw new Error(response.error);
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span className="chip chip-success">
+                      <CheckIcon size={12} /> Local AI Engine Ready
+                    </span>
+                    <span
+                      style={{ fontSize: '12px', color: 'var(--text-muted)' }}
+                    >
+                      Zero external dependencies · No API key needed
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                      fontSize: '11px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <span>
+                      <strong>Precision:</strong> {precision.toUpperCase()}
+                    </span>
+                    <span>
+                      <strong>Storage:</strong> {modelStoragePath}
+                    </span>
+                    <span>
+                      <strong>Compute:</strong>{' '}
+                      {deviceChoice === 'auto'
+                        ? `Auto (${
+                            benchmarkReport
+                              ? `${benchmarkReport.fastestName} (${benchmarkReport.fastestLatencyMs} ms)`
+                              : hardwareProfile?.deviceLabel ||
+                                'Hardware Accelerated'
+                          })`
+                        : `${deviceChoice.toUpperCase()} (Manual Override)`}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="provider-key">
+                    <span
+                      className={
+                        hasKey && active
+                          ? 'chip chip-success'
+                          : 'chip chip-warning'
                       }
-                    }, 'The API key was forgotten.')
-                  }
-                >
-                  <CloseIcon size={14} />
-                </button>
-              </div>
+                    >
+                      {hasKey && active ? 'Key ready' : 'No key stored'}
+                    </span>
+                    <input
+                      className="input"
+                      type="password"
+                      placeholder="Paste the API key"
+                      autoComplete="off"
+                      value={keyDraft}
+                      onChange={(event) => setKeyDraft(event.target.value)}
+                    />
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      disabled={busy || !keyDraft.trim()}
+                      onClick={() => void saveKey()}
+                    >
+                      Save key
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-icon btn-sm"
+                      type="button"
+                      title="Forget the stored key"
+                      aria-label="Forget the stored key"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          const response = await sendSwitchboardRequest({
+                            type: 'providers/forget-key',
+                          });
+                          if (!response.ok) {
+                            throw new Error(response.error);
+                          }
+                        }, 'The API key was forgotten.')
+                      }
+                    >
+                      <CloseIcon size={14} />
+                    </button>
+                  </div>
 
-              <label className="settings-toggle provider-remember">
-                <span>Remember the key on this device</span>
-                <input
-                  className="switch"
-                  type="checkbox"
-                  role="switch"
-                  aria-checked={remember}
-                  checked={remember}
-                  onChange={(event) => setRemember(event.target.checked)}
-                />
-              </label>
+                  <label className="settings-toggle provider-remember">
+                    <span>Remember the key on this device</span>
+                    <input
+                      className="switch"
+                      type="checkbox"
+                      role="switch"
+                      aria-checked={remember}
+                      checked={remember}
+                      onChange={(event) => setRemember(event.target.checked)}
+                    />
+                  </label>
+                </>
+              )}
 
               <footer className="provider-foot">
                 <span>
                   <ShieldIcon size={13} />
-                  Session only unless you turn the switch on.
+                  {profile.apiFormat === 'tabman-local'
+                    ? '100% private · Neural clustering executes locally in your browser'
+                    : 'Session only unless you turn the switch on.'}
                 </span>
                 <button
                   className="btn btn-danger btn-sm"
