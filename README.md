@@ -475,18 +475,23 @@ Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2
 
    Evaluates MRR@10, triplet margin, and Matryoshka dimension truncation (768d vs 512d vs 256d vs 128d).
 
-4. **Export to INT8 ONNX (Browser WebGPU/NPU) and Ollama:**
+4. **Export to INT8 ONNX (Browser WebGPU/NPU/CPU) and Ollama:**
 
    ```bash
-   # Export 270M for in-browser WebGPU/NPU execution
-   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-270m-finetuned/final --output-dir ./models/onnx_270m
-
-   # Export 440M or 740M for local Ollama serving
-   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-440m-finetuned/final --output-dir ./models/onnx_440m
-   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-740m-finetuned/final --output-dir ./models/onnx_740m
+   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-270m-finetuned/final --output-dir ./models/exported-270m
+   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-440m-finetuned/final --output-dir ./models/exported-440m
+   python scripts/ai/export_models.py --model ./models/embeddinggemma-2-740m-finetuned/final --output-dir ./models/exported-740m
    ```
 
-5. **Serve via High-Throughput GPU Server:**
+5. **Upload ONNX Artifacts to Hugging Face:**
+
+   ```bash
+   python scripts/ai/upload_to_hf.py --username Anshulgada --variant 270m --onnx-only
+   python scripts/ai/upload_to_hf.py --username Anshulgada --variant 440m --onnx-only
+   python scripts/ai/upload_to_hf.py --username Anshulgada --variant 740m --onnx-only
+   ```
+
+6. **Serve via High-Throughput GPU Server:**
 
    ```bash
    python scripts/ai/serve_embeddings.py --port 11434 --variant 270m
@@ -494,7 +499,14 @@ Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2
 
    Provides sub-2ms embedding inference over OpenAI (`/v1/embeddings`) and Ollama (`/api/embeddings`) endpoints.
 
-6. **Published Hugging Face Models:**
+7. **Verify Local CPU Benchmark & Categorization:**
+
+   ```bash
+   python scripts/ai/test_local_cpu_onnx.py
+   python scripts/ai/test_categorization.py
+   ```
+
+8. **Published Hugging Face Models:**
    - [`Anshulgada/tabman-embeddinggemma-2-270m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-270m) — Fine-tuned (Text & Code) with WebGPU INT8 ONNX
    - [`Anshulgada/tabman-embeddinggemma-2-440m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-440m) — Fine-tuned (Text + Vision) with WebGPU INT8 ONNX
    - [`Anshulgada/tabman-embeddinggemma-2-740m`](https://huggingface.co/Anshulgada/tabman-embeddinggemma-2-740m) — Fine-tuned (Full Multimodal) with WebGPU INT8 ONNX
