@@ -1036,3 +1036,59 @@
   color: var(--brand-text);
   font-weight: 600;
 }
+
+.benchmark-results-strip {
+  align-items: center;
+  background: var(--bg-subtle, rgba(255, 255, 255, 0.02));
+  border: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  transition: all 0.25s ease;
+}
+
+.benchmark-strip-title {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.benchmark-badge {
+  align-items: center;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  padding: 3px 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.benchmark-badge:hover {
+  transform: translateY(-1px);
+}
+
+.benchmark-badge.fastest {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  border-color: var(--brand);
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--brand) 20%, transparent);
+  color: var(--brand-text);
+  font-weight: 600;
+}
+
+.benchmark-spin {
+  animation: benchmarkSpin 1s linear infinite;
+}
+
+@keyframes benchmarkSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

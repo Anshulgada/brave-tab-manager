@@ -35,9 +35,18 @@ export function Topbar({
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true">
-          T
-        </span>
+        <img
+          src="/logo.png"
+          alt={PRODUCT_NAME}
+          className="brand-logo"
+          width="32"
+          height="32"
+          style={{
+            objectFit: 'contain',
+            flexShrink: 0,
+            filter: 'drop-shadow(0 2px 5px rgba(0, 0, 0, 0.2))',
+          }}
+        />
         <div className="brand-copy">
           <strong>{PRODUCT_NAME}</strong>
           <span>Local library</span>

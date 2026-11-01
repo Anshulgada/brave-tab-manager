@@ -6,7 +6,6 @@ import {
   CloseIcon,
   FolderIcon,
   PlusIcon,
-  SparkIcon,
   TagIcon,
   TrashIcon,
   WindowIcon,
@@ -32,9 +31,17 @@ export function WelcomeState({
 }) {
   return (
     <section className="welcome">
-      <span className="welcome-mark" aria-hidden="true">
-        <SparkIcon size={26} />
-      </span>
+      <img
+        src="/logo.png"
+        alt="Tabman Logo"
+        width="64"
+        height="64"
+        style={{
+          objectFit: 'contain',
+          marginBottom: '8px',
+          filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.25))',
+        }}
+      />
       <h2>Your tab library starts here</h2>
       <p>
         Collect the tabs you have open right now, park tabs from the side panel,
