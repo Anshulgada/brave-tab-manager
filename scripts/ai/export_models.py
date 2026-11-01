@@ -156,8 +156,10 @@ def export_via_torch_onnx(
             int8_onnx_path,
         )
         shutil.copy2(int8_onnx_path, output_dir / "model_int8.onnx")
-        # Also copy as model_quantized.onnx for full backward compatibility
-        shutil.copy2(int8_onnx_path, output_dir / "model_quantized.onnx")
+        # Remove legacy model_quantized.onnx if present to prevent duplicate commits
+        legacy_path = output_dir / "model_quantized.onnx"
+        if legacy_path.exists():
+            legacy_path.unlink()
         return int8_dir
 
     return output_dir

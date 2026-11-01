@@ -82,16 +82,10 @@ def main() -> None:
     # 1. Download / retrieve cached model artifacts from Hugging Face Hub
     print(f"[*] Fetching ONNX model and tokenizer from Hugging Face: {REPO_ID}...")
     t0_download = time.perf_counter()
-    try:
-        onnx_file = hf_hub_download(
-            repo_id=REPO_ID,
-            filename="onnx/model_int8.onnx",
-        )
-    except Exception:
-        onnx_file = hf_hub_download(
-            repo_id=REPO_ID,
-            filename="onnx/model_quantized.onnx",
-        )
+    onnx_file = hf_hub_download(
+        repo_id=REPO_ID,
+        filename="onnx/model_int8.onnx",
+    )
     tokenizer_file = hf_hub_download(
         repo_id=REPO_ID,
         filename="tokenizer.json",
