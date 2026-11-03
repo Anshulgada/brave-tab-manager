@@ -139,9 +139,235 @@ pub fn kmeans_cluster(
     total_inertia
 }
 
+/// Automatically clusters `n` vectors of dimension `dim` using density-based
+/// Minimum Spanning Tree (MST) mutual reachability analysis ("Auto-K").
+///
+/// Discovers the natural number of semantic tab clusters without requiring `k` upfront.
+/// Returns the number of clusters found.
+pub fn autok_cluster(
+    vectors: &[f32],
+    n: usize,
+    dim: usize,
+    min_cluster_size: usize,
+    out_assignments: &mut [i32],
+) -> usize {
+    if n == 0 || dim == 0 {
+        return 0;
+    }
+
+    if n == 1 {
+        out_assignments[0] = 0;
+        return 1;
+    }
+
+    // 1. Compute Pairwise Cosine Distance Matrix
+    let mut dist_matrix = vec![0.0f32; n * n];
+    for i in 0..n {
+        let vi = &vectors[i * dim..(i + 1) * dim];
+        dist_matrix[i * n + i] = 0.0;
+        for j in (i + 1)..n {
+            let vj = &vectors[j * dim..(j + 1) * dim];
+            let sim = dot_product(vi, vj);
+            let d = (1.0 - sim).max(0.0);
+            dist_matrix[i * n + j] = d;
+            dist_matrix[j * n + i] = d;
+        }
+    }
+
+    // 2. Core Distances (density estimate: distance to k-th nearest neighbor)
+    let k_neighbor = (min_cluster_size.max(2)).min(n - 1);
+    let mut core_dists = vec![0.0f32; n];
+    let mut row_dists = vec![0.0f32; n];
+
+    for i in 0..n {
+        row_dists.copy_from_slice(&dist_matrix[i * n..(i + 1) * n]);
+        row_dists.sort_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
+        core_dists[i] = row_dists[k_neighbor];
+    }
+
+    // 3. Minimum Spanning Tree using Prim's algorithm on Mutual Reachability graph
+    let mut in_tree = vec![false; n];
+    let mut min_edge_cost = vec![f32::MAX; n];
+    let mut parent = vec![0usize; n];
+
+    min_edge_cost[0] = 0.0;
+
+    #[derive(Clone, Copy)]
+    struct MstEdge {
+        u: usize,
+        v: usize,
+        weight: f32,
+    }
+
+    let mut mst_edges: Vec<MstEdge> = Vec::with_capacity(n - 1);
+
+    for _ in 0..n {
+        let mut u = None;
+        let mut best_cost = f32::MAX;
+
+        for (i, (&cost, &is_in)) in min_edge_cost.iter().zip(in_tree.iter()).enumerate() {
+            if !is_in && cost < best_cost {
+                best_cost = cost;
+                u = Some(i);
+            }
+        }
+
+        let u = match u {
+            Some(node) => node,
+            None => break,
+        };
+
+        in_tree[u] = true;
+
+        if u != 0 {
+            mst_edges.push(MstEdge {
+                u: parent[u],
+                v: u,
+                weight: best_cost,
+            });
+        }
+
+        for v in 0..n {
+            if !in_tree[v] {
+                // Mutual reachability distance
+                let raw_d = dist_matrix[u * n + v];
+                let mreach = raw_d.max(core_dists[u]).max(core_dists[v]);
+
+                if mreach < min_edge_cost[v] {
+                    min_edge_cost[v] = mreach;
+                    parent[v] = u;
+                }
+            }
+        }
+    }
+
+    if mst_edges.is_empty() {
+        for a in out_assignments.iter_mut().take(n) {
+            *a = 0;
+        }
+        return 1;
+    }
+
+    // 4. Adaptive Threshold Cut
+    let edge_count = mst_edges.len() as f32;
+    let sum_weight: f32 = mst_edges.iter().map(|e| e.weight).sum();
+    let mean_weight = sum_weight / edge_count;
+
+    let var_weight: f32 = mst_edges
+        .iter()
+        .map(|e| (e.weight - mean_weight).powi(2))
+        .sum::<f32>()
+        / edge_count;
+    let std_weight = var_weight.sqrt();
+
+    // Cut threshold: edges exceeding mean + 0.6 * std are inter-cluster bridges
+    let threshold = (mean_weight + 0.6 * std_weight).min(0.65).max(0.15);
+
+    // 5. Build Adjacency List with pruned edges
+    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for edge in &mst_edges {
+        if edge.weight <= threshold {
+            adj[edge.u].push(edge.v);
+            adj[edge.v].push(edge.u);
+        }
+    }
+
+    // 6. Connected Components via BFS
+    out_assignments[..n].fill(-1);
+    let mut cluster_id = 0i32;
+    let mut visited = vec![false; n];
+    let mut queue = std::collections::VecDeque::new();
+    let mut component = Vec::new();
+    let mut small_nodes = Vec::new();
+
+    for start_node in 0..n {
+        if visited[start_node] {
+            continue;
+        }
+
+        component.clear();
+        visited[start_node] = true;
+        queue.push_back(start_node);
+
+        while let Some(node) = queue.pop_front() {
+            component.push(node);
+            for &neighbor in &adj[node] {
+                if !visited[neighbor] {
+                    visited[neighbor] = true;
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+
+        if component.len() >= min_cluster_size {
+            for &node in &component {
+                out_assignments[node] = cluster_id;
+            }
+            cluster_id += 1;
+        } else {
+            small_nodes.extend_from_slice(&component);
+        }
+    }
+
+    // Fallback: If no clusters formed, all to cluster 0
+    if cluster_id == 0 {
+        for a in out_assignments.iter_mut().take(n) {
+            *a = 0;
+        }
+        return 1;
+    }
+
+    // Assign singleton/small nodes to their nearest established cluster
+    for &node in &small_nodes {
+        let mut closest_c = 0i32;
+        let mut min_d = f32::MAX;
+
+        for other in 0..n {
+            let c = out_assignments[other];
+            if c >= 0 {
+                let d = dist_matrix[node * n + other];
+                if d < min_d {
+                    min_d = d;
+                    closest_c = c;
+                }
+            }
+        }
+        out_assignments[node] = closest_c;
+    }
+
+    cluster_id as usize
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_autok_clustering_detects_groups() {
+        // Group A: 3 vectors near [1, 0, 0]
+        // Group B: 3 vectors near [0, 1, 0]
+        let vectors = vec![
+            1.0, 0.05, 0.0,
+            0.95, 0.1, 0.0,
+            0.98, 0.02, 0.0,
+            0.05, 1.0, 0.0,
+            0.02, 0.98, 0.0,
+            0.08, 0.95, 0.0,
+        ];
+
+        let mut assignments = vec![-1i32; 6];
+        let k = autok_cluster(&vectors, 6, 3, 2, &mut assignments);
+
+        assert_eq!(k, 2);
+        // Group A shares same cluster
+        assert_eq!(assignments[0], assignments[1]);
+        assert_eq!(assignments[1], assignments[2]);
+        // Group B shares same cluster
+        assert_eq!(assignments[3], assignments[4]);
+        assert_eq!(assignments[4], assignments[5]);
+        // Group A and Group B are distinct
+        assert_ne!(assignments[0], assignments[3]);
+    }
 
     #[test]
     fn test_kmeans_simple_clustering() {
