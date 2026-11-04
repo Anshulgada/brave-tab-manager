@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import type { FormEvent, RefObject } from 'react';
+import { type FormEvent, type RefObject, useEffect, useRef } from 'react';
 import type { TabRecord } from '../../../src/database';
 import type { LibraryCollection } from '../../../src/library';
 import { CustomSelect } from '../../../src/ui/CustomSelect';
@@ -13,6 +13,7 @@ import {
   PencilIcon,
   RestoreIcon,
   SearchIcon,
+  SparkIcon,
   TagIcon,
   TrashIcon,
   ZapIcon,
@@ -24,6 +25,7 @@ export interface CollectionDetailProps {
   collection: LibraryCollection;
   busy: boolean;
   onCollect: () => void;
+  onOrganizeCollection?: () => void;
   renaming: boolean;
   renameValue: string;
   onRenameValueChange: (val: string) => void;
@@ -64,9 +66,9 @@ export function CollectBar({
   return (
     <section className="collect-bar">
       <div>
-        <strong>Collect every open tab</strong>
+        <strong>Add open tabs to this collection</strong>
         <span>
-          Save the tabs you have open right now into a new collection. They stay
+          Add the tabs you have open right now into this collection. They stay
           open in the browser.
         </span>
       </div>
@@ -116,6 +118,7 @@ export function CollectionDetail({
   collection,
   busy,
   onCollect,
+  onOrganizeCollection,
   renaming,
   renameValue,
   onRenameValueChange,
@@ -145,6 +148,35 @@ export function CollectionDetail({
   onDragStartTab,
   onDragEndTab,
 }: CollectionDetailProps) {
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (
+        e.key === '/' ||
+        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f')
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <>
       <CollectBar busy={busy} onCollect={onCollect} />
@@ -206,6 +238,18 @@ export function CollectionDetail({
         </div>
 
         <div className="collection-actions">
+          {onOrganizeCollection && (
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={busy || collection.tabs.length === 0}
+              onClick={onOrganizeCollection}
+              title="Organize this collection's tabs using AI or rules"
+            >
+              <SparkIcon size={15} />
+              Organize
+            </button>
+          )}
           <button
             className="btn"
             type="button"
@@ -233,6 +277,7 @@ export function CollectionDetail({
             <div className="collection-search-wrap">
               <SearchIcon size={14} />
               <input
+                ref={searchInputRef}
                 type="search"
                 className="collection-search-input"
                 placeholder={`Search ${collection.tabs.length} tabs...`}
@@ -240,6 +285,21 @@ export function CollectionDetail({
                 onChange={(e) => onQueryChange(e.target.value)}
                 aria-label="Search tabs in this collection"
               />
+              {!query && (
+                <kbd
+                  className="kbd"
+                  style={{
+                    fontSize: '10px',
+                    padding: '1px 5px',
+                    opacity: 0.55,
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                  }}
+                  title="Press / or ⌘F to search"
+                >
+                  /
+                </kbd>
+              )}
               {query && (
                 <button
                   type="button"

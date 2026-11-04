@@ -119,12 +119,15 @@
 .settings-note {
   color: var(--text-faint);
   font-size: 12.5px;
+  line-height: 1.4;
+  margin-top: auto;
+  padding-top: 6px;
 }
 
 .shortcut-list {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -135,7 +138,19 @@
   color: var(--text-soft);
   display: flex;
   font-size: 13px;
-  gap: 10px;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.shortcut-list li:last-child {
+  border-bottom: none;
+}
+
+.shortcut-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .trash-list {

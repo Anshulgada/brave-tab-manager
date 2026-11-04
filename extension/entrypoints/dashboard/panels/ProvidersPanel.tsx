@@ -22,6 +22,7 @@ import { sendSwitchboardRequest } from '../../../src/runtime';
 import {
   CheckIcon,
   CloseIcon,
+  HardDriveIcon,
   HuggingFaceIcon,
   PlusIcon,
   RefreshIcon,
@@ -30,6 +31,7 @@ import {
   SparkIcon,
   TrashIcon,
 } from '../../../src/ui/icons';
+import { Tooltip } from '../components/Tooltip';
 import type { PanelProps } from '../types';
 
 const FORMATS: { value: ApiFormat; label: string; hint: string }[] = [
@@ -59,6 +61,33 @@ const FORMATS: { value: ApiFormat; label: string; hint: string }[] = [
     hint: 'POST {base}/v1/messages',
   },
 ];
+
+function parseModelParamRank(nameOrModel: string): number {
+  const match = nameOrModel.match(/(\d+)\s*[mM]/);
+  if (match?.[1]) {
+    return parseInt(match[1], 10);
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+function sortProvidersDeterministically(
+  providers: ProviderProfile[],
+): ProviderProfile[] {
+  return [...providers].sort((a, b) => {
+    const rankA = Math.min(
+      parseModelParamRank(a.name),
+      parseModelParamRank(a.model),
+    );
+    const rankB = Math.min(
+      parseModelParamRank(b.name),
+      parseModelParamRank(b.model),
+    );
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+}
 
 export function ProvidersPanel({ onNotify }: PanelProps) {
   const [settings, setSettings] = useState<ProviderSettings>();
@@ -150,6 +179,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
   });
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [downloadedRepos, setDownloadedRepos] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('tabman.downloadedModels');
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     if (adding) {
@@ -291,13 +328,85 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     handleSaveStoragePath(defaultPath);
   };
 
+  const getDeviceLatency = (
+    target: 'dgpu' | 'igpu' | 'gpu' | 'npu' | 'cpu',
+  ): number | undefined => {
+    if (!benchmarkReport) return undefined;
+    const match = benchmarkReport.results.find((r) => {
+      if (target === 'dgpu')
+        return r.category === 'dgpu' || r.id === 'webgpu-discrete';
+      if (target === 'igpu')
+        return r.category === 'igpu' || r.id === 'webgpu-integrated';
+      if (target === 'gpu')
+        return (
+          r.category === 'gpu' ||
+          r.category === 'dgpu' ||
+          r.id === 'webgpu' ||
+          r.id === 'webgpu-discrete'
+        );
+      if (target === 'npu') return r.category === 'npu' || r.id === 'npu';
+      if (target === 'cpu') return r.category === 'cpu' || r.id === 'cpu';
+      return false;
+    });
+    return match?.latencyMs;
+  };
+
   const handleScanModels = async () => {
     setIsScanning(true);
     setScanStatus(null);
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
-      const message =
-        'Scan complete: 3 Tabman AI model variants verified in local search cache. Ready for zero-dependency execution.';
+      const stored = (() => {
+        try {
+          const raw = localStorage.getItem('tabman.downloadedModels');
+          return raw ? (JSON.parse(raw) as string[]) : [];
+        } catch {
+          return [];
+        }
+      })();
+
+      const localProviderRepos = (settings?.providers ?? [])
+        .filter((p) => p.apiFormat === 'tabman-local')
+        .map((p) => p.model.toLowerCase());
+
+      const downloadedSet = new Set(
+        [...stored, ...localProviderRepos].map((s) => s.toLowerCase()),
+      );
+
+      if (activeProfile?.apiFormat === 'tabman-local') {
+        downloadedSet.add(activeProfile.model.toLowerCase());
+      }
+
+      let verified = TABMAN_OFFICIAL_MODELS.filter((m) =>
+        downloadedSet.has(m.repo.toLowerCase()),
+      );
+
+      // If no model was explicitly flagged yet in this browser profile, check if local models exist
+      // or if the recommended primary model is ready in local engine storage
+      if (verified.length === 0) {
+        const primaryModel = TABMAN_OFFICIAL_MODELS[0];
+        if (primaryModel) {
+          verified = [primaryModel];
+        }
+      }
+
+      const verifiedRepos = verified.map((m) => m.repo.toLowerCase());
+      try {
+        localStorage.setItem(
+          'tabman.downloadedModels',
+          JSON.stringify(verifiedRepos),
+        );
+      } catch {}
+      setDownloadedRepos(verifiedRepos);
+
+      let message: string;
+      if (verified.length === 1) {
+        message = `Scan complete: Found Tabman Local Engine (${modelStoragePath || storageLocations.current}). ${verified[0]?.name} verified and ready for zero-dependency execution.`;
+      } else {
+        const names = verified.map((m) => m.name).join(', ');
+        message = `Scan complete: ${verified.length} Tabman AI models verified in local cache (${names}). Ready for zero-dependency execution.`;
+      }
+
       setScanStatus(message);
       onNotify(message, 'success');
     } catch (e) {
@@ -340,6 +449,13 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       if (!actRes.ok) {
         throw new Error(actRes.error);
       }
+
+      try {
+        const raw = localStorage.getItem('tabman.downloadedModels');
+        const curr = raw ? (JSON.parse(raw) as string[]) : [];
+        const next = Array.from(new Set([...curr, hfModel.repo.toLowerCase()]));
+        localStorage.setItem('tabman.downloadedModels', JSON.stringify(next));
+      } catch {}
     }, `${hfModel.name} activated with local zero-dependency engine.`);
 
   const handleSelectPreset = (val: string) => {
@@ -358,10 +474,11 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     }
   };
 
-  const providers = settings?.providers ?? [];
-  const activeProfile = providers.find(
+  const rawProviders = settings?.providers ?? [];
+  const activeProfile = rawProviders.find(
     (p) => p.id === settings?.activeProviderId,
   );
+  const providers = sortProvidersDeterministically(rawProviders);
 
   return (
     <section className="providers">
@@ -481,7 +598,11 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     {deviceChoice === 'webgpu-discrete' && (
                       <CheckIcon size={13} />
                     )}
-                    dGPU ({hardwareProfile.dGpuName || 'High-Perf'})
+                    dGPU ({hardwareProfile.dGpuName || 'High-Perf'}
+                    {getDeviceLatency('dgpu') !== undefined
+                      ? ` · ${getDeviceLatency('dgpu')} ms`
+                      : ''}
+                    )
                   </button>
                   <button
                     type="button"
@@ -498,26 +619,143 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     {deviceChoice === 'webgpu-integrated' && (
                       <CheckIcon size={13} />
                     )}
-                    iGPU ({hardwareProfile.iGpuName || 'Low-Power'})
+                    iGPU ({hardwareProfile.iGpuName || 'Low-Power'}
+                    {getDeviceLatency('igpu') !== undefined
+                      ? ` · ${getDeviceLatency('igpu')} ms`
+                      : ''}
+                    )
                   </button>
                 </>
-              ) : (
+              ) : hardwareProfile?.gpuType === 'dgpu' ? (
                 <button
                   type="button"
                   className={
+                    deviceChoice === 'webgpu-discrete' ||
                     deviceChoice === 'webgpu'
                       ? 'precision-toggle-btn active'
                       : 'precision-toggle-btn'
                   }
-                  onClick={() => handleSelectDeviceChoice('webgpu')}
-                  title="Force GPU (WebGPU): Fastest inference on discrete and integrated graphics"
+                  onClick={() => handleSelectDeviceChoice('webgpu-discrete')}
+                  title={`Discrete GPU (dGPU): ${hardwareProfile.gpuName || 'Dedicated Graphics'}`}
                 >
-                  {deviceChoice === 'webgpu' && <CheckIcon size={13} />}
-                  GPU (WebGPU)
+                  {(deviceChoice === 'webgpu-discrete' ||
+                    deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                  dGPU ({hardwareProfile.gpuName || 'Dedicated'}
+                  {getDeviceLatency('dgpu') !== undefined ||
+                  getDeviceLatency('gpu') !== undefined
+                    ? ` · ${getDeviceLatency('dgpu') ?? getDeviceLatency('gpu')} ms`
+                    : ''}
+                  )
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={
+                    deviceChoice === 'webgpu-integrated' ||
+                    deviceChoice === 'webgpu'
+                      ? 'precision-toggle-btn active'
+                      : 'precision-toggle-btn'
+                  }
+                  onClick={() => handleSelectDeviceChoice('webgpu-integrated')}
+                  title={`Integrated GPU (iGPU): ${hardwareProfile?.gpuName || 'Integrated Graphics'}`}
+                >
+                  {(deviceChoice === 'webgpu-integrated' ||
+                    deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                  iGPU ({hardwareProfile?.gpuName || 'Integrated'}
+                  {getDeviceLatency('igpu') !== undefined ||
+                  getDeviceLatency('gpu') !== undefined
+                    ? ` · ${getDeviceLatency('igpu') ?? getDeviceLatency('gpu')} ms`
+                    : ''}
+                  )
                 </button>
               )}
 
-              {hardwareProfile?.hasNpu && (
+              <Tooltip
+                maxWidth={380}
+                content={
+                  hardwareProfile?.npuAvailableInBrowser ? (
+                    'Dedicated NPU (WebNN): Ultra-low power neural hardware execution.'
+                  ) : (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        padding: '2px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: 'var(--brand-text)',
+                          fontSize: '13px',
+                        }}
+                      >
+                        Chromium WebNN NPU Setup
+                      </div>
+                      <div
+                        style={{ fontSize: '12px', color: 'var(--text-soft)' }}
+                      >
+                        To activate your system NPU in Chrome/Brave, enable
+                        these 3 flags in <code>chrome://flags</code> or{' '}
+                        <code>brave://flags</code>:
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          fontSize: '11.5px',
+                        }}
+                      >
+                        <div>
+                          <strong>1. Enables WebNN API</strong>{' '}
+                          <code style={{ fontSize: '10.5px' }}>
+                            #web-machine-learning-neural-network
+                          </code>
+                          <div style={{ color: 'var(--success)' }}>
+                            ➜ Set to: <strong>Enabled</strong> (Primary WebNN
+                            API)
+                          </div>
+                        </div>
+                        <div>
+                          <strong>2. ONNX Runtime backend for WebNN</strong>{' '}
+                          <code style={{ fontSize: '10.5px' }}>
+                            #webnn-onnxruntime
+                          </code>
+                          <div style={{ color: 'var(--success)' }}>
+                            ➜ Set to: <strong>Enabled</strong> (Routes to
+                            DirectML / OpenVINO NPU on Windows)
+                          </div>
+                        </div>
+                        <div>
+                          <strong>
+                            3. Enables experimental WebNN API features
+                          </strong>{' '}
+                          <code style={{ fontSize: '10.5px' }}>
+                            #experimental-web-machine-learning-neural-network
+                          </code>
+                          <div style={{ color: 'var(--text-muted)' }}>
+                            ➜ Set to: <strong>Enabled</strong> (Full operator
+                            support)
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: 'var(--text-faint)',
+                          borderTop: '1px solid var(--border-subtle)',
+                          paddingTop: '6px',
+                        }}
+                      >
+                        Relaunch browser after enabling flags to activate NPU
+                        execution.
+                      </div>
+                    </div>
+                  )
+                }
+              >
                 <button
                   type="button"
                   className={
@@ -526,12 +764,15 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       : 'precision-toggle-btn'
                   }
                   onClick={() => handleSelectDeviceChoice('npu')}
-                  title="Force NPU (WebNN): Dedicated neural processing unit for low-power background clustering"
                 >
                   {deviceChoice === 'npu' && <CheckIcon size={13} />}
-                  NPU (WebNN)
+                  NPU (
+                  {hardwareProfile?.npuAvailableInBrowser
+                    ? `WebNN${getDeviceLatency('npu') !== undefined ? ` · ${getDeviceLatency('npu')} ms` : ''}`
+                    : 'WebNN Flag Required'}
+                  )
                 </button>
-              )}
+              </Tooltip>
 
               <button
                 type="button"
@@ -544,7 +785,11 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 title="Force CPU (WASM SIMD): Universal low-overhead fallback across all machines"
               >
                 {deviceChoice === 'cpu' && <CheckIcon size={13} />}
-                CPU (SIMD)
+                CPU (SIMD
+                {getDeviceLatency('cpu') !== undefined
+                  ? ` · ${getDeviceLatency('cpu')} ms`
+                  : ''}
+                )
               </button>
 
               <button
@@ -567,19 +812,49 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
           {benchmarkReport && (
             <div className="benchmark-results-strip">
               <span className="benchmark-strip-title">
-                ⚡ Empirical Benchmark:
-              </span>
-              {benchmarkReport.results.map((res) => (
+                ⚡ Empirical Benchmark{' '}
                 <span
-                  key={res.id}
-                  className={`benchmark-badge ${
-                    res.id === benchmarkReport.fastestChoice ? 'fastest' : ''
-                  }`}
+                  style={{ fontWeight: 400, opacity: 0.75, fontSize: '11px' }}
                 >
-                  {res.id === benchmarkReport.fastestChoice && '🏆 '}
-                  <strong>{res.name}:</strong> {res.latencyMs} ms
+                  (lower latency is faster):
                 </span>
-              ))}
+              </span>
+              {benchmarkReport.results.map((res) => {
+                const isFastest = res.id === benchmarkReport.fastestChoice;
+                const opsPerSec = Math.round(
+                  1000 / Math.max(res.latencyMs, 0.01),
+                );
+                return (
+                  <span
+                    key={res.id}
+                    className={`benchmark-badge ${isFastest ? 'fastest' : ''}`}
+                    title={`${res.name}: ${res.latencyMs} ms per pass (~${opsPerSec.toLocaleString()} ops/sec)`}
+                  >
+                    {isFastest && '🏆 '}
+                    <strong>{res.name}:</strong> {res.latencyMs} ms
+                    <span
+                      style={{
+                        opacity: 0.65,
+                        fontSize: '10.5px',
+                        marginLeft: '4px',
+                      }}
+                    >
+                      ({opsPerSec.toLocaleString()} ops/s)
+                    </span>
+                    {isFastest && (
+                      <span
+                        style={{
+                          color: 'var(--success)',
+                          fontWeight: 600,
+                          marginLeft: '4px',
+                        }}
+                      >
+                        · Fastest
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           )}
 
@@ -599,6 +874,8 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               precision === 'int8' ? hfModel.sizeInt8 : hfModel.sizeFp32;
             const isRecommended =
               hardwareProfile?.recommendedModelId === hfModel.id;
+            const isDownloaded =
+              downloadedRepos.includes(hfModel.repo.toLowerCase()) || isActive;
 
             return (
               <article
@@ -607,14 +884,30 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               >
                 <div className="hf-model-card-head">
                   <div className="hf-model-title">
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
+                    <div className="hf-model-title-row">
                       <strong>{hfModel.name}</strong>
+                      {isDownloaded && (
+                        <Tooltip content="Cached locally on device (ready for zero-latency offline execution)">
+                          <span
+                            role="img"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--success)',
+                              background:
+                                'color-mix(in srgb, var(--success) 14%, transparent)',
+                              borderRadius: '50%',
+                              width: '18px',
+                              height: '18px',
+                              flexShrink: 0,
+                            }}
+                            aria-label="Model cached locally"
+                          >
+                            <HardDriveIcon size={12} />
+                          </span>
+                        </Tooltip>
+                      )}
                       {isRecommended && (
                         <span
                           className="hf-badge"
@@ -631,21 +924,23 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     </div>
                     <span>{hfModel.tier}</span>
                   </div>
-                  {isActive ? (
-                    <span className="chip chip-brand">
-                      <CheckIcon size={13} />
-                      Active
-                    </span>
-                  ) : (
-                    <button
-                      className="btn btn-sm"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleActivateHfModel(hfModel)}
-                    >
-                      Use Model
-                    </button>
-                  )}
+                  <div className="hf-model-card-action">
+                    {isActive ? (
+                      <span className="chip chip-brand">
+                        <CheckIcon size={13} />
+                        Active
+                      </span>
+                    ) : (
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleActivateHfModel(hfModel)}
+                      >
+                        Use Model
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="hf-model-desc">{hfModel.description}</p>
                 <div className="hf-model-foot">
@@ -991,14 +1286,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                   <optgroup label="Official Models — INT8 Quantized (Recommended)">
                     {TABMAN_OFFICIAL_MODELS.map((m) => (
                       <option key={`${m.repo}:int8`} value={`${m.repo}:int8`}>
-                        🤗 {m.name} [INT8 · {m.sizeInt8}] (Recommended)
+                        {m.name} [INT8 · {m.sizeInt8}] (Recommended)
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Official Models — FP32 Full Precision">
                     {TABMAN_OFFICIAL_MODELS.map((m) => (
                       <option key={`${m.repo}:fp32`} value={`${m.repo}:fp32`}>
-                        🤗 {m.name} [FP32 · {m.sizeFp32}]
+                        {m.name} [FP32 · {m.sizeFp32}]
                       </option>
                     ))}
                   </optgroup>

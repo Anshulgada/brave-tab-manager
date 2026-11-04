@@ -1,10 +1,8 @@
 import { motion } from 'framer-motion';
 import { useRef, useState } from 'react';
-import {
-  exportCorrectionsJsonl,
-  recordCorrection,
-} from '../../../src/corrections';
+import { recordCorrection } from '../../../src/corrections';
 import { TabmanDatabase } from '../../../src/database';
+import type { LibraryCollection } from '../../../src/library';
 import type { OrganizeProposal } from '../../../src/messages';
 import { sendSwitchboardRequest } from '../../../src/runtime';
 import { hostInitial, hostLabel } from '../../../src/ui/format';
@@ -12,7 +10,6 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CloseIcon,
-  DownloadIcon,
   FolderIcon,
   LayersIcon,
   PencilIcon,
@@ -23,13 +20,17 @@ import type { PanelProps } from '../types';
 
 export interface OrganizePanelProps extends PanelProps {
   rules?: string;
+  sourceCollection?: LibraryCollection;
   onApplied: () => void;
+  onBackToCollection?: () => void;
 }
 
 export function OrganizePanel({
   rules,
+  sourceCollection,
   onNotify,
   onApplied,
+  onBackToCollection,
 }: OrganizePanelProps) {
   const [proposal, setProposal] = useState<OrganizeProposal>();
   const [busy, setBusy] = useState(false);
@@ -40,10 +41,10 @@ export function OrganizePanel({
         return (
           (localStorage.getItem('tabman-organize-mode') as
             | 'multiple'
-            | 'single') || 'multiple'
+            | 'single') || 'single'
         );
       } catch {
-        return 'multiple';
+        return 'single';
       }
     },
   );
@@ -96,6 +97,7 @@ export function OrganizePanel({
         type: 'library/organize',
         mode,
         rules: mode === 'deterministic' ? rules : undefined,
+        collectionId: sourceCollection?.id,
       });
       if (!response.ok) {
         throw new Error(response.error);
@@ -142,30 +144,6 @@ export function OrganizePanel({
     setExcludedTabIds(new Set());
   };
 
-  const handleExportTrainingData = async () => {
-    try {
-      const db = new TabmanDatabase();
-      const jsonl = await exportCorrectionsJsonl(db);
-      if (!jsonl.trim()) {
-        onNotify(
-          'No training feedback recorded yet. Organizing and approving tabs creates training signal!',
-          'info',
-        );
-        return;
-      }
-      const blob = new Blob([jsonl], { type: 'application/x-jsonlines' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `tabman_corrections_${Date.now()}.jsonl`;
-      a.click();
-      URL.revokeObjectURL(url);
-      onNotify('Exported training feedback JSONL successfully!', 'success');
-    } catch {
-      onNotify('Failed to export training data', 'danger');
-    }
-  };
-
   const apply = async () => {
     if (!proposal || busy) {
       return;
@@ -184,15 +162,22 @@ export function OrganizePanel({
         destinationMode === 'single'
           ? {
               ...proposal,
+              collectionId: sourceCollection?.id,
               items: activeItems.map((item) => ({
                 ...item,
-                collectionName: `Organized Tabs (${new Date().toLocaleDateString()})`,
+                collectionName:
+                  sourceCollection?.name ||
+                  `Organized Tabs (${new Date().toLocaleDateString()})`,
                 tags: item.collectionName
                   ? [...new Set([...item.tags, item.collectionName])]
                   : item.tags,
               })),
             }
-          : { ...proposal, items: activeItems };
+          : {
+              ...proposal,
+              collectionId: sourceCollection?.id,
+              items: activeItems,
+            };
 
       const response = await sendSwitchboardRequest({
         type: 'library/organize/apply',
@@ -398,39 +383,33 @@ export function OrganizePanel({
     <section className="organize">
       <header className="settings-head">
         <p className="eyebrow">Assistant</p>
-        <h1>Organize the open tabs</h1>
+        <h1>
+          {sourceCollection
+            ? `Organize "${sourceCollection.name}"`
+            : 'Organize the open tabs'}
+        </h1>
         <p className="settings-intro">
-          Tabman collects the open tabs, organizes them with local pattern rules
-          or an AI provider, and previews the result in an interactive Kanban
-          board. Drag cards to move tabs between collections before saving!
+          {sourceCollection
+            ? `Organize the ${sourceCollection.tabs.length} tabs in this collection using local pattern rules or an AI provider.`
+            : 'Tabman collects the open tabs, organizes them with local pattern rules or an AI provider, and previews the result in an interactive Kanban board.'}
         </p>
+        {sourceCollection && onBackToCollection && (
+          <div style={{ marginTop: '8px' }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={onBackToCollection}
+            >
+              ← Back to {sourceCollection.name}
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="organize-toolbar">
         <div className="organize-toolbar-left">
           <span className="organize-mode-label">Destination:</span>
           <div className="segmented-pill-track">
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                destinationMode === 'multiple' ? 'active' : ''
-              }`}
-              onClick={() => {
-                setDestinationMode('multiple');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'multiple');
-                } catch {}
-              }}
-            >
-              {destinationMode === 'multiple' && (
-                <motion.div
-                  layoutId="destPill"
-                  className="segmented-pill-slider"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="segmented-pill-text">Separate collections</span>
-            </button>
             <button
               type="button"
               className={`segmented-pill-btn ${
@@ -453,6 +432,27 @@ export function OrganizePanel({
               <span className="segmented-pill-text">
                 Single collection (with tags)
               </span>
+            </button>
+            <button
+              type="button"
+              className={`segmented-pill-btn ${
+                destinationMode === 'multiple' ? 'active' : ''
+              }`}
+              onClick={() => {
+                setDestinationMode('multiple');
+                try {
+                  localStorage.setItem('tabman-organize-mode', 'multiple');
+                } catch {}
+              }}
+            >
+              {destinationMode === 'multiple' && (
+                <motion.div
+                  layoutId="destPill"
+                  className="segmented-pill-slider"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className="segmented-pill-text">Separate collections</span>
             </button>
           </div>
         </div>
@@ -545,15 +545,6 @@ export function OrganizePanel({
                 </button>
               </div>
 
-              <button
-                className="btn btn-ghost btn-sm"
-                type="button"
-                onClick={handleExportTrainingData}
-                title="Export human-in-the-loop corrections as JSONL for GPU training"
-              >
-                <DownloadIcon size={14} />
-                Export Training Data
-              </button>
               <button
                 className="btn btn-ghost btn-sm"
                 type="button"

@@ -12,4 +12,5 @@ export * from './NavigationRail';
 export * from './TabCard';
 export * from './TagManagerModal';
 export * from './Toasts';
+export * from './Tooltip';
 export * from './Topbar';
