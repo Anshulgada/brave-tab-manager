@@ -113,6 +113,8 @@ jobs:
       url: https://pypi.org/p/tabman
     permissions:
       id-token: write
+      attestations: write
+      contents: read
     steps:
       - name: Download Python distributions
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -125,7 +127,7 @@ jobs:
         with:
           packages-dir: dist/
           skip-existing: true
-          attestations: false
+          attestations: true
 
   github-release:
     name: GitHub Release

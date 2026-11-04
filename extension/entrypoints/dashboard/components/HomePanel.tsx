@@ -34,12 +34,12 @@ export function WelcomeState({
       <img
         src="/logo.png"
         alt="Tabman Logo"
-        width="64"
-        height="64"
+        width="68"
+        height="68"
         style={{
           objectFit: 'contain',
-          marginBottom: '8px',
-          filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.25))',
+          marginBottom: '4px',
+          filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.3))',
         }}
       />
       <h2>Your tab library starts here</h2>
@@ -158,16 +158,18 @@ export function HomePanel({
         </motion.article>
       </section>
 
-      <section className="home-actions" aria-label="Quick actions">
-        <button className="btn btn-primary" type="button" onClick={onCollect}>
-          <ZapIcon size={16} />
-          Collect every open tab
-        </button>
-        <button className="btn" type="button" onClick={onCreate}>
-          <PlusIcon size={16} />
-          New collection
-        </button>
-      </section>
+      {collections.length > 0 && (
+        <section className="home-actions" aria-label="Quick actions">
+          <button className="btn btn-primary" type="button" onClick={onCollect}>
+            <ZapIcon size={16} />
+            Collect every open tab
+          </button>
+          <button className="btn" type="button" onClick={onCreate}>
+            <PlusIcon size={16} />
+            New collection
+          </button>
+        </section>
+      )}
 
       {collections.length > 0 && (
         <section className="home-collections" aria-label="Your collections">

@@ -52,3 +52,6 @@ tabman-ai/
 # Tooling output that should never be committed
 .playwright-mcp/
 artifacts/
+
+# Rust build artifacts
+target/

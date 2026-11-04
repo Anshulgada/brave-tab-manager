@@ -39,12 +39,12 @@ export function Topbar({
           src="/logo.png"
           alt={PRODUCT_NAME}
           className="brand-logo"
-          width="32"
-          height="32"
+          width="40"
+          height="40"
           style={{
             objectFit: 'contain',
             flexShrink: 0,
-            filter: 'drop-shadow(0 2px 5px rgba(0, 0, 0, 0.2))',
+            filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25))',
           }}
         />
         <div className="brand-copy">

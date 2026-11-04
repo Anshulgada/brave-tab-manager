@@ -273,8 +273,7 @@
 
 /* Empty and welcome states ------------------------------------------------ */
 
-.empty,
-.welcome {
+.empty {
   align-items: center;
   background: var(--surface);
   border: 1px dashed var(--border-strong);
@@ -286,6 +285,21 @@
   max-width: 560px;
   padding: 52px 40px;
   text-align: center;
+}
+
+.welcome {
+  align-items: center;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px auto;
+  max-width: 720px;
+  padding: 24px 32px;
+  text-align: center;
+  width: 100%;
 }
 
 .empty-mark,
@@ -303,22 +317,31 @@
 .empty h2,
 .welcome h2 {
   font-size: 19px;
+  margin: 0;
 }
 
-.empty p,
-.welcome p {
+.empty p {
   color: var(--text-muted);
   font-size: 13.5px;
   max-width: 42ch;
 }
 
+.welcome p {
+  color: var(--text-muted);
+  font-size: 13.5px;
+  max-width: 66ch;
+  margin: 0;
+}
+
 .welcome-steps {
   counter-reset: step;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
   list-style: none;
-  margin: 6px 0 10px;
+  margin: 6px 0 0;
   padding: 0;
   text-align: left;
 }

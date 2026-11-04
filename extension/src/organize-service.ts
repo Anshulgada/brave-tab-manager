@@ -7,6 +7,7 @@
  */
 
 import {
+  clusterTabsSemantically,
   deterministicSuggestions,
   localSemanticSuggestions,
   type OrganizeTab,
@@ -26,6 +27,7 @@ import {
   saveProviderSettings,
   storeApiKey,
 } from './provider-store';
+import { canonicalizeUrl } from './rust-wasm';
 import { collectionSchema, tabSchema } from './schema';
 
 export class OrganizeError extends Error {
@@ -79,15 +81,41 @@ export async function collectOpenTabs(): Promise<OrganizeTab[]> {
 export async function buildProposal(
   mode: 'provider' | 'deterministic',
   rules?: string,
+  collectionId?: string,
 ): Promise<OrganizeProposal> {
-  const tabs = await collectOpenTabs();
-  if (tabs.length === 0) {
-    throw new OrganizeError('There are no open tabs to organize');
+  let tabs: OrganizeTab[];
+  if (collectionId) {
+    const database = new TabmanDatabase();
+    const records = await database.tabs
+      .where('collectionId')
+      .equals(collectionId)
+      .toArray();
+    tabs = records.map((r) => ({
+      id: r.id,
+      title: r.title,
+      url: r.url,
+      hostname: r.hostname,
+    }));
+    if (tabs.length === 0) {
+      throw new OrganizeError('This collection has no tabs to organize');
+    }
+  } else {
+    tabs = await collectOpenTabs();
+    if (tabs.length === 0) {
+      throw new OrganizeError('There are no open tabs to organize');
+    }
   }
   const createdAt = new Date().toISOString();
 
   if (mode === 'deterministic') {
-    const suggestions = deterministicSuggestions(tabs, rules);
+    const kMatch = rules?.match(/^(?:k|clusters)=(\d+)/i);
+    let suggestions = deterministicSuggestions(tabs, rules);
+    if (kMatch?.[1]) {
+      const k = parseInt(kMatch[1], 10);
+      if (k > 0) {
+        suggestions = clusterTabsSemantically(tabs, k);
+      }
+    }
     return {
       provider: 'deterministic',
       createdAt,
@@ -339,7 +367,21 @@ export async function applyProposal(
       [database.collections, database.tabs, database.tags],
       async () => {
         for (const [name, items] of groups) {
-          const collectionId = crypto.randomUUID();
+          let targetCollection = proposal.collectionId
+            ? await database.collections.get(proposal.collectionId)
+            : undefined;
+          if (targetCollection?.status !== 'active') {
+            const trimmed = name.trim().toLowerCase();
+            const activeCollections = await database.collections
+              .where('status')
+              .equals('active')
+              .toArray();
+            targetCollection = activeCollections.find(
+              (c) => c.name.trim().toLowerCase() === trimmed,
+            );
+          }
+
+          const collectionId = targetCollection?.id ?? crypto.randomUUID();
           const tagNames = new Map<string, string>();
           for (const item of items) {
             for (const tag of item.tags) {
@@ -363,7 +405,7 @@ export async function applyProposal(
             const tab = tabSchema.parse({
               id: crypto.randomUUID(),
               title: item.title.slice(0, 2048),
-              url: item.url,
+              url: canonicalizeUrl(item.url, false),
               hostname: item.hostname.slice(0, 253),
               pinned: false,
               position: index,
@@ -380,31 +422,53 @@ export async function applyProposal(
               normalizedHostname: tab.hostname.toLocaleLowerCase(),
             };
           });
-          const collection = collectionSchema.parse({
-            id: collectionId,
-            name,
-            description: `Organized by ${proposal.provider}`,
-            color: null,
-            createdAt: now,
-            updatedAt: now,
-            status: 'active',
-            tags: tags.map(
-              ({
-                collectionId: _collectionId,
-                sortOrder: _sortOrder,
-                ...tag
-              }) => tag,
-            ),
-            tabs: records.map(
-              ({
-                collectionId: _collectionId,
-                normalizedHostname: _hostname,
-                ...tab
-              }) => tab,
-            ),
-          });
-          const { tabs: _tabs, tags: _tags, ...collectionRecord } = collection;
-          await database.collections.add(collectionRecord);
+
+          if (targetCollection) {
+            await database.collections.put({
+              ...targetCollection,
+              name,
+              updatedAt: now,
+            });
+            await database.tabs
+              .where('collectionId')
+              .equals(collectionId)
+              .delete();
+            await database.tags
+              .where('collectionId')
+              .equals(collectionId)
+              .delete();
+          } else {
+            const collection = collectionSchema.parse({
+              id: collectionId,
+              name,
+              description: `Organized by ${proposal.provider}`,
+              color: null,
+              createdAt: now,
+              updatedAt: now,
+              status: 'active',
+              tags: tags.map(
+                ({
+                  collectionId: _collectionId,
+                  sortOrder: _sortOrder,
+                  ...tag
+                }) => tag,
+              ),
+              tabs: records.map(
+                ({
+                  collectionId: _collectionId,
+                  normalizedHostname: _hostname,
+                  ...tab
+                }) => tab,
+              ),
+            });
+            const {
+              tabs: _tabs,
+              tags: _tags,
+              ...collectionRecord
+            } = collection;
+            await database.collections.add(collectionRecord);
+          }
+
           if (tags.length > 0) {
             await database.tags.bulkAdd(tags);
           }

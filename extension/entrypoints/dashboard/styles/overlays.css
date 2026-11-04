@@ -641,3 +641,86 @@
   gap: 6px;
   padding-top: 2px;
 }
+
+.collect-modal-select {
+  width: 100%;
+}
+
+.collect-modal-select .custom-select-trigger {
+  width: 100%;
+}
+
+.collect-modal-select .custom-select-menu {
+  left: 0;
+  right: 0;
+  width: 100%;
+}
+
+/* Tooltips ---------------------------------------------------------------- */
+
+.tooltip-trigger-wrap {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+}
+
+.tooltip-bubble {
+  position: absolute;
+  z-index: 1000;
+  background: var(--canvas-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow:
+    0 12px 32px -4px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  word-break: normal;
+  text-align: left;
+  width: max-content;
+  max-width: 360px;
+  white-space: normal;
+}
+
+.tooltip-bubble code {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 5px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+  color: var(--brand-fg, #60a5fa);
+  word-break: break-all;
+}
+
+.tooltip-bubble strong {
+  color: var(--text-bright, #fff);
+  font-weight: 600;
+}
+
+.tooltip-bubble-top {
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tooltip-bubble-bottom {
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tooltip-bubble-left {
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tooltip-bubble-right {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}

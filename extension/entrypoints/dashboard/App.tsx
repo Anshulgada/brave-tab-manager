@@ -31,6 +31,7 @@ import {
 } from '../../src/library';
 import type { LibraryChangedMessage } from '../../src/messages';
 import { sendSwitchboardRequest } from '../../src/runtime';
+import { fuzzyScore } from '../../src/rust-wasm';
 import type { Settings } from '../../src/schema';
 import { pluralize, tabLabel } from '../../src/ui/format';
 import {
@@ -118,6 +119,7 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [collectDialogOpen, setCollectDialogOpen] = useState(false);
   const [collectName, setCollectName] = useState('');
+  const [collectTargetId, setCollectTargetId] = useState<string | undefined>();
 
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
 
@@ -273,9 +275,22 @@ export function App() {
       'startViewTransition' in document &&
       !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ) {
-      document.startViewTransition(() => {
+      try {
+        const transition = (
+          document as unknown as {
+            startViewTransition: (cb: () => void) => {
+              ready?: Promise<void>;
+              finished?: Promise<void>;
+            };
+          }
+        ).startViewTransition(() => {
+          updateTheme();
+        });
+        transition?.ready?.catch(() => {});
+        transition?.finished?.catch(() => {});
+      } catch {
         updateTheme();
-      });
+      }
     } else {
       updateTheme();
     }
@@ -338,54 +353,110 @@ export function App() {
   const filteredCollections = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     if (!needle) return activeCollections;
-    return activeCollections.filter(
-      (collection) =>
-        collection.name.toLocaleLowerCase().includes(needle) ||
-        collection.tabs.some((tab) =>
-          [tab.title, tab.hostname, tab.url].some((value) =>
-            value.toLocaleLowerCase().includes(needle),
-          ),
-        ),
-    );
+    return activeCollections
+      .map((collection) => {
+        const nameScore = fuzzyScore(needle, collection.name);
+        const bestTabScore = collection.tabs.reduce((max, tab) => {
+          const s = Math.max(
+            fuzzyScore(needle, tab.title),
+            fuzzyScore(needle, tab.hostname),
+            fuzzyScore(needle, tab.url),
+          );
+          return Math.max(max, s);
+        }, -1);
+        const score = Math.max(nameScore, bestTabScore);
+        return { collection, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.collection);
   }, [activeCollections, query]);
 
   const visibleTabs = useMemo(() => {
     const tabs = selectedCollection?.tabs ?? [];
     const needle = query.trim().toLocaleLowerCase();
-    const filtered = tabs.filter(
-      (tab) =>
-        (!tagFilter || tab.tagIds.includes(tagFilter)) &&
-        (!needle ||
-          [tab.title, tab.hostname, tab.url].some((value) =>
-            value.toLocaleLowerCase().includes(needle),
-          )),
-    );
-    return [...filtered].sort((left, right) => {
-      if (left.pinned !== right.pinned) {
-        return left.pinned ? -1 : 1;
-      }
-      if (sortOrder === 'name') {
-        return tabLabel(left.title, left.hostname, left.url).localeCompare(
-          tabLabel(right.title, right.hostname, right.url),
-        );
-      }
-      if (sortOrder === 'domain') {
-        const leftDomain = rootDomainSortKey(left.hostname);
-        const rightDomain = rootDomainSortKey(right.hostname);
-        const cmp = leftDomain.localeCompare(rightDomain);
-        if (cmp !== 0) return cmp;
-        return tabLabel(left.title, left.hostname, left.url).localeCompare(
-          tabLabel(right.title, right.hostname, right.url),
-        );
-      }
-      if (sortOrder === 'tabs') {
-        return left.position - right.position;
-      }
-      return (
-        Date.parse(right.lastAccessedAt ?? right.createdAt) -
-        Date.parse(left.lastAccessedAt ?? left.createdAt)
+    let candidateTabs = tabs;
+    if (tagFilter) {
+      candidateTabs = candidateTabs.filter((tab) =>
+        tab.tagIds.includes(tagFilter),
       );
-    });
+    }
+    if (!needle) {
+      return [...candidateTabs].sort((left, right) => {
+        if (left.pinned !== right.pinned) {
+          return left.pinned ? -1 : 1;
+        }
+        if (sortOrder === 'name') {
+          return tabLabel(left.title, left.hostname, left.url).localeCompare(
+            tabLabel(right.title, right.hostname, right.url),
+          );
+        }
+        if (sortOrder === 'domain') {
+          const leftDomain = rootDomainSortKey(left.hostname);
+          const rightDomain = rootDomainSortKey(right.hostname);
+          const cmp = leftDomain.localeCompare(rightDomain);
+          if (cmp !== 0) return cmp;
+          return tabLabel(left.title, left.hostname, left.url).localeCompare(
+            tabLabel(right.title, right.hostname, right.url),
+          );
+        }
+        if (sortOrder === 'tabs') {
+          return left.position - right.position;
+        }
+        return (
+          Date.parse(right.lastAccessedAt ?? right.createdAt) -
+          Date.parse(left.lastAccessedAt ?? left.createdAt)
+        );
+      });
+    }
+
+    const scored = candidateTabs
+      .map((tab) => {
+        const score = Math.max(
+          fuzzyScore(needle, tab.title),
+          fuzzyScore(needle, tab.hostname),
+          fuzzyScore(needle, tab.url),
+        );
+        return { tab, score };
+      })
+      .filter((item) => item.score > 0);
+
+    return scored
+      .sort((left, right) => {
+        if (left.tab.pinned !== right.tab.pinned) {
+          return left.tab.pinned ? -1 : 1;
+        }
+        if (sortOrder === 'recent') {
+          return right.score - left.score;
+        }
+        if (sortOrder === 'name') {
+          return tabLabel(
+            left.tab.title,
+            left.tab.hostname,
+            left.tab.url,
+          ).localeCompare(
+            tabLabel(right.tab.title, right.tab.hostname, right.tab.url),
+          );
+        }
+        if (sortOrder === 'domain') {
+          const leftDomain = rootDomainSortKey(left.tab.hostname);
+          const rightDomain = rootDomainSortKey(right.tab.hostname);
+          const cmp = leftDomain.localeCompare(rightDomain);
+          if (cmp !== 0) return cmp;
+          return tabLabel(
+            left.tab.title,
+            left.tab.hostname,
+            left.tab.url,
+          ).localeCompare(
+            tabLabel(right.tab.title, right.tab.hostname, right.tab.url),
+          );
+        }
+        if (sortOrder === 'tabs') {
+          return left.tab.position - right.tab.position;
+        }
+        return right.score - left.score;
+      })
+      .map((item) => item.tab);
   }, [query, selectedCollection, sortOrder, tagFilter]);
 
   const savedTabCount = useMemo(
@@ -705,11 +776,16 @@ export function App() {
   const filteredCommands = useMemo(() => {
     const needle = paletteQuery.trim().toLocaleLowerCase();
     if (!needle) return commands;
-    return commands.filter((cmd) =>
-      [cmd.label, cmd.hint ?? ''].some((value) =>
-        value.toLocaleLowerCase().includes(needle),
-      ),
-    );
+    return commands
+      .map((cmd) => {
+        const labelScore = fuzzyScore(needle, cmd.label);
+        const hintScore = cmd.hint ? fuzzyScore(needle, cmd.hint) : -1;
+        const score = Math.max(labelScore, hintScore);
+        return { cmd, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.cmd);
   }, [commands, paletteQuery]);
 
   useEffect(() => {
@@ -751,7 +827,7 @@ export function App() {
           section={currentSection}
           onNavigate={(sec) => navigateTo(sec)}
           trashedCount={trashedCollections.length}
-          collections={filteredCollections}
+          collections={activeCollections}
           selectedCollectionId={selectedCollection?.id}
           onSelectCollection={(id) => {
             setTagFilter('');
@@ -837,7 +913,9 @@ export function App() {
             <LoadingState />
           ) : currentSection === 'home' || currentSection === 'library' ? (
             <HomePanel
-              collections={activeCollections}
+              collections={
+                query.trim() ? filteredCollections : activeCollections
+              }
               savedTabCount={savedTabCount}
               tagCount={tagCount}
               onCollect={() => void collectAll()}
@@ -881,10 +959,22 @@ export function App() {
           ) : currentSection === 'organize' ? (
             <OrganizePanel
               rules={rules}
+              sourceCollection={selectedCollection}
               onNotify={pushToast}
+              onBackToCollection={() => {
+                if (selectedCollection) {
+                  navigateTo('collection', selectedCollection.id);
+                } else {
+                  navigateTo('home');
+                }
+              }}
               onApplied={() => {
                 void load();
-                navigateTo('home');
+                if (selectedCollection) {
+                  navigateTo('collection', selectedCollection.id);
+                } else {
+                  navigateTo('home');
+                }
               }}
             />
           ) : currentSection === 'rules' ? (
@@ -940,6 +1030,9 @@ export function App() {
                 collection={selectedCollection}
                 busy={busy}
                 onCollect={() => void collectAll()}
+                onOrganizeCollection={() =>
+                  navigateTo('organize', selectedCollection.id)
+                }
                 renaming={renaming}
                 renameValue={renameValue}
                 onRenameValueChange={setRenameValue}
@@ -1138,13 +1231,24 @@ export function App() {
         busy={busy}
         name={collectName}
         onNameChange={setCollectName}
+        collections={activeCollections}
+        targetCollectionId={collectTargetId}
+        onTargetCollectionIdChange={setCollectTargetId}
         onClose={() => setCollectDialogOpen(false)}
-        onConfirm={() =>
+        onConfirm={(targetId) => {
+          const effectiveId =
+            targetId !== undefined ? targetId : collectTargetId;
+          const target = effectiveId
+            ? activeCollections.find((c) => c.id === effectiveId)
+            : undefined;
           void performCollect(
-            collectName.trim() ||
-              `Collected ${new Date().toLocaleDateString()}`,
-          )
-        }
+            target
+              ? target.name
+              : collectName.trim() ||
+                  `Collected ${new Date().toLocaleDateString()}`,
+            effectiveId,
+          );
+        }}
       />
 
       <EditTabModal

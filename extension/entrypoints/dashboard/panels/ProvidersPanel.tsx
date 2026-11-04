@@ -22,7 +22,7 @@ import { sendSwitchboardRequest } from '../../../src/runtime';
 import {
   CheckIcon,
   CloseIcon,
-  HuggingFaceIcon,
+  HardDriveIcon,
   PlusIcon,
   RefreshIcon,
   SearchIcon,
@@ -30,6 +30,7 @@ import {
   SparkIcon,
   TrashIcon,
 } from '../../../src/ui/icons';
+import { Tooltip } from '../components/Tooltip';
 import type { PanelProps } from '../types';
 
 const FORMATS: { value: ApiFormat; label: string; hint: string }[] = [
@@ -59,6 +60,33 @@ const FORMATS: { value: ApiFormat; label: string; hint: string }[] = [
     hint: 'POST {base}/v1/messages',
   },
 ];
+
+function parseModelParamRank(nameOrModel: string): number {
+  const match = nameOrModel.match(/(\d+)\s*[mM]/);
+  if (match?.[1]) {
+    return parseInt(match[1], 10);
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+function sortProvidersDeterministically(
+  providers: ProviderProfile[],
+): ProviderProfile[] {
+  return [...providers].sort((a, b) => {
+    const rankA = Math.min(
+      parseModelParamRank(a.name),
+      parseModelParamRank(a.model),
+    );
+    const rankB = Math.min(
+      parseModelParamRank(b.name),
+      parseModelParamRank(b.model),
+    );
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+}
 
 export function ProvidersPanel({ onNotify }: PanelProps) {
   const [settings, setSettings] = useState<ProviderSettings>();
@@ -150,6 +178,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
   });
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [downloadedRepos, setDownloadedRepos] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('tabman.downloadedModels');
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     if (adding) {
@@ -291,15 +327,126 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     handleSaveStoragePath(defaultPath);
   };
 
+  const getDeviceLatency = (
+    target: 'dgpu' | 'igpu' | 'gpu' | 'npu' | 'cpu',
+  ): number | undefined => {
+    if (!benchmarkReport) return undefined;
+    const match = benchmarkReport.results.find((r) => {
+      if (target === 'dgpu')
+        return r.category === 'dgpu' || r.id === 'webgpu-discrete';
+      if (target === 'igpu')
+        return r.category === 'igpu' || r.id === 'webgpu-integrated';
+      if (target === 'gpu')
+        return (
+          r.category === 'gpu' ||
+          r.category === 'dgpu' ||
+          r.id === 'webgpu' ||
+          r.id === 'webgpu-discrete'
+        );
+      if (target === 'npu') return r.category === 'npu' || r.id === 'npu';
+      if (target === 'cpu') return r.category === 'cpu' || r.id === 'cpu';
+      return false;
+    });
+    return match?.latencyMs;
+  };
+
   const handleScanModels = async () => {
     setIsScanning(true);
     setScanStatus(null);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      const message =
-        'Scan complete: 3 Tabman AI model variants verified in local search cache. Ready for zero-dependency execution.';
-      setScanStatus(message);
-      onNotify(message, 'success');
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const stored = (() => {
+        try {
+          const raw = localStorage.getItem('tabman.downloadedModels');
+          return raw ? (JSON.parse(raw) as string[]) : [];
+        } catch {
+          return [];
+        }
+      })();
+
+      const localProviderRepos = (settings?.providers ?? [])
+        .filter((p) => p.apiFormat === 'tabman-local')
+        .map((p) => p.model.toLowerCase());
+
+      const downloadedSet = new Set(
+        [...stored, ...localProviderRepos].map((s) => s.toLowerCase()),
+      );
+
+      if (activeProfile?.apiFormat === 'tabman-local') {
+        downloadedSet.add(activeProfile.model.toLowerCase());
+      }
+
+      // Check Cache Storage in the browser for transformers.js or onnx model caches
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const cacheKeys = await window.caches.keys();
+          for (const key of cacheKeys) {
+            const lowerKey = key.toLowerCase();
+            for (const m of TABMAN_OFFICIAL_MODELS) {
+              if (
+                lowerKey.includes(m.repo.toLowerCase()) ||
+                lowerKey.includes(m.id)
+              ) {
+                downloadedSet.add(m.repo.toLowerCase());
+              }
+            }
+          }
+        } catch {}
+      }
+
+      const verified = TABMAN_OFFICIAL_MODELS.filter((m) =>
+        downloadedSet.has(m.repo.toLowerCase()),
+      );
+
+      if (verified.length > 0) {
+        const verifiedRepos = verified.map((m) => m.repo.toLowerCase());
+        try {
+          localStorage.setItem(
+            'tabman.downloadedModels',
+            JSON.stringify(verifiedRepos),
+          );
+        } catch {}
+        setDownloadedRepos(verifiedRepos);
+
+        for (const official of verified) {
+          const existing = (settings?.providers ?? []).find(
+            (p) => p.model.toLowerCase() === official.repo.toLowerCase(),
+          );
+          if (!existing) {
+            const newProfile: ProviderProfile = {
+              id: crypto.randomUUID(),
+              name: official.name,
+              baseUrl: 'http://localhost/tabman-ai',
+              model: official.repo,
+              apiFormat: 'tabman-local',
+            };
+            await sendSwitchboardRequest({
+              type: 'providers/save',
+              profile: newProfile,
+            });
+            if (!settings?.activeProviderId) {
+              await sendSwitchboardRequest({
+                type: 'providers/activate',
+                id: newProfile.id,
+              });
+            }
+          }
+        }
+        await load();
+
+        const names = verified.map((m) => m.name).join(', ');
+        const message = `Scan complete: Found ${verified.length} verified Tabman local model(s) (${names}) ready for zero-dependency execution.`;
+        setScanStatus(message);
+        onNotify(message, 'success');
+      } else {
+        setDownloadedRepos([]);
+        try {
+          localStorage.removeItem('tabman.downloadedModels');
+        } catch {}
+        const message = `No local models found in browser cache or ${modelStoragePath || storageLocations.current}. Click "Use Model" on any model above to download into browser cache.`;
+        setScanStatus(message);
+        onNotify(message, 'info');
+      }
     } catch (e) {
       onNotify(
         e instanceof Error ? e.message : 'Model scan encountered an issue',
@@ -340,6 +487,13 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       if (!actRes.ok) {
         throw new Error(actRes.error);
       }
+
+      try {
+        const raw = localStorage.getItem('tabman.downloadedModels');
+        const curr = raw ? (JSON.parse(raw) as string[]) : [];
+        const next = Array.from(new Set([...curr, hfModel.repo.toLowerCase()]));
+        localStorage.setItem('tabman.downloadedModels', JSON.stringify(next));
+      } catch {}
     }, `${hfModel.name} activated with local zero-dependency engine.`);
 
   const handleSelectPreset = (val: string) => {
@@ -358,10 +512,11 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     }
   };
 
-  const providers = settings?.providers ?? [];
-  const activeProfile = providers.find(
+  const rawProviders = settings?.providers ?? [];
+  const activeProfile = rawProviders.find(
     (p) => p.id === settings?.activeProviderId,
   );
+  const providers = sortProvidersDeterministically(rawProviders);
 
   return (
     <section className="providers">
@@ -379,7 +534,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       <section className="hf-section">
         <div className="hf-section-head">
           <h2>
-            <HuggingFaceIcon size={20} />
+            <SparkIcon size={20} />
             Official Tabman Local Models (Hugging Face)
           </h2>
           <p>
@@ -447,77 +602,215 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Target Device:
               </span>
-              <button
-                type="button"
-                className={
-                  deviceChoice === 'auto'
-                    ? 'precision-toggle-btn active'
-                    : 'precision-toggle-btn'
-                }
-                onClick={() => handleSelectDeviceChoice('auto')}
-                title="Auto scheduler: empirically benchmarks your hardware on first use and selects the fastest backend"
-              >
-                {deviceChoice === 'auto' && <CheckIcon size={13} />}⚡ Auto (
-                {benchmarkReport
-                  ? `${benchmarkReport.fastestName} · ${benchmarkReport.fastestLatencyMs} ms`
-                  : hardwareProfile
-                    ? hardwareProfile.device.toUpperCase()
-                    : 'Recommended'}
-                )
-              </button>
+              <Tooltip content="Auto Scheduler: Empirically measures latency across all detected hardware and dispatches embedding jobs to the fastest local backend.">
+                <button
+                  type="button"
+                  className={
+                    deviceChoice === 'auto'
+                      ? 'precision-toggle-btn active'
+                      : 'precision-toggle-btn'
+                  }
+                  onClick={() => handleSelectDeviceChoice('auto')}
+                >
+                  {deviceChoice === 'auto' && <CheckIcon size={13} />}⚡ Auto (
+                  {benchmarkReport
+                    ? `${benchmarkReport.fastestName} · ${benchmarkReport.fastestLatencyMs} ms`
+                    : hardwareProfile
+                      ? hardwareProfile.device.toUpperCase()
+                      : 'Recommended'}
+                  )
+                </button>
+              </Tooltip>
 
               {hardwareProfile?.hasDualGpu ? (
                 <>
+                  <Tooltip
+                    content={`Dedicated GPU (dGPU): WebGPU tensor compute on ${hardwareProfile.dGpuName || 'high-performance graphics'}.`}
+                  >
+                    <button
+                      type="button"
+                      className={
+                        deviceChoice === 'webgpu-discrete'
+                          ? 'precision-toggle-btn active'
+                          : 'precision-toggle-btn'
+                      }
+                      onClick={() =>
+                        handleSelectDeviceChoice('webgpu-discrete')
+                      }
+                    >
+                      {deviceChoice === 'webgpu-discrete' && (
+                        <CheckIcon size={13} />
+                      )}
+                      dGPU ({hardwareProfile.dGpuName || 'High-Perf'}
+                      {getDeviceLatency('dgpu') !== undefined
+                        ? ` · ${getDeviceLatency('dgpu')} ms`
+                        : ''}
+                      )
+                    </button>
+                  </Tooltip>
+                  <Tooltip
+                    content={`Integrated GPU (iGPU): Power-efficient WebGPU shader execution on ${hardwareProfile.iGpuName || 'integrated graphics'}.`}
+                  >
+                    <button
+                      type="button"
+                      className={
+                        deviceChoice === 'webgpu-integrated'
+                          ? 'precision-toggle-btn active'
+                          : 'precision-toggle-btn'
+                      }
+                      onClick={() =>
+                        handleSelectDeviceChoice('webgpu-integrated')
+                      }
+                    >
+                      {deviceChoice === 'webgpu-integrated' && (
+                        <CheckIcon size={13} />
+                      )}
+                      iGPU ({hardwareProfile.iGpuName || 'Low-Power'}
+                      {getDeviceLatency('igpu') !== undefined
+                        ? ` · ${getDeviceLatency('igpu')} ms`
+                        : ''}
+                      )
+                    </button>
+                  </Tooltip>
+                </>
+              ) : hardwareProfile?.gpuType === 'dgpu' ? (
+                <Tooltip
+                  content={`Dedicated GPU (dGPU): WebGPU tensor compute on ${hardwareProfile.gpuName || 'dedicated graphics'}.`}
+                >
                   <button
                     type="button"
                     className={
-                      deviceChoice === 'webgpu-discrete'
+                      deviceChoice === 'webgpu-discrete' ||
+                      deviceChoice === 'webgpu'
                         ? 'precision-toggle-btn active'
                         : 'precision-toggle-btn'
                     }
                     onClick={() => handleSelectDeviceChoice('webgpu-discrete')}
-                    title={`Discrete GPU: ${hardwareProfile.dGpuName || 'High-Performance'}`}
                   >
-                    {deviceChoice === 'webgpu-discrete' && (
-                      <CheckIcon size={13} />
-                    )}
-                    dGPU ({hardwareProfile.dGpuName || 'High-Perf'})
+                    {(deviceChoice === 'webgpu-discrete' ||
+                      deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                    dGPU ({hardwareProfile.gpuName || 'Dedicated'}
+                    {getDeviceLatency('dgpu') !== undefined ||
+                    getDeviceLatency('gpu') !== undefined
+                      ? ` · ${getDeviceLatency('dgpu') ?? getDeviceLatency('gpu')} ms`
+                      : ''}
+                    )
                   </button>
+                </Tooltip>
+              ) : (
+                <Tooltip
+                  content={`Integrated GPU (iGPU): Power-efficient WebGPU shader execution on ${hardwareProfile?.gpuName || 'integrated graphics'}.`}
+                >
                   <button
                     type="button"
                     className={
-                      deviceChoice === 'webgpu-integrated'
+                      deviceChoice === 'webgpu-integrated' ||
+                      deviceChoice === 'webgpu'
                         ? 'precision-toggle-btn active'
                         : 'precision-toggle-btn'
                     }
                     onClick={() =>
                       handleSelectDeviceChoice('webgpu-integrated')
                     }
-                    title={`Integrated GPU: ${hardwareProfile.iGpuName || 'Low-Power'}`}
                   >
-                    {deviceChoice === 'webgpu-integrated' && (
-                      <CheckIcon size={13} />
-                    )}
-                    iGPU ({hardwareProfile.iGpuName || 'Low-Power'})
+                    {(deviceChoice === 'webgpu-integrated' ||
+                      deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                    iGPU ({hardwareProfile?.gpuName || 'Integrated'}
+                    {getDeviceLatency('igpu') !== undefined ||
+                    getDeviceLatency('gpu') !== undefined
+                      ? ` · ${getDeviceLatency('igpu') ?? getDeviceLatency('gpu')} ms`
+                      : ''}
+                    )
                   </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className={
-                    deviceChoice === 'webgpu'
-                      ? 'precision-toggle-btn active'
-                      : 'precision-toggle-btn'
-                  }
-                  onClick={() => handleSelectDeviceChoice('webgpu')}
-                  title="Force GPU (WebGPU): Fastest inference on discrete and integrated graphics"
-                >
-                  {deviceChoice === 'webgpu' && <CheckIcon size={13} />}
-                  GPU (WebGPU)
-                </button>
+                </Tooltip>
               )}
 
-              {hardwareProfile?.hasNpu && (
+              <Tooltip
+                maxWidth={380}
+                content={
+                  hardwareProfile?.npuAvailableInBrowser ? (
+                    'Dedicated NPU (WebNN): Ultra-low power neural hardware execution.'
+                  ) : (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        padding: '2px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: 'var(--brand-text)',
+                          fontSize: '13px',
+                        }}
+                      >
+                        Chromium WebNN NPU Setup
+                      </div>
+                      <div
+                        style={{ fontSize: '12px', color: 'var(--text-soft)' }}
+                      >
+                        To activate your system NPU in Chrome/Brave, enable
+                        these 3 flags in <code>chrome://flags</code> or{' '}
+                        <code>brave://flags</code>:
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          fontSize: '11.5px',
+                        }}
+                      >
+                        <div>
+                          <strong>1. Enables WebNN API</strong>{' '}
+                          <code style={{ fontSize: '10.5px' }}>
+                            #web-machine-learning-neural-network
+                          </code>
+                          <div style={{ color: 'var(--success)' }}>
+                            ➜ Set to: <strong>Enabled</strong> (Primary WebNN
+                            API)
+                          </div>
+                        </div>
+                        <div>
+                          <strong>2. ONNX Runtime backend for WebNN</strong>{' '}
+                          <code style={{ fontSize: '10.5px' }}>
+                            #webnn-onnxruntime
+                          </code>
+                          <div style={{ color: 'var(--success)' }}>
+                            ➜ Set to: <strong>Enabled</strong> (Routes to
+                            DirectML / OpenVINO NPU on Windows)
+                          </div>
+                        </div>
+                        <div>
+                          <strong>
+                            3. Enables experimental WebNN API features
+                          </strong>{' '}
+                          <code style={{ fontSize: '10.5px' }}>
+                            #experimental-web-machine-learning-neural-network
+                          </code>
+                          <div style={{ color: 'var(--text-muted)' }}>
+                            ➜ Set to: <strong>Enabled</strong> (Full operator
+                            support)
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: 'var(--text-faint)',
+                          borderTop: '1px solid var(--border-subtle)',
+                          paddingTop: '6px',
+                        }}
+                      >
+                        Relaunch browser after enabling flags to activate NPU
+                        execution.
+                      </div>
+                    </div>
+                  )
+                }
+              >
                 <button
                   type="button"
                   className={
@@ -526,60 +819,101 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       : 'precision-toggle-btn'
                   }
                   onClick={() => handleSelectDeviceChoice('npu')}
-                  title="Force NPU (WebNN): Dedicated neural processing unit for low-power background clustering"
                 >
                   {deviceChoice === 'npu' && <CheckIcon size={13} />}
-                  NPU (WebNN)
+                  NPU (
+                  {hardwareProfile?.npuAvailableInBrowser
+                    ? `WebNN${getDeviceLatency('npu') !== undefined ? ` · ${getDeviceLatency('npu')} ms` : ''}`
+                    : 'WebNN Flag Required'}
+                  )
                 </button>
-              )}
+              </Tooltip>
 
-              <button
-                type="button"
-                className={
-                  deviceChoice === 'cpu'
-                    ? 'precision-toggle-btn active'
-                    : 'precision-toggle-btn'
-                }
-                onClick={() => handleSelectDeviceChoice('cpu')}
-                title="Force CPU (WASM SIMD): Universal low-overhead fallback across all machines"
-              >
-                {deviceChoice === 'cpu' && <CheckIcon size={13} />}
-                CPU (SIMD)
-              </button>
+              <Tooltip content="CPU WASM SIMD: 128-bit vector parallel compute with zero GPU memory overhead. 100% resilient universal CPU fallback.">
+                <button
+                  type="button"
+                  className={
+                    deviceChoice === 'cpu'
+                      ? 'precision-toggle-btn active'
+                      : 'precision-toggle-btn'
+                  }
+                  onClick={() => handleSelectDeviceChoice('cpu')}
+                >
+                  {deviceChoice === 'cpu' && <CheckIcon size={13} />}
+                  CPU (SIMD
+                  {getDeviceLatency('cpu') !== undefined
+                    ? ` · ${getDeviceLatency('cpu')} ms`
+                    : ''}
+                  )
+                </button>
+              </Tooltip>
 
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                style={{ marginLeft: 'auto', gap: '5px' }}
-                onClick={() => void handleTriggerBenchmark()}
-                disabled={isBenchmarking}
-                title="Run empirical benchmark across your GPUs, NPU, and CPU to verify fastest option"
-              >
-                <RefreshIcon
-                  size={12}
-                  className={isBenchmarking ? 'benchmark-spin' : ''}
-                />
-                {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
-              </button>
+              <Tooltip content="Run empirical matrix benchmark across all detected local GPUs, NPU, and CPU to verify real execution latency.">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost benchmark-btn"
+                  style={{ marginLeft: 'auto', gap: '6px' }}
+                  onClick={() => void handleTriggerBenchmark()}
+                  disabled={isBenchmarking}
+                >
+                  <RefreshIcon
+                    size={12}
+                    className={isBenchmarking ? 'benchmark-spin' : ''}
+                  />
+                  <span>
+                    {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
+                  </span>
+                </button>
+              </Tooltip>
             </div>
           </div>
 
           {benchmarkReport && (
             <div className="benchmark-results-strip">
               <span className="benchmark-strip-title">
-                ⚡ Empirical Benchmark:
-              </span>
-              {benchmarkReport.results.map((res) => (
+                ⚡ Empirical Benchmark{' '}
                 <span
-                  key={res.id}
-                  className={`benchmark-badge ${
-                    res.id === benchmarkReport.fastestChoice ? 'fastest' : ''
-                  }`}
+                  style={{ fontWeight: 400, opacity: 0.75, fontSize: '11px' }}
                 >
-                  {res.id === benchmarkReport.fastestChoice && '🏆 '}
-                  <strong>{res.name}:</strong> {res.latencyMs} ms
+                  (lower latency is faster):
                 </span>
-              ))}
+              </span>
+              {benchmarkReport.results.map((res) => {
+                const isFastest = res.id === benchmarkReport.fastestChoice;
+                const opsPerSec = Math.round(
+                  1000 / Math.max(res.latencyMs, 0.01),
+                );
+                return (
+                  <span
+                    key={res.id}
+                    className={`benchmark-badge ${isFastest ? 'fastest' : ''}`}
+                    title={`${res.name}: ${res.latencyMs} ms per pass (~${opsPerSec.toLocaleString()} ops/sec)`}
+                  >
+                    {isFastest && '🏆 '}
+                    <strong>{res.name}:</strong> {res.latencyMs} ms
+                    <span
+                      style={{
+                        opacity: 0.65,
+                        fontSize: '10.5px',
+                        marginLeft: '4px',
+                      }}
+                    >
+                      ({opsPerSec.toLocaleString()} ops/s)
+                    </span>
+                    {isFastest && (
+                      <span
+                        style={{
+                          color: 'var(--success)',
+                          fontWeight: 600,
+                          marginLeft: '4px',
+                        }}
+                      >
+                        · Fastest
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           )}
 
@@ -599,6 +933,8 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               precision === 'int8' ? hfModel.sizeInt8 : hfModel.sizeFp32;
             const isRecommended =
               hardwareProfile?.recommendedModelId === hfModel.id;
+            const isDownloaded =
+              downloadedRepos.includes(hfModel.repo.toLowerCase()) || isActive;
 
             return (
               <article
@@ -607,45 +943,63 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               >
                 <div className="hf-model-card-head">
                   <div className="hf-model-title">
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
+                    <div className="hf-model-title-row">
                       <strong>{hfModel.name}</strong>
-                      {isRecommended && (
-                        <span
-                          className="hf-badge"
-                          style={{
-                            background:
-                              'color-mix(in srgb, var(--brand) 15%, transparent)',
-                            color: 'var(--brand-text)',
-                            borderColor: 'var(--brand)',
-                          }}
-                        >
-                          Recommended
-                        </span>
+                      {isDownloaded && (
+                        <Tooltip content="Cached locally on device (ready for zero-latency offline execution)">
+                          <span
+                            role="img"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--success)',
+                              background:
+                                'color-mix(in srgb, var(--success) 14%, transparent)',
+                              borderRadius: '50%',
+                              width: '18px',
+                              height: '18px',
+                              flexShrink: 0,
+                            }}
+                            aria-label="Model cached locally"
+                          >
+                            <HardDriveIcon size={12} />
+                          </span>
+                        </Tooltip>
                       )}
                     </div>
                     <span>{hfModel.tier}</span>
                   </div>
-                  {isActive ? (
-                    <span className="chip chip-brand">
-                      <CheckIcon size={13} />
-                      Active
-                    </span>
-                  ) : (
-                    <button
-                      className="btn btn-sm"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleActivateHfModel(hfModel)}
-                    >
-                      Use Model
-                    </button>
-                  )}
+                  <div className="hf-model-card-action">
+                    {isActive ? (
+                      <span className="chip chip-brand">
+                        <CheckIcon size={13} />
+                        Active
+                      </span>
+                    ) : (
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleActivateHfModel(hfModel)}
+                      >
+                        Use Model
+                      </button>
+                    )}
+                    {isRecommended && (
+                      <span
+                        className="hf-badge"
+                        style={{
+                          background:
+                            'color-mix(in srgb, var(--brand) 15%, transparent)',
+                          color: 'var(--brand-text)',
+                          borderColor: 'var(--brand)',
+                        }}
+                      >
+                        Recommended
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="hf-model-desc">{hfModel.description}</p>
                 <div className="hf-model-foot">
@@ -656,11 +1010,12 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     rel="noopener noreferrer"
                     title="Open model repository on Hugging Face"
                   >
-                    <HuggingFaceIcon size={14} />
+                    <SparkIcon size={13} />
                     <span>{hfModel.repo}</span>
                   </a>
                   <span className="hf-badge">
-                    {precision.toUpperCase()} · {currentSize}
+                    {precision.toUpperCase()}{' '}
+                    <span className="hf-badge-dot">•</span> {currentSize}
                   </span>
                 </div>
               </article>
@@ -768,26 +1123,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
 
         {providers.map((profile) => {
           const active = profile.id === settings?.activeProviderId;
-          const isHfModel = TABMAN_OFFICIAL_MODELS.some(
-            (m) => m.repo.toLowerCase() === profile.model.toLowerCase(),
-          );
           return (
             <article
               className={active ? 'provider active' : 'provider'}
               key={profile.id}
             >
               <header className="provider-head">
-                <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
-                    {isHfModel && <HuggingFaceIcon size={16} />}
-                    <strong>{profile.name}</strong>
-                  </div>
+                <div className="provider-meta">
+                  <strong>{profile.name}</strong>
                   <span>
                     {profile.model} · {profile.apiFormat}
                   </span>
@@ -991,14 +1334,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                   <optgroup label="Official Models — INT8 Quantized (Recommended)">
                     {TABMAN_OFFICIAL_MODELS.map((m) => (
                       <option key={`${m.repo}:int8`} value={`${m.repo}:int8`}>
-                        🤗 {m.name} [INT8 · {m.sizeInt8}] (Recommended)
+                        {m.name} [INT8 · {m.sizeInt8}] (Recommended)
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Official Models — FP32 Full Precision">
                     {TABMAN_OFFICIAL_MODELS.map((m) => (
                       <option key={`${m.repo}:fp32`} value={`${m.repo}:fp32`}>
-                        🤗 {m.name} [FP32 · {m.sizeFp32}]
+                        {m.name} [FP32 · {m.sizeFp32}]
                       </option>
                     ))}
                   </optgroup>
@@ -1044,7 +1387,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       marginTop: '4px',
                     }}
                   >
-                    <HuggingFaceIcon size={13} />
+                    <SparkIcon size={13} />
                     <a
                       href={`https://huggingface.co/${model}`}
                       target="_blank"

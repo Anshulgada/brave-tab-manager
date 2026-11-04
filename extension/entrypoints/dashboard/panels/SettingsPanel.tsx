@@ -8,11 +8,11 @@ import {
   SunIcon,
   ZapIcon,
 } from '../../../src/ui/icons';
-import { shortcut } from '../../../src/ui/platform';
+import { modifierKey } from '../../../src/ui/platform';
 
 export function SettingsPanel({
   settings,
-  busy,
+  busy: _busy,
   onApplyTheme,
   onSave,
 }: {
@@ -28,15 +28,23 @@ export function SettingsPanel({
         return (
           (localStorage.getItem('tabman-organize-mode') as
             | 'multiple'
-            | 'single') || 'multiple'
+            | 'single') || 'single'
         );
       } catch {
-        return 'multiple';
+        return 'single';
       }
     },
   );
 
   useEffect(() => setDraft(settings), [settings]);
+
+  const handleUpdate = (updater: (prev: Settings) => Settings) => {
+    setDraft((prev) => {
+      const next = updater(prev);
+      onSave(next);
+      return next;
+    });
+  };
 
   return (
     <section className="settings">
@@ -50,13 +58,7 @@ export function SettingsPanel({
       </header>
 
       <div className="settings-grid">
-        <form
-          className="settings-card"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSave(draft);
-          }}
-        >
+        <div className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <SunIcon size={16} />
@@ -76,8 +78,8 @@ export function SettingsPanel({
                 }`}
                 aria-pressed={draft.theme === theme}
                 onClick={() => {
-                  setDraft({ ...draft, theme });
                   onApplyTheme(theme);
+                  handleUpdate((prev) => ({ ...prev, theme }));
                 }}
               >
                 {draft.theme === theme && (
@@ -101,18 +103,9 @@ export function SettingsPanel({
               </button>
             ))}
           </div>
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            Save theme
-          </button>
-        </form>
+        </div>
 
-        <form
-          className="settings-card"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSave(draft);
-          }}
-        >
+        <div className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <GridIcon size={16} />
@@ -131,7 +124,9 @@ export function SettingsPanel({
                   draft.defaultView === defaultView ? 'active' : ''
                 }`}
                 aria-pressed={draft.defaultView === defaultView}
-                onClick={() => setDraft({ ...draft, defaultView })}
+                onClick={() =>
+                  handleUpdate((prev) => ({ ...prev, defaultView }))
+                }
               >
                 {draft.defaultView === defaultView && (
                   <motion.div
@@ -150,18 +145,9 @@ export function SettingsPanel({
               </button>
             ))}
           </div>
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            Save view
-          </button>
-        </form>
+        </div>
 
-        <form
-          className="settings-card"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSave(draft);
-          }}
-        >
+        <div className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <ShieldIcon size={16} />
@@ -180,7 +166,10 @@ export function SettingsPanel({
               aria-checked={draft.includeFullUrlInAi}
               checked={draft.includeFullUrlInAi}
               onChange={(event) =>
-                setDraft({ ...draft, includeFullUrlInAi: event.target.checked })
+                handleUpdate((prev) => ({
+                  ...prev,
+                  includeFullUrlInAi: event.target.checked,
+                }))
               }
             />
           </label>
@@ -188,10 +177,7 @@ export function SettingsPanel({
             Off sends only titles and hostnames. Tabman never reads the page
             body.
           </p>
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            Save privacy
-          </button>
-        </form>
+        </div>
 
         <div className="settings-card">
           <div className="settings-card-head">
@@ -204,32 +190,6 @@ export function SettingsPanel({
             </div>
           </div>
           <div className="segmented-pill-track">
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                organizeMode === 'multiple' ? 'active' : ''
-              }`}
-              aria-pressed={organizeMode === 'multiple'}
-              onClick={() => {
-                setOrganizeMode('multiple');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'multiple');
-                } catch {}
-              }}
-            >
-              {organizeMode === 'multiple' && (
-                <motion.div
-                  layoutId="settingsDestPill"
-                  className="segmented-pill-slider"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
-              <span className="segmented-pill-text">Separate collections</span>
-            </button>
             <button
               type="button"
               className={`segmented-pill-btn ${
@@ -258,11 +218,37 @@ export function SettingsPanel({
                 Single collection with tags
               </span>
             </button>
+            <button
+              type="button"
+              className={`segmented-pill-btn ${
+                organizeMode === 'multiple' ? 'active' : ''
+              }`}
+              aria-pressed={organizeMode === 'multiple'}
+              onClick={() => {
+                setOrganizeMode('multiple');
+                try {
+                  localStorage.setItem('tabman-organize-mode', 'multiple');
+                } catch {}
+              }}
+            >
+              {organizeMode === 'multiple' && (
+                <motion.div
+                  layoutId="settingsDestPill"
+                  className="segmented-pill-slider"
+                  transition={{
+                    type: 'spring',
+                    stiffness: 500,
+                    damping: 35,
+                  }}
+                />
+              )}
+              <span className="segmented-pill-text">Separate collections</span>
+            </button>
           </div>
           <p className="settings-note">
-            {organizeMode === 'multiple'
-              ? 'Creates a distinct collection for each group or domain rule.'
-              : 'Puts all tabs into one dated collection and tags them with their group name.'}
+            {organizeMode === 'single'
+              ? 'Puts all tabs into one dated collection and tags them with their group name.'
+              : 'Creates a distinct collection for each group or domain rule.'}
           </p>
         </div>
 
@@ -273,20 +259,41 @@ export function SettingsPanel({
             </span>
             <div>
               <h2>Shortcuts</h2>
-              <p>Work faster from the keyboard.</p>
+              <p>Quick keys for frequent actions.</p>
             </div>
           </div>
           <ul className="shortcut-list">
             <li>
-              <span className="kbd">{shortcut('K')}</span>Open the command
-              palette
+              <span>Command palette</span>
+              <div className="shortcut-keys">
+                <kbd className="kbd">{modifierKey}</kbd>
+                <kbd className="kbd">K</kbd>
+              </div>
             </li>
             <li>
-              <span className="kbd">/</span>Focus the search field
+              <span>Open Tabman extension</span>
+              <div className="shortcut-keys">
+                <kbd className="kbd">{modifierKey}</kbd>
+                <kbd className="kbd">Shift</kbd>
+                <kbd className="kbd">O</kbd>
+              </div>
             </li>
             <li>
-              <span className="kbd">Esc</span>Close an overlay or clear a
-              selection
+              <span>Search inside collection</span>
+              <div className="shortcut-keys">
+                <kbd className="kbd">/</kbd>
+                <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                  or
+                </span>
+                <kbd className="kbd">{modifierKey}</kbd>
+                <kbd className="kbd">F</kbd>
+              </div>
+            </li>
+            <li>
+              <span>Close modal or clear selection</span>
+              <div className="shortcut-keys">
+                <kbd className="kbd">Esc</kbd>
+              </div>
             </li>
           </ul>
         </div>

@@ -177,7 +177,7 @@ export function getDefaultModelStorageLocations(): {
     typeof navigator !== 'undefined' &&
     /win/i.test(navigator.userAgent || navigator.platform || '');
 
-  const windowsPath = '%LOCALAPPDATA%\\Tabman\\models';
+  const windowsPath = '%LOCALAPPDATA%\\tabman\\models';
   const linuxPath = '~/.local/share/tabman/models';
 
   return {
@@ -254,16 +254,78 @@ export interface HardwareProfile {
   device: ComputeDevice;
   deviceLabel: string;
   gpuName?: string;
+  gpuType?: 'dgpu' | 'igpu';
   hasDualGpu?: boolean;
   dGpuName?: string;
   iGpuName?: string;
   cpuThreads: number;
   ramGb?: number;
   hasNpu: boolean;
+  npuAvailableInBrowser?: boolean;
+  nativeSidecarAvailable?: boolean;
   recommendedPrecision: ModelPrecision;
   recommendedModelId: string;
   recommendationReason: string;
   benchmarkReport?: HardwareBenchmarkReport | null;
+}
+
+/**
+ * Probe local native desktop sidecar via Native Messaging if installed.
+ */
+export async function probeNativeSidecar(): Promise<{
+  available: boolean;
+  cpuThreads?: number;
+  hasDirectML?: boolean;
+  hasOpenVinoNPU?: boolean;
+  primaryDevice?: string;
+} | null> {
+  const ch = (
+    globalThis as unknown as {
+      chrome?: {
+        runtime?: {
+          sendNativeMessage?: (
+            host: string,
+            msg: unknown,
+            cb: (resp: {
+              status?: string;
+              cpuThreads?: number;
+              hasDirectML?: boolean;
+              hasOpenVinoNPU?: boolean;
+              primaryDevice?: string;
+            }) => void,
+          ) => void;
+          lastError?: unknown;
+        };
+      };
+    }
+  ).chrome;
+
+  if (!ch?.runtime?.sendNativeMessage) {
+    return null;
+  }
+  return new Promise((resolve) => {
+    try {
+      ch.runtime?.sendNativeMessage?.(
+        'com.tabman.sidecar',
+        { type: 'hardware/inspect' },
+        (response) => {
+          if (ch.runtime?.lastError || !response || response.status !== 'ok') {
+            resolve(null);
+          } else {
+            resolve({
+              available: true,
+              cpuThreads: response.cpuThreads,
+              hasDirectML: response.hasDirectML,
+              hasOpenVinoNPU: response.hasOpenVinoNPU,
+              primaryDevice: response.primaryDevice,
+            });
+          }
+        },
+      );
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 /**
@@ -274,7 +336,9 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
   let device: ComputeDevice = 'cpu';
   let deviceLabel = 'CPU (WebAssembly SIMD)';
   let gpuName: string | undefined;
+  let gpuType: 'dgpu' | 'igpu' | undefined;
   let hasNpu = false;
+  let npuAvailableInBrowser = false;
   let hasDualGpu = false;
   let dGpuName: string | undefined;
   let iGpuName: string | undefined;
@@ -288,10 +352,17 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
 
   // 1. Inspect GPUs (High-Performance dGPU vs Low-Power iGPU)
   const hardware = await inspectSystemHardwareTargets();
+  const sidecar = await probeNativeSidecar();
+  const nativeSidecarAvailable = sidecar?.available ?? false;
   hasDualGpu = hardware.hasDualGpu;
   dGpuName = hardware.dGpuName;
   iGpuName = hardware.iGpuName;
-  hasNpu = hardware.hasNpu;
+  hasNpu =
+    hardware.hasNpu ||
+    (sidecar?.hasOpenVinoNPU ?? false) ||
+    (sidecar?.hasDirectML ?? false);
+  npuAvailableInBrowser = hardware.npuAvailableInBrowser;
+  gpuType = hardware.singleGpuType;
 
   if (hasDualGpu) {
     device = 'webgpu';
@@ -300,7 +371,8 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
   } else if (hardware.singleGpuName) {
     device = 'webgpu';
     gpuName = hardware.singleGpuName;
-    deviceLabel = `${gpuName} (WebGPU)`;
+    const prefix = gpuType === 'dgpu' ? 'dGPU' : 'iGPU';
+    deviceLabel = `${prefix}: ${gpuName} (WebGPU)`;
   } else {
     // Fallback single adapter check
     try {
@@ -380,12 +452,15 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
     device,
     deviceLabel,
     gpuName,
+    gpuType,
     hasDualGpu,
     dGpuName,
     iGpuName,
     cpuThreads,
     ramGb,
     hasNpu,
+    npuAvailableInBrowser,
+    nativeSidecarAvailable,
     recommendedPrecision: 'int8',
     recommendedModelId,
     recommendationReason,

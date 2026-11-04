@@ -355,4 +355,42 @@ describe('background switchboard service', () => {
       parkingCollectionIds: [],
     });
   });
+
+  it('drops tracking parameters (utm, fbclid) and keeps query params and # fragments when parking tabs', async () => {
+    const rawUrl =
+      'https://example.com/item?utm_source=fb&q=tabman&fbclid=12345#overview';
+    const browserMock = installBrowserMock();
+    browserMock.tabs.get = vi.fn().mockResolvedValue({
+      id: 1,
+      windowId: 1,
+      index: 0,
+      title: 'Item with tracking',
+      url: rawUrl,
+      favIconUrl: 'https://example.com/favicon.ico',
+      pinned: false,
+      active: true,
+      audible: false,
+      discarded: false,
+      groupId: -1,
+      incognito: false,
+      highlighted: false,
+      selected: false,
+      autoDiscardable: true,
+    });
+
+    const response = await handleSwitchboardRequest({
+      type: 'switchboard/park',
+      tabIds: [1],
+      name: 'Clean parked',
+    });
+    expect(response).toEqual({ ok: true, affected: 1 });
+
+    const database = new TabmanDatabase();
+    openDatabases.push(database);
+    const parked = await database.tabs.toArray();
+    expect(parked).toHaveLength(1);
+    expect(parked[0]?.url).toBe('https://example.com/item?q=tabman#overview');
+    expect(parked[0]?.url).not.toContain('utm_source');
+    expect(parked[0]?.url).not.toContain('fbclid');
+  });
 });

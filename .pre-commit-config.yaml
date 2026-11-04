@@ -13,10 +13,12 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
+        exclude: '^extension/src/rust-wasm-binary\.ts$'
       - id: mixed-line-ending
         args: [--fix=lf]
-        exclude: '\.ps1$'
+        exclude: '(\.ps1$|^extension/src/rust-wasm-binary\.ts$)'
       - id: trailing-whitespace
+        exclude: '^extension/src/rust-wasm-binary\.ts$'
 
   - repo: local
     hooks:
@@ -57,7 +59,7 @@ repos:
         name: Detect secrets
         entry: uv run detect-secrets-hook --baseline .secrets.baseline
         language: system
-        exclude: ^(uv\.lock|extension/bun\.lock)$
+        exclude: ^(uv\.lock|extension/bun\.lock|extension/src/rust-wasm-binary\.ts)$
 
       - id: shellcheck
         name: ShellCheck

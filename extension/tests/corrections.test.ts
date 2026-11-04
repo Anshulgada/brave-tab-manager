@@ -4,10 +4,13 @@ import Dexie from 'dexie';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  computeCorrectionsSimilarityMatrix,
   cosineSimilarity,
+  createCorrectionsVectorStore,
   exportCorrectionsJsonl,
   findNearestCorrection,
   recordCorrection,
+  searchCorrectionsVectorStore,
   textJaccardSimilarity,
 } from '../src/corrections';
 import { TabmanDatabase } from '../src/database';
@@ -191,5 +194,106 @@ describe('corrections storage and kNN lookup', () => {
       0.85,
     );
     expect(noMatch).toBeNull();
+  });
+
+  it('slices high-dimensional (768d) embeddings to 128d with Matryoshka projection', async () => {
+    const db = createTestDb();
+
+    // 768d embedding (e.g. from Gemma / Nomic)
+    const bigEmb = new Array(768).fill(0);
+    bigEmb[0] = 0.8;
+    bigEmb[1] = 0.6;
+
+    await recordCorrection(db, {
+      url: 'https://huggingface.co/models',
+      title: 'Hugging Face Models',
+      hostname: 'huggingface.co',
+      collectionName: 'AI Models',
+      tags: ['huggingface', 'llm'],
+      action: 'approve',
+      embedding: bigEmb,
+    });
+
+    const records = await db.corrections.toArray();
+    expect(records).toHaveLength(1);
+    expect(records[0]?.embedding?.length).toBe(128);
+
+    const queryBig = new Array(768).fill(0);
+    queryBig[0] = 0.82;
+    queryBig[1] = 0.58;
+
+    const match = await findNearestCorrection(
+      db,
+      {
+        title: 'Hugging Face Hub',
+        url: 'https://huggingface.co/hub',
+        hostname: 'huggingface.co',
+        embedding: queryBig,
+      },
+      0.85,
+    );
+    expect(match).not.toBeNull();
+    expect(match?.matchedRecord.collectionName).toBe('AI Models');
+  });
+
+  it('computes pairwise cosine matrix and builds zero-copy TABV binary vector store', async () => {
+    const db = createTestDb();
+
+    for (let i = 0; i < 10; i++) {
+      const v = new Array(128).fill(0);
+      v[i] = 1.0; // orthogonal unit vectors
+      await recordCorrection(db, {
+        url: `https://example.com/item-${i}`,
+        title: `Item ${i}`,
+        hostname: 'example.com',
+        collectionName: `Category ${i}`,
+        tags: [`tag-${i}`],
+        action: 'approve',
+        embedding: v,
+      });
+    }
+
+    const all = await db.corrections.toArray();
+    expect(all).toHaveLength(10);
+
+    // Pairwise similarity matrix (Kernel 1)
+    const matrix = computeCorrectionsSimilarityMatrix(all, 128);
+    expect(matrix.length).toBe(100); // 10x10
+    expect(matrix[0]).toBeCloseTo(1.0, 4); // diagonal self-similarity
+    expect(matrix[1]).toBeCloseTo(0.0, 4); // orthogonal
+
+    // TABV Zero-Copy binary vector store (Kernel 10)
+    const storeBuffer = createCorrectionsVectorStore(all, 128, true);
+    expect(storeBuffer.byteLength).toBeGreaterThan(64);
+    expect(storeBuffer[0]).toBe(0x54); // 'T'
+    expect(storeBuffer[1]).toBe(0x41); // 'A'
+    expect(storeBuffer[2]).toBe(0x42); // 'B'
+    expect(storeBuffer[3]).toBe(0x56); // 'V'
+
+    const queryVec = new Float32Array(128);
+    queryVec[3] = 1.0;
+    const matches = searchCorrectionsVectorStore(
+      storeBuffer,
+      all,
+      queryVec,
+      3,
+      0.8,
+    );
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    expect(matches[0]?.matchedRecord.collectionName).toBe('Category 3');
+
+    // Also tests Accelerated Int8 Quantized SIMD Search in findNearestCorrection
+    const nearest = await findNearestCorrection(
+      db,
+      {
+        title: 'Query Item 3',
+        url: 'https://example.com/item-3',
+        hostname: 'example.com',
+        embedding: Array.from(queryVec),
+      },
+      0.8,
+    );
+    expect(nearest).not.toBeNull();
+    expect(nearest?.matchedRecord.collectionName).toBe('Category 3');
   });
 });
