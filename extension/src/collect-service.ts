@@ -7,6 +7,7 @@
 
 import { TabmanDatabase, type TabRecord } from './database';
 import { notifyLibraryChanged } from './notify';
+import { canonicalizeUrl, deduplicateUrls } from './rust-wasm';
 import { collectionSchema, tabSchema } from './schema';
 
 export class CollectError extends Error {
@@ -70,10 +71,11 @@ export async function collectOpenTabs(
       parsed.hostname || parsed.protocol.replace(':', '')
     ).slice(0, 253);
     try {
+      const cleanUrl = canonicalizeUrl(source.url, false);
       const tab = tabSchema.parse({
         id: crypto.randomUUID(),
         title: (source.title ?? hostname).slice(0, 2048),
-        url: source.url,
+        url: cleanUrl,
         hostname,
         ...(source.favIconUrl ? { favIconUrl: source.favIconUrl } : {}),
         pinned: source.pinned,
@@ -99,26 +101,51 @@ export async function collectOpenTabs(
     throw new CollectError('There are no open tabs to collect');
   }
 
+  // Deduplicate open tabs batch with Rust WASM Kernel 8 deduplicateUrls
+  const rawUrls = records.map((r) => r.url);
+  const dedupResult = deduplicateUrls(rawUrls, false);
+  const uniqueRecords = dedupResult.uniqueIndices.flatMap((i) => {
+    const r = records[i];
+    return r ? [r] : [];
+  });
+
   const database = new TabmanDatabase();
   let targetCollectionId!: string;
   let collectionName!: string;
-  let affected = records.length;
+  let affected = uniqueRecords.length;
   try {
     await database.transaction(
       'rw',
       [database.collections, database.tabs],
       async () => {
-        const existing = collectionId
+        let existing = collectionId
           ? await database.collections.get(collectionId)
           : undefined;
+        if (existing?.status !== 'active' && name) {
+          const trimmed = name.trim().toLowerCase();
+          const activeCollections = await database.collections
+            .where('status')
+            .equals('active')
+            .toArray();
+          const match = activeCollections.find(
+            (c) => c.name.trim().toLowerCase() === trimmed,
+          );
+          if (match) {
+            existing = match;
+          }
+        }
         if (existing && existing.status === 'active') {
           const existingTabs = await database.tabs
             .where('collectionId')
             .equals(existing.id)
             .toArray();
 
-          const existingUrls = new Set(existingTabs.map((t) => t.url));
-          const newRecords = records.filter((r) => !existingUrls.has(r.url));
+          const existingUrls = new Set(
+            existingTabs.map((t) => canonicalizeUrl(t.url, false)),
+          );
+          const newRecords = uniqueRecords.filter(
+            (r) => !existingUrls.has(canonicalizeUrl(r.url, false)),
+          );
 
           if (newRecords.length > 0) {
             const startPosition = existingTabs.length;
@@ -154,7 +181,7 @@ export async function collectOpenTabs(
           updatedAt: now,
           status: 'active',
           tags: [],
-          tabs: records.map(
+          tabs: uniqueRecords.map(
             ({
               collectionId: _collectionId,
               normalizedHostname: _hostname,
@@ -163,7 +190,7 @@ export async function collectOpenTabs(
           ),
         });
         const { tabs: _tabs, tags: _tags, ...collectionRecord } = collection;
-        const taggedRecords = records.map((record, index) => ({
+        const taggedRecords = uniqueRecords.map((record, index) => ({
           ...record,
           collectionId: targetCollectionId,
           position: index,

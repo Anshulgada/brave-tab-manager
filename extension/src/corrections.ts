@@ -7,6 +7,17 @@
  */
 
 import type { CorrectionRecord, TabmanDatabase } from './database';
+import {
+  computePairwiseCosine,
+  createVectorStore,
+  getVectorStoreTabId,
+  matryoshkaSlice,
+  pureJsCosineSimilarity,
+  quantizeEmbeddings,
+  searchTopKTabs,
+  searchTopKTabsQuantized,
+  searchVectorStore,
+} from './rust-wasm';
 
 export interface KnnMatch {
   matchedRecord: CorrectionRecord;
@@ -15,22 +26,11 @@ export interface KnnMatch {
 }
 
 /**
- * Compute cosine similarity between two normalized 128d vectors.
+ * Compute cosine similarity between two normalized 128d vectors using Rust WASM / SIMD kernel.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    const valA = a[i] ?? 0;
-    const valB = b[i] ?? 0;
-    dot += valA * valB;
-    normA += valA * valA;
-    normB += valB * valB;
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
+  return pureJsCosineSimilarity(new Float32Array(a), new Float32Array(b));
 }
 
 /**
@@ -73,6 +73,18 @@ export async function recordCorrection(
   },
 ): Promise<void> {
   const id = crypto.randomUUID();
+  let embedding = item.embedding;
+  if (embedding && embedding.length > 128) {
+    const sliced = matryoshkaSlice(
+      [new Float32Array(embedding)],
+      128,
+      embedding.length,
+    );
+    const first = sliced[0];
+    if (first) {
+      embedding = Array.from(first);
+    }
+  }
   const record: CorrectionRecord = {
     id,
     url: item.url,
@@ -82,9 +94,74 @@ export async function recordCorrection(
     tags: item.tags,
     action: item.action,
     timestamp: new Date().toISOString(),
-    embedding: item.embedding,
+    embedding,
   };
   await db.corrections.put(record);
+}
+
+/**
+ * Compute the full pairwise cosine similarity matrix across all stored correction records.
+ */
+export function computeCorrectionsSimilarityMatrix(
+  records: CorrectionRecord[],
+  dim = 128,
+): Float32Array {
+  const vectors: Float32Array[] = [];
+  for (const r of records) {
+    if (r.embedding && r.embedding.length === dim) {
+      vectors.push(new Float32Array(r.embedding));
+    }
+  }
+  if (vectors.length === 0) return new Float32Array(0);
+  return computePairwiseCosine(vectors, dim);
+}
+
+/**
+ * Builds a Zero-Copy Binary Vector Store (TABV) buffer from correction records.
+ */
+export function createCorrectionsVectorStore(
+  records: CorrectionRecord[],
+  dim = 128,
+  quantize = true,
+): Uint8Array {
+  const valid = records.filter(
+    (r) => r.embedding && r.embedding.length === dim,
+  );
+  const ids = valid.map((r) => r.id);
+  const vectors = valid.map((r) => new Float32Array(r.embedding ?? []));
+  return createVectorStore(ids, vectors, dim, quantize);
+}
+
+/**
+ * Search the Zero-Copy Binary Vector Store directly in WASM memory.
+ */
+export function searchCorrectionsVectorStore(
+  storeBuffer: Uint8Array,
+  records: CorrectionRecord[],
+  queryVec: Float32Array,
+  k = 5,
+  threshold = 0.85,
+): KnnMatch[] {
+  const topResults = searchVectorStore(storeBuffer, queryVec, k);
+  const matches: KnnMatch[] = [];
+  const recordMap = new Map(records.map((r) => [r.id, r]));
+
+  for (const res of topResults) {
+    if (res.score >= threshold) {
+      const id = getVectorStoreTabId(storeBuffer, res.index);
+      if (id) {
+        const record = recordMap.get(id);
+        if (record) {
+          matches.push({
+            matchedRecord: record,
+            similarity: res.score,
+            confidence: res.score >= 0.92 ? 'high' : 'medium',
+          });
+        }
+      }
+    }
+  }
+  return matches;
 }
 
 /**
@@ -102,6 +179,74 @@ export async function findNearestCorrection(
 ): Promise<KnnMatch | null> {
   const allCorrections = await db.corrections.toArray();
   if (allCorrections.length === 0) return null;
+
+  if (query.embedding && query.embedding.length > 0) {
+    let queryEmbedding = query.embedding;
+    if (queryEmbedding.length > 128) {
+      const sliced = matryoshkaSlice(
+        [new Float32Array(queryEmbedding)],
+        128,
+        queryEmbedding.length,
+      );
+      const first = sliced[0];
+      if (first) {
+        queryEmbedding = Array.from(first);
+      }
+    }
+    const dim = queryEmbedding.length;
+    const recordsWithEmb = allCorrections.filter(
+      (r) => r.embedding && r.embedding.length === dim,
+    );
+    if (recordsWithEmb.length > 0) {
+      const queryVec = new Float32Array(queryEmbedding);
+      const dbVecs = recordsWithEmb.map(
+        (r) => new Float32Array(r.embedding ?? []),
+      );
+
+      let topIndex = -1;
+      let topScore = -1;
+
+      if (recordsWithEmb.length >= 8) {
+        // High density: Accelerated Int8 Quantized SIMD Search
+        const qDb = quantizeEmbeddings(dbVecs, dim);
+        const qQuery = quantizeEmbeddings([queryVec], dim);
+        const queryQuant = qQuery.quant[0] ?? new Int8Array(dim);
+        const queryScale = qQuery.scales[0] ?? 1.0;
+        const topResults = searchTopKTabsQuantized(
+          queryQuant,
+          queryScale,
+          qDb.quant,
+          qDb.scales,
+          1,
+          dim,
+        );
+        const top = topResults[0];
+        if (top) {
+          topIndex = top.index;
+          topScore = top.score;
+        }
+      } else {
+        // Standard Top-K Vector Search
+        const topResults = searchTopKTabs(queryVec, dbVecs, 1, dim);
+        const top = topResults[0];
+        if (top) {
+          topIndex = top.index;
+          topScore = top.score;
+        }
+      }
+
+      if (topIndex >= 0 && topScore >= threshold) {
+        const match = recordsWithEmb[topIndex];
+        if (match) {
+          return {
+            matchedRecord: match,
+            similarity: topScore,
+            confidence: topScore >= 0.92 ? 'high' : 'medium',
+          };
+        }
+      }
+    }
+  }
 
   let bestMatch: CorrectionRecord | null = null;
   let highestSim = -1;

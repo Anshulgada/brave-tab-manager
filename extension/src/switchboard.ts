@@ -1,3 +1,5 @@
+import { fuzzyScore } from './rust-wasm';
+
 export interface BrowserTabSnapshot {
   id?: number;
   windowId?: number;
@@ -175,14 +177,25 @@ export function filterSwitchboard(
     return snapshot;
   }
   const windows = snapshot.windows
-    .map((window) => ({
-      ...window,
-      tabs: window.tabs.filter((tab) =>
-        [tab.title, tab.url, tab.hostname].some((value) =>
-          value.toLocaleLowerCase().includes(needle),
-        ),
-      ),
-    }))
+    .map((window) => {
+      const scoredTabs = window.tabs
+        .map((tab) => {
+          const score = Math.max(
+            fuzzyScore(needle, tab.title),
+            fuzzyScore(needle, tab.url),
+            fuzzyScore(needle, tab.hostname),
+          );
+          return { tab, score };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.tab);
+
+      return {
+        ...window,
+        tabs: scoredTabs,
+      };
+    })
     .filter((window) => window.tabs.length > 0);
   return {
     ...snapshot,

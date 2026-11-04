@@ -50,10 +50,15 @@ export const switchboardRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('library/organize'),
     mode: z.enum(['provider', 'deterministic']).default('provider'),
     rules: z.string().optional(),
+    collectionId: z.uuid().optional(),
   }),
   z.strictObject({
     type: z.literal('library/organize/apply'),
     proposal: z.unknown(),
+  }),
+  z.strictObject({
+    type: z.literal('library/html/extract'),
+    html: z.string(),
   }),
   z.strictObject({ type: z.literal('providers/get') }),
   z.strictObject({
@@ -86,6 +91,7 @@ export interface OrganizeProposal {
   provider: string;
   createdAt: string;
   items: OrganizeProposalItem[];
+  collectionId?: string;
 }
 
 export type SwitchboardResponse =
@@ -100,6 +106,7 @@ export type SwitchboardResponse =
   | { ok: true; proposal: OrganizeProposal }
   | { ok: true; applied: { collections: number; tabs: number } }
   | { ok: true; settings: ProviderSettings; hasKey: boolean }
+  | { ok: true; content: { title: string; description: string; body: string } }
   | { ok: true }
   | { ok: false; error: string };
 

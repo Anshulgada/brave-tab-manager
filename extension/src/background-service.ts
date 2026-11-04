@@ -17,6 +17,7 @@ import {
   setApiKey,
   upsertProvider,
 } from './organize-service';
+import { canonicalizeUrl, extractHtmlContent } from './rust-wasm';
 import { collectionSchema, tabSchema } from './schema';
 import { buildSwitchboardSnapshot } from './switchboard';
 
@@ -295,7 +296,8 @@ async function parkTabs(
       continue;
     }
     try {
-      const parsedUrl = new URL(url);
+      const cleanUrl = canonicalizeUrl(url, false);
+      const parsedUrl = new URL(cleanUrl);
       const favIconUrl = supportedAddress(source.favIconUrl);
       const hostname = (
         parsedUrl.hostname || parsedUrl.protocol.replace(':', '')
@@ -303,7 +305,7 @@ async function parkTabs(
       const tab = tabSchema.parse({
         id: crypto.randomUUID(),
         title: (source.title ?? url).slice(0, 2048),
-        url,
+        url: cleanUrl,
         hostname,
         ...(favIconUrl ? { favIconUrl } : {}),
         pinned: source.pinned,
@@ -477,15 +479,23 @@ export async function handleSwitchboardRequest(
       case 'library/restore':
         return await restoreCollection(request.collectionId);
       case 'library/collect':
-        return await collectOpenTabs(request.name);
+        return await collectOpenTabs(request.name, request.collectionId);
       case 'library/organize': {
-        const proposal = await buildProposal(request.mode, request.rules);
+        const proposal = await buildProposal(
+          request.mode,
+          request.rules,
+          request.collectionId,
+        );
         return { ok: true, proposal };
       }
       case 'library/organize/apply': {
         const applied = await applyProposal(request.proposal as never);
         await notifyLibraryChanged();
         return { ok: true, applied };
+      }
+      case 'library/html/extract': {
+        const content = extractHtmlContent(request.html);
+        return { ok: true, content };
       }
       case 'providers/get': {
         const { settings, hasKey } = await readProviderSettings();

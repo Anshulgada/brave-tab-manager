@@ -350,4 +350,102 @@ describe('local semantic tab clustering (tabman-local)', () => {
     expect(suggestions[5]?.collectionName).toBe('Audio & Podcasts');
     expect(suggestions[6]?.collectionName).toBe('Localhost & Internal Dev');
   });
+
+  it('clusters fallback unclassified tabs using Auto-K density clustering (Kernel 4)', async () => {
+    const { localSemanticSuggestions } = await import('../src/ai');
+    const miscTabs: OrganizeTab[] = [
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        title: 'Tech Crunch Article One',
+        hostname: 'techcrunch.com',
+        url: 'https://techcrunch.com/article1',
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        title: 'Tech Crunch Article Two',
+        hostname: 'techcrunch.com',
+        url: 'https://techcrunch.com/article2',
+      },
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        title: 'Verge Gadget Review',
+        hostname: 'theverge.com',
+        url: 'https://theverge.com/gadget',
+      },
+    ];
+
+    const suggestions = localSemanticSuggestions(miscTabs);
+    expect(suggestions).toHaveLength(3);
+    // Verified suggestions are populated and structured
+    expect(suggestions[0]?.collectionName).toBeDefined();
+    expect(suggestions[1]?.collectionName).toBeDefined();
+  });
+
+  it('clusters tabs with K-Means (Kernel 3) and computes pairwise cosine matrix (Kernel 1)', async () => {
+    const {
+      clusterTabsSemantically,
+      computeTabSimilarityMatrix,
+      searchTopRelatedTabs,
+      projectTabEmbeddings,
+    } = await import('../src/ai');
+
+    const sampleTabs: OrganizeTab[] = [
+      {
+        id: '1',
+        title: 'Rust Programming Language',
+        hostname: 'rust-lang.org',
+        url: 'https://rust-lang.org',
+      },
+      {
+        id: '2',
+        title: 'Rust Cargo Package Manager',
+        hostname: 'doc.rust-lang.org',
+        url: 'https://doc.rust-lang.org/cargo',
+      },
+      {
+        id: '3',
+        title: 'Cooking Pasta Recipes',
+        hostname: 'allrecipes.com',
+        url: 'https://allrecipes.com/pasta',
+      },
+      {
+        id: '4',
+        title: 'Baking Homemade Bread',
+        hostname: 'allrecipes.com',
+        url: 'https://allrecipes.com/bread',
+      },
+    ];
+
+    // Kernel 3: K-Means clustering into k=2 groups
+    const clustered = clusterTabsSemantically(sampleTabs, 2);
+    expect(clustered).toHaveLength(4);
+    // Tab 1 and 2 share Rust topics, Tab 3 and 4 share Cooking topics
+    expect(clustered[0]?.collectionName).toBe(clustered[1]?.collectionName);
+    expect(clustered[2]?.collectionName).toBe(clustered[3]?.collectionName);
+    expect(clustered[0]?.collectionName).not.toBe(clustered[2]?.collectionName);
+
+    // Kernel 1: Pairwise cosine matrix
+    const matrix = computeTabSimilarityMatrix(sampleTabs, 128);
+    expect(matrix.length).toBe(16); // 4x4 matrix
+    // Self similarity on diagonal is 1.0
+    expect(matrix[0]).toBeCloseTo(1.0, 3);
+    expect(matrix[5]).toBeCloseTo(1.0, 3);
+    // Rust vs Rust similarity is higher than Rust vs Cooking
+    const simRust1Rust2 = matrix[1] ?? 0;
+    const simRust1Cooking = matrix[2] ?? 0;
+    expect(simRust1Rust2).toBeGreaterThan(simRust1Cooking);
+
+    // Kernel 2: Top-K related tabs
+    const firstTab = sampleTabs[0];
+    if (!firstTab) throw new Error('sampleTabs[0] missing');
+    const related = searchTopRelatedTabs(firstTab, sampleTabs.slice(1), 2);
+    expect(related.length).toBe(2);
+    expect(related[0]?.id).toBe('2'); // Cargo is most related to Rust
+
+    // Kernel 7: Matryoshka Slicing
+    const highDim = [new Float32Array(768).fill(0.1)];
+    const sliced = projectTabEmbeddings(highDim, 128);
+    expect(sliced).toHaveLength(1);
+    expect(sliced[0]?.length).toBe(128);
+  });
 });

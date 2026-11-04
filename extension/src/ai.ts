@@ -7,6 +7,14 @@
  */
 
 import { z } from 'zod';
+import {
+  autoKCluster,
+  clusterTabs,
+  computePairwiseCosine,
+  fastTokenize,
+  matryoshkaSlice,
+  searchTopKTabs,
+} from './rust-wasm';
 
 export const apiFormatSchema = z.enum([
   'openai',
@@ -573,6 +581,157 @@ export function deterministicSuggestions(
 }
 
 /**
+ * Project a tab title and URL into a normalized 128d semantic feature vector.
+ */
+export function tabToFeatureVector(tab: OrganizeTab, dim = 128): Float32Array {
+  const vec = new Float32Array(dim);
+  const text = `${tab.title} ${tab.hostname} ${tab.url ?? ''}`.toLowerCase();
+  const tokenRes = fastTokenize(text, 32);
+  for (let i = 0; i < tokenRes.length; i++) {
+    const tok = Number(tokenRes.tokens[i] ?? 0n);
+    if (tok === 0 || tok === 2) continue;
+    const bucket = Math.abs(tok) % dim;
+    vec[bucket] = (vec[bucket] ?? 0) + 1.0;
+  }
+  for (let i = 0; i < Math.min(text.length - 2, 64); i++) {
+    const h =
+      (text.charCodeAt(i) * 31 + text.charCodeAt(i + 1)) * 31 +
+      text.charCodeAt(i + 2);
+    const b = Math.abs(h) % dim;
+    vec[b] = (vec[b] ?? 0) + 0.5;
+  }
+  let norm = 0;
+  for (let i = 0; i < dim; i++) {
+    const val = vec[i] ?? 0;
+    norm += val * val;
+  }
+  norm = Math.sqrt(norm);
+  if (norm > 1e-9) {
+    for (let i = 0; i < dim; i++) {
+      vec[i] = (vec[i] ?? 0) / norm;
+    }
+  }
+  return vec;
+}
+
+/**
+ * Cluster tabs semantically into k collections using Rust WASM K-Means (Kernel 3).
+ */
+export function clusterTabsSemantically(
+  tabs: OrganizeTab[],
+  k: number,
+  maxIterations = 20,
+): Suggestion[] {
+  if (tabs.length === 0 || k <= 0) return [];
+  const targetK = Math.min(k, tabs.length);
+  const vectors = tabs.map((t) => tabToFeatureVector(t, 128));
+  const res = clusterTabs(vectors, targetK, maxIterations, 128);
+
+  const clusterTabsMap = new Map<number, OrganizeTab[]>();
+  for (let i = 0; i < tabs.length; i++) {
+    const cId = res.assignments[i] ?? 0;
+    const tab = tabs[i];
+    if (tab) {
+      const list = clusterTabsMap.get(cId) ?? [];
+      list.push(tab);
+      clusterTabsMap.set(cId, list);
+    }
+  }
+
+  const clusterMetaMap = new Map<number, { name: string; tags: string[] }>();
+  for (const [cId, cTabs] of clusterTabsMap) {
+    const hostCounts = new Map<string, number>();
+    for (const t of cTabs) {
+      hostCounts.set(t.hostname, (hostCounts.get(t.hostname) ?? 0) + 1);
+    }
+    let dominantHost = cTabs[0]?.hostname ?? 'Tabs';
+    let maxCount = 0;
+    for (const [h, count] of hostCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        dominantHost = h;
+      }
+    }
+    const labels = dominantHost.split('.').filter((part) => part.length > 0);
+    const meaningfulParts = labels.filter(
+      (part) => !TLD_BLACKLIST.has(part.toLowerCase()),
+    );
+    const clusterName = (
+      meaningfulParts.at(-1) ??
+      labels.at(-2) ??
+      labels[0] ??
+      dominantHost
+    ).slice(0, 120);
+
+    const allTags = new Set<string>();
+    for (const t of cTabs) {
+      for (const tag of extractMeaningfulTags(t.hostname)) {
+        allTags.add(tag);
+      }
+    }
+    clusterMetaMap.set(cId, {
+      name: clusterName || 'Tabs',
+      tags: Array.from(allTags).slice(0, 5),
+    });
+  }
+
+  return tabs.map((tab, i) => {
+    const cId = res.assignments[i] ?? 0;
+    const meta = clusterMetaMap.get(cId) ?? {
+      name: tab.hostname || 'Tabs',
+      tags: extractMeaningfulTags(tab.hostname),
+    };
+    return {
+      tabId: tab.id,
+      collectionName: meta.name,
+      tags: meta.tags,
+    };
+  });
+}
+
+/**
+ * Compute the pairwise cosine similarity matrix across open tabs using Rust WASM (Kernel 1).
+ */
+export function computeTabSimilarityMatrix(
+  tabs: OrganizeTab[],
+  dim = 128,
+): Float32Array {
+  if (tabs.length === 0) return new Float32Array(0);
+  const vectors = tabs.map((t) => tabToFeatureVector(t, dim));
+  return computePairwiseCosine(vectors, dim);
+}
+
+/**
+ * Search the top-K most semantically related candidate tabs using Top-K Vector Search (Kernel 2).
+ */
+export function searchTopRelatedTabs(
+  queryTab: OrganizeTab,
+  candidateTabs: OrganizeTab[],
+  k = 5,
+): OrganizeTab[] {
+  if (candidateTabs.length === 0 || k <= 0) return [];
+  const queryVec = tabToFeatureVector(queryTab, 128);
+  const candVecs = candidateTabs.map((t) => tabToFeatureVector(t, 128));
+  const topResults = searchTopKTabs(queryVec, candVecs, k, 128);
+  const matches: OrganizeTab[] = [];
+  for (const res of topResults) {
+    const cand = candidateTabs[res.index];
+    if (cand) matches.push(cand);
+  }
+  return matches;
+}
+
+/**
+ * Project high-dimensional embedding vectors down to target dimension using Matryoshka Slicing (Kernel 7).
+ */
+export function projectTabEmbeddings(
+  embeddings: Float32Array[],
+  targetDim = 128,
+): Float32Array[] {
+  return matryoshkaSlice(embeddings, targetDim);
+}
+
+/**
  * Zero-dependency semantic tab categorization matching Tabman EmbeddingGemma's
  * 18 curated domain verticals and high-affinity topics.
  */
@@ -580,7 +739,12 @@ export function localSemanticSuggestions(
   tabs: OrganizeTab[],
   _modelId?: string,
 ): Suggestion[] {
-  return tabs.map((tab) => {
+  const results: (Suggestion | null)[] = new Array(tabs.length).fill(null);
+  const unclassifiedIndices: number[] = [];
+
+  for (let i = 0; i < tabs.length; i++) {
+    const tab = tabs[i];
+    if (!tab) continue;
     const titleLower = tab.title.toLowerCase();
     const urlLower = (tab.url || '').toLowerCase();
     const hostLower = tab.hostname.toLowerCase();
@@ -592,11 +756,12 @@ export function localSemanticSuggestions(
         hostLower,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Localhost & Internal Dev',
         tags: ['local', 'dev', 'internal'],
       };
+      continue;
     }
 
     // 2. Research & Academic Papers
@@ -605,11 +770,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Research & Papers',
         tags: ['research', 'papers', 'academic'],
       };
+      continue;
     }
 
     // 3. Video & Tutorials
@@ -618,11 +784,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Video & Tutorials',
         tags: ['video', 'media', 'learning'],
       };
+      continue;
     }
 
     // 4. Audio & Podcasts
@@ -631,11 +798,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Audio & Podcasts',
         tags: ['audio', 'music', 'podcast'],
       };
+      continue;
     }
 
     // 5. Machine Learning & AI
@@ -644,11 +812,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Machine Learning & AI',
         tags: ['ai', 'ml', 'models'],
       };
+      continue;
     }
 
     // 6. Cloud & DevOps
@@ -657,11 +826,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Cloud & DevOps',
         tags: ['cloud', 'devops', 'infra'],
       };
+      continue;
     }
 
     // 7. API References & Docs
@@ -670,11 +840,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'API References & Docs',
         tags: ['api', 'docs', 'reference'],
       };
+      continue;
     }
 
     // 8. Frontend & UI Engineering
@@ -684,11 +855,12 @@ export function localSemanticSuggestions(
       ) &&
       !/arxiv|paper|dataset/i.test(text)
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Frontend & UI Engineering',
         tags: ['frontend', 'ui', 'web-dev'],
       };
+      continue;
     }
 
     // 10. Productivity & Workspace
@@ -697,11 +869,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Productivity & Workspace',
         tags: ['productivity', 'work', 'notes'],
       };
+      continue;
     }
 
     // 11. Design & UX
@@ -710,11 +883,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Design & UX',
         tags: ['design', 'ui', 'creative'],
       };
+      continue;
     }
 
     // 12. Community & Discussions
@@ -723,11 +897,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Community & Discussions',
         tags: ['community', 'discussion', 'forums'],
       };
+      continue;
     }
 
     // 13. Finance & Markets
@@ -736,11 +911,12 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Finance & Markets',
         tags: ['finance', 'markets', 'investing'],
       };
+      continue;
     }
 
     // 14. E-Commerce & Shopping
@@ -749,51 +925,140 @@ export function localSemanticSuggestions(
         text,
       )
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Shopping & Hardware',
         tags: ['shopping', 'products', 'commerce'],
       };
+      continue;
     }
 
     // 15. Career & Jobs
     if (
       /linkedin\.com|greenhouse\.io|lever\.co|indeed\.com|jobs\./i.test(text)
     ) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Career & Jobs',
         tags: ['career', 'jobs', 'recruiting'],
       };
+      continue;
     }
 
     // 16. Travel & Navigation
     if (/maps\.google|airbnb|booking\.com|expedia|flights/i.test(text)) {
-      return {
+      results[i] = {
         tabId: tab.id,
         collectionName: 'Travel & Navigation',
         tags: ['travel', 'navigation', 'booking'],
       };
+      continue;
     }
 
-    // Fallback: extract intelligent collection name and tags from hostname/title
-    const labels = tab.hostname.split('.').filter((part) => part.length > 0);
-    const meaningfulParts = labels.filter(
-      (part) => !TLD_BLACKLIST.has(part.toLowerCase()),
-    );
-    const defaultName = (
-      meaningfulParts.at(-1) ??
-      labels.at(-2) ??
-      labels[0] ??
-      tab.hostname ??
-      'Tabs'
-    ).slice(0, 120);
-    const tags = extractMeaningfulTags(tab.hostname);
+    unclassifiedIndices.push(i);
+  }
 
-    return {
-      tabId: tab.id,
-      collectionName: defaultName || 'Tabs',
-      tags,
-    };
-  });
+  // Handle unclassified tabs:
+  if (unclassifiedIndices.length === 1) {
+    const idx = unclassifiedIndices[0];
+    if (idx !== undefined) {
+      const tab = tabs[idx];
+      if (tab) {
+        const labels = tab.hostname
+          .split('.')
+          .filter((part) => part.length > 0);
+        const meaningfulParts = labels.filter(
+          (part) => !TLD_BLACKLIST.has(part.toLowerCase()),
+        );
+        const defaultName = (
+          meaningfulParts.at(-1) ??
+          labels.at(-2) ??
+          labels[0] ??
+          tab.hostname ??
+          'Tabs'
+        ).slice(0, 120);
+        results[idx] = {
+          tabId: tab.id,
+          collectionName: defaultName || 'Tabs',
+          tags: extractMeaningfulTags(tab.hostname),
+        };
+      }
+    }
+  } else if (unclassifiedIndices.length >= 2) {
+    // Rust WASM Kernel 4: Auto-K Density Tab Clustering
+    const unclassifiedTabs = unclassifiedIndices.flatMap((i) => {
+      const t = tabs[i];
+      return t ? [t] : [];
+    });
+    const vectors = unclassifiedTabs.map((tab) => tabToFeatureVector(tab, 128));
+    const clusterResult = autoKCluster(vectors, 2, 128);
+
+    const clusterTabsMap = new Map<number, OrganizeTab[]>();
+    for (let u = 0; u < unclassifiedTabs.length; u++) {
+      const clusterId = clusterResult.assignments[u] ?? 0;
+      const tab = unclassifiedTabs[u];
+      if (tab) {
+        const list = clusterTabsMap.get(clusterId) ?? [];
+        list.push(tab);
+        clusterTabsMap.set(clusterId, list);
+      }
+    }
+
+    const clusterNamesMap = new Map<number, { name: string; tags: string[] }>();
+    for (const [clusterId, cTabs] of clusterTabsMap) {
+      const hostCounts = new Map<string, number>();
+      for (const t of cTabs) {
+        hostCounts.set(t.hostname, (hostCounts.get(t.hostname) ?? 0) + 1);
+      }
+      let dominantHost = cTabs[0]?.hostname ?? 'Tabs';
+      let maxCount = 0;
+      for (const [h, count] of hostCounts) {
+        if (count > maxCount) {
+          maxCount = count;
+          dominantHost = h;
+        }
+      }
+
+      const labels = dominantHost.split('.').filter((part) => part.length > 0);
+      const meaningfulParts = labels.filter(
+        (part) => !TLD_BLACKLIST.has(part.toLowerCase()),
+      );
+      const clusterName = (
+        meaningfulParts.at(-1) ??
+        labels.at(-2) ??
+        labels[0] ??
+        dominantHost
+      ).slice(0, 120);
+
+      const allTags = new Set<string>();
+      for (const t of cTabs) {
+        for (const tag of extractMeaningfulTags(t.hostname)) {
+          allTags.add(tag);
+        }
+      }
+      clusterNamesMap.set(clusterId, {
+        name: clusterName || 'Tabs',
+        tags: Array.from(allTags).slice(0, 5),
+      });
+    }
+
+    for (let u = 0; u < unclassifiedIndices.length; u++) {
+      const idx = unclassifiedIndices[u];
+      if (idx === undefined) continue;
+      const tab = tabs[idx];
+      if (!tab) continue;
+      const clusterId = clusterResult.assignments[u] ?? 0;
+      const clusterMeta = clusterNamesMap.get(clusterId) ?? {
+        name: tab.hostname || 'Tabs',
+        tags: extractMeaningfulTags(tab.hostname),
+      };
+      results[idx] = {
+        tabId: tab.id,
+        collectionName: clusterMeta.name,
+        tags: clusterMeta.tags,
+      };
+    }
+  }
+
+  return results.filter((s): s is Suggestion => s !== null);
 }

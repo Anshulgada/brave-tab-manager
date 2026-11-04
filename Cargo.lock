@@ -4,8 +4,8 @@ version = 4
 
 [[package]]
 name = "tabman-sidecar"
-version = "0.6.1"
+version = "0.6.2"
 
 [[package]]
 name = "tabman-wasm"
-version = "0.6.0"
+version = "0.6.2"
