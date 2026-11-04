@@ -177,7 +177,7 @@ export function getDefaultModelStorageLocations(): {
     typeof navigator !== 'undefined' &&
     /win/i.test(navigator.userAgent || navigator.platform || '');
 
-  const windowsPath = '%LOCALAPPDATA%\\Tabman\\models';
+  const windowsPath = '%LOCALAPPDATA%\\tabman\\models';
   const linuxPath = '~/.local/share/tabman/models';
 
   return {

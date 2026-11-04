@@ -333,7 +333,14 @@ textarea {
 
 .btn-sm {
   font-size: 12px;
-  padding: 7px 10px;
+  padding: 0 12px;
+  height: 34px;
+  min-height: 34px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 /* Inputs ----------------------------------------------------------------- */

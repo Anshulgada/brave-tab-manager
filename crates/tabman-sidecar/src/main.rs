@@ -65,6 +65,25 @@ fn handle_json_request(request_json: &str) -> String {
         );
     }
 
+    if request_json.contains("models/embed") || request_json.contains("\"type\":\"embed\"") {
+        let text = if let Some(idx) = request_json.find("\"text\":\"") {
+            let start = idx + 8;
+            if let Some(end) = request_json[start..].find('"') {
+                &request_json[start..start + end]
+            } else {
+                "tabman"
+            }
+        } else {
+            "tabman"
+        };
+        let emb = models::generate_embedding(text, 128);
+        let vals: Vec<String> = emb.iter().map(|v| format!("{:.6}", v)).collect();
+        return format!(
+            r#"{{"status":"ok","dim":128,"embedding":[{}]}}"#,
+            vals.join(",")
+        );
+    }
+
     // Default echo / ack
     r#"{"status":"ok","message":"Request received by Tabman Sidecar"}"#.to_string()
 }
@@ -85,6 +104,15 @@ fn main() -> io::Result<()> {
             "--benchmark" | "-b" => {
                 let latency = hardware::benchmark_workload(10);
                 println!("Empirical Benchmark: {:.3} ms (128x768 projection)", latency);
+                return Ok(());
+            }
+            "--embed" => {
+                let text = args.get(2).map(|s| s.as_str()).unwrap_or("Tabman AI");
+                let emb = models::generate_embedding(text, 128);
+                println!(
+                    r#"{{"text":"{}","dim":128,"l2_norm":1.0,"sample":[{:.4},{:.4},{:.4}]}}"#,
+                    text, emb[0], emb[1], emb[2]
+                );
                 return Ok(());
             }
             "--scan" => {

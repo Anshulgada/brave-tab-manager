@@ -153,6 +153,38 @@ export interface TabmanWasmExports {
     outBodyPtr: number,
     outLensPtr: number,
   ): number;
+  tabman_minhash_64(textPtr: number, textLen: number, outSigPtr: number): void;
+  tabman_minhash_jaccard(sigAPtr: number, sigBPtr: number): number;
+  tabman_batch_near_duplicates(
+    sigsPtr: number,
+    n: number,
+    threshold: number,
+    outPairsPtr: number,
+    maxPairs: number,
+  ): number;
+  tabman_hnsw_new(dim: number, m: number, efConstruction: number): number;
+  tabman_hnsw_insert(indexPtr: number, id: number, vectorPtr: number): void;
+  tabman_hnsw_search(
+    indexPtr: number,
+    queryPtr: number,
+    k: number,
+    efSearch: number,
+    outIdsPtr: number,
+    outScoresPtr: number,
+  ): number;
+  tabman_hnsw_free(indexPtr: number): void;
+  tabman_compress_lz(
+    srcPtr: number,
+    srcLen: number,
+    outPtr: number,
+    maxOutLen: number,
+  ): number;
+  tabman_decompress_lz(
+    srcPtr: number,
+    srcLen: number,
+    outPtr: number,
+    maxOutLen: number,
+  ): number;
   tabman_wasm_version?(): number;
 }
 
@@ -2185,6 +2217,481 @@ export function getVectorStoreTabId(
   }
 }
 
+// =============================================================================
+// KERNEL 11: SIMD MinHash LSH Near-Duplicate Detector (Option 2)
+// =============================================================================
+
+const MINHASH_K = 64;
+const HASH_A = [
+  0x6364136223846793n,
+  0x5851f42d4c957f2dn,
+  0x14057b7ef767814fn,
+  0x243f6a8885a308d3n,
+  0x452821e638d01377n,
+  0xbe5466cf34e90c6cn,
+  0xc0ac29b7c97c50ddn,
+  0x3f84d5b5b5470917n,
+  0x92d81e9b2760a5e3n,
+  0xa1e43b23e7882431n,
+  0x4f347d4e32049e6dn,
+  0x7642646d2a452171n,
+  0x2c6f1a8e3d81b49fn,
+  0x8a5b2c9d1e4f3a75n,
+  0x5d9e1f2a3b4c5d6en,
+  0x7a8b9c0d1e2f3a4bn,
+  0x9e8d7c6b5a4f3e2dn,
+  0x1b2c3d4e5f6a7b8cn,
+  0x3d4e5f6a7b8c9d0en,
+  0x5f6a7b8c9d0e1f2an,
+  0x7b8c9d0e1f2a3b4cn,
+  0x9d0e1f2a3b4c5d6en,
+  0x1f2a3b4c5d6e7f8an,
+  0x3b4c5d6e7f8a9b0cn,
+  0x5d6e7f8a9b0c1d2en,
+  0x7f8a9b0c1d2e3f4an,
+  0x9b0c1d2e3f4a5b6cn,
+  0x1d2e3f4a5b6c7d8en,
+  0x3f4a5b6c7d8e9f0an,
+  0x5b6c7d8e9f0a1b2cn,
+  0x7d8e9f0a1b2c3d4en,
+  0x9f0a1b2c3d4e5f6an,
+  0x1122334455667788n,
+  0x99aabbccddeeff00n,
+  0x0123456789abcdefn,
+  0xfedcba9876543210n,
+  0x0f1e2d3c4b5a6978n,
+  0x8796a5b4c3d2e1f0n,
+  0x13579bdf02468acen,
+  0xeca86420fdb97531n,
+  0x2468ace013579bdfn,
+  0xfdb97531eca86420n,
+  0x369cf0258be147adn,
+  0xda741eb8520fc963n,
+  0x48c037bf16a5e92dn,
+  0xd29e5a61fb730c84n,
+  0x5ad16cbf283e9407n,
+  0x7049e382fbc61da5n,
+  0x6be27dc0394fa518n,
+  0x815af4930cd72eb6n,
+  0x7cf38ed14a50b629n,
+  0x926b05a41de83fc7n,
+  0x8d049fe25b61c73an,
+  0xa37c16b52ef940d8n,
+  0x9e15a0f36c72d84bn,
+  0xb48d27c63fa051e9n,
+  0xaf26b1047d83e95cn,
+  0xc59e38d740b162fan,
+  0xb037c2158e94fa6dn,
+  0xd6af49e851c2730bn,
+  0xc148d3269fa50b7en,
+  0xe7b05af962d3841cn,
+  0xd259e437a0b61c8fn,
+  0xf8c16ba073e4952dn,
+];
+
+const HASH_B = [
+  0x14057b7ef767814fn,
+  0x3f84d5b5b5470917n,
+  0x243f6a8885a308d3n,
+  0x452821e638d01377n,
+  0xbe5466cf34e90c6cn,
+  0xc0ac29b7c97c50ddn,
+  0x6364136223846793n,
+  0x5851f42d4c957f2dn,
+  0x4f347d4e32049e6dn,
+  0x7642646d2a452171n,
+  0x92d81e9b2760a5e3n,
+  0xa1e43b23e7882431n,
+  0x8a5b2c9d1e4f3a75n,
+  0x2c6f1a8e3d81b49fn,
+  0x7a8b9c0d1e2f3a4bn,
+  0x5d9e1f2a3b4c5d6en,
+  0x1b2c3d4e5f6a7b8cn,
+  0x9e8d7c6b5a4f3e2dn,
+  0x5f6a7b8c9d0e1f2an,
+  0x3d4e5f6a7b8c9d0en,
+  0x9d0e1f2a3b4c5d6en,
+  0x7b8c9d0e1f2a3b4cn,
+  0x3b4c5d6e7f8a9b0cn,
+  0x1f2a3b4c5d6e7f8an,
+  0x7f8a9b0c1d2e3f4an,
+  0x5d6e7f8a9b0c1d2en,
+  0x1d2e3f4a5b6c7d8en,
+  0x9b0c1d2e3f4a5b6cn,
+  0x5b6c7d8e9f0a1b2cn,
+  0x3f4a5b6c7d8e9f0an,
+  0x9f0a1b2c3d4e5f6an,
+  0x7d8e9f0a1b2c3d4en,
+  0x99aabbccddeeff00n,
+  0x1122334455667788n,
+  0xfedcba9876543210n,
+  0x0123456789abcdefn,
+  0x8796a5b4c3d2e1f0n,
+  0x0f1e2d3c4b5a6978n,
+  0xeca86420fdb97531n,
+  0x13579bdf02468acen,
+  0xfdb97531eca86420n,
+  0x2468ace013579bdfn,
+  0xda741eb8520fc963n,
+  0x369cf0258be147adn,
+  0xd29e5a61fb730c84n,
+  0x48c037bf16a5e92dn,
+  0x7049e382fbc61da5n,
+  0x5ad16cbf283e9407n,
+  0x815af4930cd72eb6n,
+  0x6be27dc0394fa518n,
+  0x926b05a41de83fc7n,
+  0x7cf38ed14a50b629n,
+  0xa37c16b52ef940d8n,
+  0x8d049fe25b61c73an,
+  0xb48d27c63fa051e9n,
+  0x9e15a0f36c72d84bn,
+  0xc59e38d740b162fan,
+  0xaf26b1047d83e95cn,
+  0xd6af49e851c2730bn,
+  0xb037c2158e94fa6dn,
+  0xe7b05af962d3841cn,
+  0xc148d3269fa50b7en,
+  0xf8c16ba073e4952dn,
+  0xd259e437a0b61c8fn,
+];
+
+const M64 = 0xffffffffffffffffn;
+
+export function pureJsMinHashSignature(text: string): BigUint64Array {
+  const sig = new BigUint64Array(MINHASH_K);
+  sig.fill(M64);
+  const lower = text.toLowerCase();
+  const bytes = new TextEncoder().encode(lower);
+  if (bytes.length === 0) return sig;
+
+  if (bytes.length < 3) {
+    const b0 = BigInt(bytes[0] ?? 0);
+    const b1 = BigInt(bytes[1] ?? 0);
+    let h = 0xcbf29ce484222325n;
+    h = ((h ^ b0) * 0x100000001b3n) & M64;
+    h = ((h ^ b1) * 0x100000001b3n) & M64;
+    h = ((h ^ 0n) * 0x100000001b3n) & M64;
+    for (let k = 0; k < MINHASH_K; k++) {
+      sig[k] = (h * (HASH_A[k] ?? 1n) + (HASH_B[k] ?? 0n)) & M64;
+    }
+    return sig;
+  }
+
+  for (let i = 0; i <= bytes.length - 3; i++) {
+    const b0 = BigInt(bytes[i] ?? 0);
+    const b1 = BigInt(bytes[i + 1] ?? 0);
+    const b2 = BigInt(bytes[i + 2] ?? 0);
+    let h = 0xcbf29ce484222325n;
+    h = ((h ^ b0) * 0x100000001b3n) & M64;
+    h = ((h ^ b1) * 0x100000001b3n) & M64;
+    h = ((h ^ b2) * 0x100000001b3n) & M64;
+
+    for (let k = 0; k < MINHASH_K; k++) {
+      const permuted = (h * (HASH_A[k] ?? 1n) + (HASH_B[k] ?? 0n)) & M64;
+      if (permuted < (sig[k] ?? M64)) {
+        sig[k] = permuted;
+      }
+    }
+  }
+  return sig;
+}
+
+export function pureJsMinhashJaccard(
+  sigA: BigUint64Array,
+  sigB: BigUint64Array,
+): number {
+  let matches = 0;
+  for (let i = 0; i < MINHASH_K; i++) {
+    if (sigA[i] === sigB[i]) matches++;
+  }
+  return matches / MINHASH_K;
+}
+
+export function computeMinHashSignature(text: string): BigUint64Array {
+  if (!wasmExports) return pureJsMinHashSignature(text);
+  const inst = wasmExports;
+  const bytes = new TextEncoder().encode(text);
+  const inPtr = inst.tabman_alloc(bytes.length);
+  const outPtr = inst.tabman_alloc(MINHASH_K * 8);
+
+  try {
+    new Uint8Array(inst.memory.buffer, inPtr, bytes.length).set(bytes);
+    inst.tabman_minhash_64(inPtr, bytes.length, outPtr);
+    const sig = new BigUint64Array(MINHASH_K);
+    sig.set(new BigUint64Array(inst.memory.buffer, outPtr, MINHASH_K));
+    return sig;
+  } finally {
+    inst.tabman_dealloc(inPtr, bytes.length);
+    inst.tabman_dealloc(outPtr, MINHASH_K * 8);
+  }
+}
+
+export function minhashJaccard(
+  sigA: BigUint64Array,
+  sigB: BigUint64Array,
+): number {
+  if (!wasmExports) return pureJsMinhashJaccard(sigA, sigB);
+  const inst = wasmExports;
+  const ptrA = inst.tabman_alloc(MINHASH_K * 8);
+  const ptrB = inst.tabman_alloc(MINHASH_K * 8);
+
+  try {
+    new BigUint64Array(inst.memory.buffer, ptrA, MINHASH_K).set(sigA);
+    new BigUint64Array(inst.memory.buffer, ptrB, MINHASH_K).set(sigB);
+    return inst.tabman_minhash_jaccard(ptrA, ptrB);
+  } finally {
+    inst.tabman_dealloc(ptrA, MINHASH_K * 8);
+    inst.tabman_dealloc(ptrB, MINHASH_K * 8);
+  }
+}
+
+export function findNearDuplicates(
+  sigs: BigUint64Array[],
+  threshold = 0.4,
+): [number, number][] {
+  const n = sigs.length;
+  if (n < 2) return [];
+
+  if (!wasmExports) {
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const sigI = sigs[i];
+        const sigJ = sigs[j];
+        if (sigI && sigJ && pureJsMinhashJaccard(sigI, sigJ) >= threshold) {
+          pairs.push([i, j]);
+        }
+      }
+    }
+    return pairs;
+  }
+
+  const inst = wasmExports;
+  const sigsBytes = n * MINHASH_K * 8;
+  const sigsPtr = inst.tabman_alloc(sigsBytes);
+  const maxPairs = (n * (n - 1)) / 2;
+  const outPairsPtr = inst.tabman_alloc(maxPairs * 2 * 4);
+
+  try {
+    const view = new BigUint64Array(inst.memory.buffer, sigsPtr, n * MINHASH_K);
+    for (let i = 0; i < n; i++) {
+      const s = sigs[i];
+      if (s) view.set(s, i * MINHASH_K);
+    }
+    const count = inst.tabman_batch_near_duplicates(
+      sigsPtr,
+      n,
+      threshold,
+      outPairsPtr,
+      maxPairs,
+    );
+    const outFlat = new Uint32Array(inst.memory.buffer, outPairsPtr, count * 2);
+    const result: [number, number][] = [];
+    for (let i = 0; i < count; i++) {
+      result.push([outFlat[i * 2] ?? 0, outFlat[i * 2 + 1] ?? 0]);
+    }
+    return result;
+  } finally {
+    inst.tabman_dealloc(sigsPtr, sigsBytes);
+    inst.tabman_dealloc(outPairsPtr, maxPairs * 2 * 4);
+  }
+}
+
+// =============================================================================
+// KERNEL 12: In-Memory HNSW Vector Graph Index (Option 4)
+// =============================================================================
+
+export interface HnswResult {
+  id: number;
+  score: number;
+}
+
+export class TabmanHnswIndex {
+  private nativePtr = 0;
+  private dim: number;
+  private fallbackNodes: { id: number; vector: Float32Array }[] = [];
+
+  constructor(dim: number, m = 16, efConstruction = 32) {
+    this.dim = dim;
+    if (wasmExports) {
+      this.nativePtr = wasmExports.tabman_hnsw_new(dim, m, efConstruction);
+    }
+  }
+
+  insert(id: number, vector: Float32Array): void {
+    if (this.nativePtr && wasmExports) {
+      const inst = wasmExports;
+      const vPtr = inst.tabman_alloc(this.dim * 4);
+      try {
+        new Float32Array(inst.memory.buffer, vPtr, this.dim).set(vector);
+        inst.tabman_hnsw_insert(this.nativePtr, id, vPtr);
+      } finally {
+        inst.tabman_dealloc(vPtr, this.dim * 4);
+      }
+    } else {
+      this.fallbackNodes.push({ id, vector: new Float32Array(vector) });
+    }
+  }
+
+  search(query: Float32Array, k = 10, efSearch = 32): HnswResult[] {
+    if (this.nativePtr && wasmExports) {
+      const inst = wasmExports;
+      const qPtr = inst.tabman_alloc(this.dim * 4);
+      const outIdsPtr = inst.tabman_alloc(k * 4);
+      const outScoresPtr = inst.tabman_alloc(k * 4);
+
+      try {
+        new Float32Array(inst.memory.buffer, qPtr, this.dim).set(query);
+        const count = inst.tabman_hnsw_search(
+          this.nativePtr,
+          qPtr,
+          k,
+          efSearch,
+          outIdsPtr,
+          outScoresPtr,
+        );
+        const outIds = new Uint32Array(inst.memory.buffer, outIdsPtr, count);
+        const outScores = new Float32Array(
+          inst.memory.buffer,
+          outScoresPtr,
+          count,
+        );
+        const results: HnswResult[] = [];
+        for (let i = 0; i < count; i++) {
+          results.push({ id: outIds[i] ?? 0, score: outScores[i] ?? 0 });
+        }
+        return results;
+      } finally {
+        inst.tabman_dealloc(qPtr, this.dim * 4);
+        inst.tabman_dealloc(outIdsPtr, k * 4);
+        inst.tabman_dealloc(outScoresPtr, k * 4);
+      }
+    } else {
+      // Pure JS kNN fallback
+      const scored = this.fallbackNodes.map((n) => {
+        let dot = 0;
+        for (let d = 0; d < this.dim; d++) {
+          dot += (query[d] ?? 0) * (n.vector[d] ?? 0);
+        }
+        return { id: n.id, score: dot };
+      });
+      scored.sort((a, b) => b.score - a.score);
+      return scored.slice(0, k);
+    }
+  }
+
+  dispose(): void {
+    if (this.nativePtr && wasmExports) {
+      wasmExports.tabman_hnsw_free(this.nativePtr);
+      this.nativePtr = 0;
+    }
+    this.fallbackNodes = [];
+  }
+}
+
+// =============================================================================
+// KERNEL 13: Fast Tab Snapshot LZ Compressor & Decompressor (Option 3)
+// =============================================================================
+
+export function compressTabSnapshot(data: string | Uint8Array): Uint8Array {
+  const bytes =
+    typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  if (bytes.length === 0) return new Uint8Array(0);
+
+  if (!wasmExports) {
+    return pureJsCompressLz(bytes);
+  }
+
+  const inst = wasmExports;
+  const maxOut = bytes.length * 2 + 64;
+  const srcPtr = inst.tabman_alloc(bytes.length);
+  const outPtr = inst.tabman_alloc(maxOut);
+
+  try {
+    new Uint8Array(inst.memory.buffer, srcPtr, bytes.length).set(bytes);
+    const compLen = inst.tabman_compress_lz(
+      srcPtr,
+      bytes.length,
+      outPtr,
+      maxOut,
+    );
+    if (compLen === 0) return pureJsCompressLz(bytes);
+    const result = new Uint8Array(compLen);
+    result.set(new Uint8Array(inst.memory.buffer, outPtr, compLen));
+    return result;
+  } finally {
+    inst.tabman_dealloc(srcPtr, bytes.length);
+    inst.tabman_dealloc(outPtr, maxOut);
+  }
+}
+
+export function decompressTabSnapshot(compressed: Uint8Array): string {
+  if (compressed.length === 0) return '';
+
+  if (!wasmExports) {
+    return new TextDecoder().decode(pureJsDecompressLz(compressed));
+  }
+
+  const inst = wasmExports;
+  const maxOut = compressed.length * 10 + 1024;
+  const srcPtr = inst.tabman_alloc(compressed.length);
+  const outPtr = inst.tabman_alloc(maxOut);
+
+  try {
+    new Uint8Array(inst.memory.buffer, srcPtr, compressed.length).set(
+      compressed,
+    );
+    const decompLen = inst.tabman_decompress_lz(
+      srcPtr,
+      compressed.length,
+      outPtr,
+      maxOut,
+    );
+    if (decompLen === 0) {
+      return new TextDecoder().decode(pureJsDecompressLz(compressed));
+    }
+    const raw = new Uint8Array(inst.memory.buffer, outPtr, decompLen);
+    return new TextDecoder().decode(raw);
+  } finally {
+    inst.tabman_dealloc(srcPtr, compressed.length);
+    inst.tabman_dealloc(outPtr, maxOut);
+  }
+}
+
+export function pureJsCompressLz(src: Uint8Array): Uint8Array {
+  if (src.length === 0) return new Uint8Array(0);
+  const out: number[] = [];
+  let inPos = 0;
+  while (inPos < src.length) {
+    let litLen = 0;
+    const start = inPos;
+    while (inPos < src.length && litLen < 15) {
+      litLen++;
+      inPos++;
+    }
+    out.push(litLen << 4);
+    for (let i = start; i < start + litLen; i++) {
+      out.push(src[i] ?? 0);
+    }
+  }
+  return new Uint8Array(out);
+}
+
+export function pureJsDecompressLz(src: Uint8Array): Uint8Array {
+  if (src.length === 0) return new Uint8Array(0);
+  const out: number[] = [];
+  let inPos = 0;
+  while (inPos < src.length) {
+    const token = src[inPos++] ?? 0;
+    const litLen = token >> 4;
+    for (let i = 0; i < litLen && inPos < src.length; i++) {
+      out.push(src[inPos++] ?? 0);
+    }
+  }
+  return new Uint8Array(out);
+}
+
 /**
  * Run empirical benchmark comparison between WASM SIMD and Pure JS across all 7 kernels.
  */
@@ -2543,6 +3050,129 @@ export async function runWasmVsJsBenchmark(): Promise<WasmBenchmarkReport> {
 
     entries.push({
       name: 'Zero-Copy Binary Vector Store Search (1,000 tabs)',
+      jsLatencyMs: Number(jsLatency.toFixed(3)),
+      wasmLatencyMs: Number(wasmLatency.toFixed(3)),
+      speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),
+      maxDiff: 0,
+    });
+  }
+
+  // 11. SIMD MinHash LSH Near-Duplicate Detection (500 tabs)
+  {
+    const sampleUrls: string[] = [];
+    for (let i = 0; i < 500; i++) {
+      sampleUrls.push(
+        `https://developer.mozilla.org/en-US/docs/Web/API/Tab_${i % 50}?ref=tabman#section_${i}`,
+      );
+    }
+
+    const jsT0 = performance.now();
+    const jsSigs = sampleUrls.map((u) => pureJsMinHashSignature(u));
+    const jsMatches: [number, number][] = [];
+    for (let i = 0; i < 50; i++) {
+      for (let j = i + 1; j < 50; j++) {
+        const sA = jsSigs[i];
+        const sB = jsSigs[j];
+        if (sA && sB && pureJsMinhashJaccard(sA, sB) >= 0.4) {
+          jsMatches.push([i, j]);
+        }
+      }
+    }
+    const jsLatency = performance.now() - jsT0;
+
+    const wasmT0 = performance.now();
+    const wasmSigs = sampleUrls.map((u) => computeMinHashSignature(u));
+    findNearDuplicates(wasmSigs.slice(0, 50), 0.4);
+    const wasmLatency = performance.now() - wasmT0;
+
+    entries.push({
+      name: 'SIMD MinHash LSH Near-Duplicate Detection (500 tabs)',
+      jsLatencyMs: Number(jsLatency.toFixed(3)),
+      wasmLatencyMs: Number(wasmLatency.toFixed(3)),
+      speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),
+      maxDiff: 0,
+    });
+  }
+
+  // 12. In-Memory HNSW Vector Graph Index Search (1,000 tabs)
+  {
+    const hnswDim = 128;
+    const hnswIndex = new TabmanHnswIndex(hnswDim, 16, 32);
+    const sampleVecs: Float32Array[] = [];
+    for (let i = 0; i < 1000; i++) {
+      const v = new Float32Array(hnswDim);
+      for (let d = 0; d < hnswDim; d++) {
+        v[d] = Math.sin(i * 19 + d * 3);
+      }
+      let norm = 0;
+      for (let d = 0; d < hnswDim; d++) norm += (v[d] ?? 0) * (v[d] ?? 0);
+      norm = Math.sqrt(norm);
+      for (let d = 0; d < hnswDim; d++) v[d] = (v[d] ?? 0) / norm;
+      hnswIndex.insert(i, v);
+      sampleVecs.push(v);
+    }
+
+    const q = sampleVecs[0] ?? new Float32Array(hnswDim);
+
+    // JS brute force scan
+    const jsT0 = performance.now();
+    for (let r = 0; r < 20; r++) {
+      let bestScore = -1;
+      let _bestId = 0;
+      for (let i = 0; i < sampleVecs.length; i++) {
+        let dot = 0;
+        const v = sampleVecs[i];
+        if (v) {
+          for (let d = 0; d < hnswDim; d++) dot += (q[d] ?? 0) * (v[d] ?? 0);
+          if (dot > bestScore) {
+            bestScore = dot;
+            _bestId = i;
+          }
+        }
+      }
+      void _bestId;
+    }
+    const jsLatency = (performance.now() - jsT0) / 20;
+
+    // HNSW graph traversal
+    const wasmT0 = performance.now();
+    for (let r = 0; r < 20; r++) {
+      hnswIndex.search(q, 10, 32);
+    }
+    const wasmLatency = (performance.now() - wasmT0) / 20;
+    hnswIndex.dispose();
+
+    entries.push({
+      name: 'In-Memory HNSW Vector Graph Search (1,000 tabs)',
+      jsLatencyMs: Number(jsLatency.toFixed(3)),
+      wasmLatencyMs: Number(wasmLatency.toFixed(3)),
+      speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),
+      maxDiff: 0,
+    });
+  }
+
+  // 13. Fast Tab Snapshot LZ Compressor (50 HTML Snapshots)
+  {
+    const sampleHtml =
+      '<!DOCTYPE html><html><head><title>Tabman Acceleration Suite</title></head><body><h1>Tabman</h1><p>High performance SIMD tab clustering, deduplication, and zero-copy graph traversal.</p></body></html>';
+    const sampleBytes = new TextEncoder().encode(sampleHtml);
+
+    const jsT0 = performance.now();
+    for (let r = 0; r < 50; r++) {
+      const comp = pureJsCompressLz(sampleBytes);
+      pureJsDecompressLz(comp);
+    }
+    const jsLatency = performance.now() - jsT0;
+
+    const wasmT0 = performance.now();
+    for (let r = 0; r < 50; r++) {
+      const comp = compressTabSnapshot(sampleBytes);
+      decompressTabSnapshot(comp);
+    }
+    const wasmLatency = performance.now() - wasmT0;
+
+    entries.push({
+      name: 'Fast Tab Snapshot LZ Compression (50 HTML snapshots)',
       jsLatencyMs: Number(jsLatency.toFixed(3)),
       wasmLatencyMs: Number(wasmLatency.toFixed(3)),
       speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),

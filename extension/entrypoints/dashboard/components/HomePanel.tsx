@@ -34,12 +34,12 @@ export function WelcomeState({
       <img
         src="/logo.png"
         alt="Tabman Logo"
-        width="48"
-        height="48"
+        width="68"
+        height="68"
         style={{
           objectFit: 'contain',
-          marginBottom: '2px',
-          filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25))',
+          marginBottom: '4px',
+          filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.3))',
         }}
       />
       <h2>Your tab library starts here</h2>

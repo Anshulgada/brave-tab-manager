@@ -23,7 +23,6 @@ import {
   CheckIcon,
   CloseIcon,
   HardDriveIcon,
-  HuggingFaceIcon,
   PlusIcon,
   RefreshIcon,
   SearchIcon,
@@ -355,7 +354,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     setIsScanning(true);
     setScanStatus(null);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 400));
       const stored = (() => {
         try {
           const raw = localStorage.getItem('tabman.downloadedModels');
@@ -377,38 +376,77 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
         downloadedSet.add(activeProfile.model.toLowerCase());
       }
 
-      let verified = TABMAN_OFFICIAL_MODELS.filter((m) =>
+      // Check Cache Storage in the browser for transformers.js or onnx model caches
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const cacheKeys = await window.caches.keys();
+          for (const key of cacheKeys) {
+            const lowerKey = key.toLowerCase();
+            for (const m of TABMAN_OFFICIAL_MODELS) {
+              if (
+                lowerKey.includes(m.repo.toLowerCase()) ||
+                lowerKey.includes(m.id)
+              ) {
+                downloadedSet.add(m.repo.toLowerCase());
+              }
+            }
+          }
+        } catch {}
+      }
+
+      const verified = TABMAN_OFFICIAL_MODELS.filter((m) =>
         downloadedSet.has(m.repo.toLowerCase()),
       );
 
-      // If no model was explicitly flagged yet in this browser profile, check if local models exist
-      // or if the recommended primary model is ready in local engine storage
-      if (verified.length === 0) {
-        const primaryModel = TABMAN_OFFICIAL_MODELS[0];
-        if (primaryModel) {
-          verified = [primaryModel];
+      if (verified.length > 0) {
+        const verifiedRepos = verified.map((m) => m.repo.toLowerCase());
+        try {
+          localStorage.setItem(
+            'tabman.downloadedModels',
+            JSON.stringify(verifiedRepos),
+          );
+        } catch {}
+        setDownloadedRepos(verifiedRepos);
+
+        for (const official of verified) {
+          const existing = (settings?.providers ?? []).find(
+            (p) => p.model.toLowerCase() === official.repo.toLowerCase(),
+          );
+          if (!existing) {
+            const newProfile: ProviderProfile = {
+              id: crypto.randomUUID(),
+              name: official.name,
+              baseUrl: 'http://localhost/tabman-ai',
+              model: official.repo,
+              apiFormat: 'tabman-local',
+            };
+            await sendSwitchboardRequest({
+              type: 'providers/save',
+              profile: newProfile,
+            });
+            if (!settings?.activeProviderId) {
+              await sendSwitchboardRequest({
+                type: 'providers/activate',
+                id: newProfile.id,
+              });
+            }
+          }
         }
-      }
+        await load();
 
-      const verifiedRepos = verified.map((m) => m.repo.toLowerCase());
-      try {
-        localStorage.setItem(
-          'tabman.downloadedModels',
-          JSON.stringify(verifiedRepos),
-        );
-      } catch {}
-      setDownloadedRepos(verifiedRepos);
-
-      let message: string;
-      if (verified.length === 1) {
-        message = `Scan complete: Found Tabman Local Engine (${modelStoragePath || storageLocations.current}). ${verified[0]?.name} verified and ready for zero-dependency execution.`;
-      } else {
         const names = verified.map((m) => m.name).join(', ');
-        message = `Scan complete: ${verified.length} Tabman AI models verified in local cache (${names}). Ready for zero-dependency execution.`;
+        const message = `Scan complete: Found ${verified.length} verified Tabman local model(s) (${names}) ready for zero-dependency execution.`;
+        setScanStatus(message);
+        onNotify(message, 'success');
+      } else {
+        setDownloadedRepos([]);
+        try {
+          localStorage.removeItem('tabman.downloadedModels');
+        } catch {}
+        const message = `No local models found in browser cache or ${modelStoragePath || storageLocations.current}. Click "Use Model" on any model above to download into browser cache.`;
+        setScanStatus(message);
+        onNotify(message, 'info');
       }
-
-      setScanStatus(message);
-      onNotify(message, 'success');
     } catch (e) {
       onNotify(
         e instanceof Error ? e.message : 'Model scan encountered an issue',
@@ -496,7 +534,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       <section className="hf-section">
         <div className="hf-section-head">
           <h2>
-            <HuggingFaceIcon size={20} />
+            <SparkIcon size={20} />
             Official Tabman Local Models (Hugging Face)
           </h2>
           <p>
@@ -564,110 +602,127 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Target Device:
               </span>
-              <button
-                type="button"
-                className={
-                  deviceChoice === 'auto'
-                    ? 'precision-toggle-btn active'
-                    : 'precision-toggle-btn'
-                }
-                onClick={() => handleSelectDeviceChoice('auto')}
-                title="Auto scheduler: empirically benchmarks your hardware on first use and selects the fastest backend"
-              >
-                {deviceChoice === 'auto' && <CheckIcon size={13} />}⚡ Auto (
-                {benchmarkReport
-                  ? `${benchmarkReport.fastestName} · ${benchmarkReport.fastestLatencyMs} ms`
-                  : hardwareProfile
-                    ? hardwareProfile.device.toUpperCase()
-                    : 'Recommended'}
-                )
-              </button>
+              <Tooltip content="Auto Scheduler: Empirically measures latency across all detected hardware and dispatches embedding jobs to the fastest local backend.">
+                <button
+                  type="button"
+                  className={
+                    deviceChoice === 'auto'
+                      ? 'precision-toggle-btn active'
+                      : 'precision-toggle-btn'
+                  }
+                  onClick={() => handleSelectDeviceChoice('auto')}
+                >
+                  {deviceChoice === 'auto' && <CheckIcon size={13} />}⚡ Auto (
+                  {benchmarkReport
+                    ? `${benchmarkReport.fastestName} · ${benchmarkReport.fastestLatencyMs} ms`
+                    : hardwareProfile
+                      ? hardwareProfile.device.toUpperCase()
+                      : 'Recommended'}
+                  )
+                </button>
+              </Tooltip>
 
               {hardwareProfile?.hasDualGpu ? (
                 <>
+                  <Tooltip
+                    content={`Dedicated GPU (dGPU): WebGPU tensor compute on ${hardwareProfile.dGpuName || 'high-performance graphics'}.`}
+                  >
+                    <button
+                      type="button"
+                      className={
+                        deviceChoice === 'webgpu-discrete'
+                          ? 'precision-toggle-btn active'
+                          : 'precision-toggle-btn'
+                      }
+                      onClick={() =>
+                        handleSelectDeviceChoice('webgpu-discrete')
+                      }
+                    >
+                      {deviceChoice === 'webgpu-discrete' && (
+                        <CheckIcon size={13} />
+                      )}
+                      dGPU ({hardwareProfile.dGpuName || 'High-Perf'}
+                      {getDeviceLatency('dgpu') !== undefined
+                        ? ` · ${getDeviceLatency('dgpu')} ms`
+                        : ''}
+                      )
+                    </button>
+                  </Tooltip>
+                  <Tooltip
+                    content={`Integrated GPU (iGPU): Power-efficient WebGPU shader execution on ${hardwareProfile.iGpuName || 'integrated graphics'}.`}
+                  >
+                    <button
+                      type="button"
+                      className={
+                        deviceChoice === 'webgpu-integrated'
+                          ? 'precision-toggle-btn active'
+                          : 'precision-toggle-btn'
+                      }
+                      onClick={() =>
+                        handleSelectDeviceChoice('webgpu-integrated')
+                      }
+                    >
+                      {deviceChoice === 'webgpu-integrated' && (
+                        <CheckIcon size={13} />
+                      )}
+                      iGPU ({hardwareProfile.iGpuName || 'Low-Power'}
+                      {getDeviceLatency('igpu') !== undefined
+                        ? ` · ${getDeviceLatency('igpu')} ms`
+                        : ''}
+                      )
+                    </button>
+                  </Tooltip>
+                </>
+              ) : hardwareProfile?.gpuType === 'dgpu' ? (
+                <Tooltip
+                  content={`Dedicated GPU (dGPU): WebGPU tensor compute on ${hardwareProfile.gpuName || 'dedicated graphics'}.`}
+                >
                   <button
                     type="button"
                     className={
-                      deviceChoice === 'webgpu-discrete'
+                      deviceChoice === 'webgpu-discrete' ||
+                      deviceChoice === 'webgpu'
                         ? 'precision-toggle-btn active'
                         : 'precision-toggle-btn'
                     }
                     onClick={() => handleSelectDeviceChoice('webgpu-discrete')}
-                    title={`Discrete GPU: ${hardwareProfile.dGpuName || 'High-Performance'}`}
                   >
-                    {deviceChoice === 'webgpu-discrete' && (
-                      <CheckIcon size={13} />
-                    )}
-                    dGPU ({hardwareProfile.dGpuName || 'High-Perf'}
-                    {getDeviceLatency('dgpu') !== undefined
-                      ? ` · ${getDeviceLatency('dgpu')} ms`
+                    {(deviceChoice === 'webgpu-discrete' ||
+                      deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                    dGPU ({hardwareProfile.gpuName || 'Dedicated'}
+                    {getDeviceLatency('dgpu') !== undefined ||
+                    getDeviceLatency('gpu') !== undefined
+                      ? ` · ${getDeviceLatency('dgpu') ?? getDeviceLatency('gpu')} ms`
                       : ''}
                     )
                   </button>
+                </Tooltip>
+              ) : (
+                <Tooltip
+                  content={`Integrated GPU (iGPU): Power-efficient WebGPU shader execution on ${hardwareProfile?.gpuName || 'integrated graphics'}.`}
+                >
                   <button
                     type="button"
                     className={
-                      deviceChoice === 'webgpu-integrated'
+                      deviceChoice === 'webgpu-integrated' ||
+                      deviceChoice === 'webgpu'
                         ? 'precision-toggle-btn active'
                         : 'precision-toggle-btn'
                     }
                     onClick={() =>
                       handleSelectDeviceChoice('webgpu-integrated')
                     }
-                    title={`Integrated GPU: ${hardwareProfile.iGpuName || 'Low-Power'}`}
                   >
-                    {deviceChoice === 'webgpu-integrated' && (
-                      <CheckIcon size={13} />
-                    )}
-                    iGPU ({hardwareProfile.iGpuName || 'Low-Power'}
-                    {getDeviceLatency('igpu') !== undefined
-                      ? ` · ${getDeviceLatency('igpu')} ms`
+                    {(deviceChoice === 'webgpu-integrated' ||
+                      deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                    iGPU ({hardwareProfile?.gpuName || 'Integrated'}
+                    {getDeviceLatency('igpu') !== undefined ||
+                    getDeviceLatency('gpu') !== undefined
+                      ? ` · ${getDeviceLatency('igpu') ?? getDeviceLatency('gpu')} ms`
                       : ''}
                     )
                   </button>
-                </>
-              ) : hardwareProfile?.gpuType === 'dgpu' ? (
-                <button
-                  type="button"
-                  className={
-                    deviceChoice === 'webgpu-discrete' ||
-                    deviceChoice === 'webgpu'
-                      ? 'precision-toggle-btn active'
-                      : 'precision-toggle-btn'
-                  }
-                  onClick={() => handleSelectDeviceChoice('webgpu-discrete')}
-                  title={`Discrete GPU (dGPU): ${hardwareProfile.gpuName || 'Dedicated Graphics'}`}
-                >
-                  {(deviceChoice === 'webgpu-discrete' ||
-                    deviceChoice === 'webgpu') && <CheckIcon size={13} />}
-                  dGPU ({hardwareProfile.gpuName || 'Dedicated'}
-                  {getDeviceLatency('dgpu') !== undefined ||
-                  getDeviceLatency('gpu') !== undefined
-                    ? ` · ${getDeviceLatency('dgpu') ?? getDeviceLatency('gpu')} ms`
-                    : ''}
-                  )
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={
-                    deviceChoice === 'webgpu-integrated' ||
-                    deviceChoice === 'webgpu'
-                      ? 'precision-toggle-btn active'
-                      : 'precision-toggle-btn'
-                  }
-                  onClick={() => handleSelectDeviceChoice('webgpu-integrated')}
-                  title={`Integrated GPU (iGPU): ${hardwareProfile?.gpuName || 'Integrated Graphics'}`}
-                >
-                  {(deviceChoice === 'webgpu-integrated' ||
-                    deviceChoice === 'webgpu') && <CheckIcon size={13} />}
-                  iGPU ({hardwareProfile?.gpuName || 'Integrated'}
-                  {getDeviceLatency('igpu') !== undefined ||
-                  getDeviceLatency('gpu') !== undefined
-                    ? ` · ${getDeviceLatency('igpu') ?? getDeviceLatency('gpu')} ms`
-                    : ''}
-                  )
-                </button>
+                </Tooltip>
               )}
 
               <Tooltip
@@ -774,38 +829,42 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 </button>
               </Tooltip>
 
-              <button
-                type="button"
-                className={
-                  deviceChoice === 'cpu'
-                    ? 'precision-toggle-btn active'
-                    : 'precision-toggle-btn'
-                }
-                onClick={() => handleSelectDeviceChoice('cpu')}
-                title="Force CPU (WASM SIMD): Universal low-overhead fallback across all machines"
-              >
-                {deviceChoice === 'cpu' && <CheckIcon size={13} />}
-                CPU (SIMD
-                {getDeviceLatency('cpu') !== undefined
-                  ? ` · ${getDeviceLatency('cpu')} ms`
-                  : ''}
-                )
-              </button>
+              <Tooltip content="CPU WASM SIMD: 128-bit vector parallel compute with zero GPU memory overhead. 100% resilient universal CPU fallback.">
+                <button
+                  type="button"
+                  className={
+                    deviceChoice === 'cpu'
+                      ? 'precision-toggle-btn active'
+                      : 'precision-toggle-btn'
+                  }
+                  onClick={() => handleSelectDeviceChoice('cpu')}
+                >
+                  {deviceChoice === 'cpu' && <CheckIcon size={13} />}
+                  CPU (SIMD
+                  {getDeviceLatency('cpu') !== undefined
+                    ? ` · ${getDeviceLatency('cpu')} ms`
+                    : ''}
+                  )
+                </button>
+              </Tooltip>
 
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                style={{ marginLeft: 'auto', gap: '5px' }}
-                onClick={() => void handleTriggerBenchmark()}
-                disabled={isBenchmarking}
-                title="Run empirical benchmark across your GPUs, NPU, and CPU to verify fastest option"
-              >
-                <RefreshIcon
-                  size={12}
-                  className={isBenchmarking ? 'benchmark-spin' : ''}
-                />
-                {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
-              </button>
+              <Tooltip content="Run empirical matrix benchmark across all detected local GPUs, NPU, and CPU to verify real execution latency.">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost benchmark-btn"
+                  style={{ marginLeft: 'auto', gap: '6px' }}
+                  onClick={() => void handleTriggerBenchmark()}
+                  disabled={isBenchmarking}
+                >
+                  <RefreshIcon
+                    size={12}
+                    className={isBenchmarking ? 'benchmark-spin' : ''}
+                  />
+                  <span>
+                    {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
+                  </span>
+                </button>
+              </Tooltip>
             </div>
           </div>
 
@@ -908,19 +967,6 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                           </span>
                         </Tooltip>
                       )}
-                      {isRecommended && (
-                        <span
-                          className="hf-badge"
-                          style={{
-                            background:
-                              'color-mix(in srgb, var(--brand) 15%, transparent)',
-                            color: 'var(--brand-text)',
-                            borderColor: 'var(--brand)',
-                          }}
-                        >
-                          Recommended
-                        </span>
-                      )}
                     </div>
                     <span>{hfModel.tier}</span>
                   </div>
@@ -940,6 +986,19 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                         Use Model
                       </button>
                     )}
+                    {isRecommended && (
+                      <span
+                        className="hf-badge"
+                        style={{
+                          background:
+                            'color-mix(in srgb, var(--brand) 15%, transparent)',
+                          color: 'var(--brand-text)',
+                          borderColor: 'var(--brand)',
+                        }}
+                      >
+                        Recommended
+                      </span>
+                    )}
                   </div>
                 </div>
                 <p className="hf-model-desc">{hfModel.description}</p>
@@ -951,11 +1010,12 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     rel="noopener noreferrer"
                     title="Open model repository on Hugging Face"
                   >
-                    <HuggingFaceIcon size={14} />
+                    <SparkIcon size={13} />
                     <span>{hfModel.repo}</span>
                   </a>
                   <span className="hf-badge">
-                    {precision.toUpperCase()} · {currentSize}
+                    {precision.toUpperCase()}{' '}
+                    <span className="hf-badge-dot">•</span> {currentSize}
                   </span>
                 </div>
               </article>
@@ -1063,26 +1123,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
 
         {providers.map((profile) => {
           const active = profile.id === settings?.activeProviderId;
-          const isHfModel = TABMAN_OFFICIAL_MODELS.some(
-            (m) => m.repo.toLowerCase() === profile.model.toLowerCase(),
-          );
           return (
             <article
               className={active ? 'provider active' : 'provider'}
               key={profile.id}
             >
               <header className="provider-head">
-                <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
-                    {isHfModel && <HuggingFaceIcon size={16} />}
-                    <strong>{profile.name}</strong>
-                  </div>
+                <div className="provider-meta">
+                  <strong>{profile.name}</strong>
                   <span>
                     {profile.model} · {profile.apiFormat}
                   </span>
@@ -1339,7 +1387,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       marginTop: '4px',
                     }}
                   >
-                    <HuggingFaceIcon size={13} />
+                    <SparkIcon size={13} />
                     <a
                       href={`https://huggingface.co/${model}`}
                       target="_blank"

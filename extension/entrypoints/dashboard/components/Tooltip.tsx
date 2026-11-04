@@ -50,6 +50,28 @@ export function Tooltip({
     right: 'tooltip-bubble-right',
   };
 
+  const isHorizontalCenter = position === 'top' || position === 'bottom';
+  const isVerticalCenter = position === 'left' || position === 'right';
+
+  const initialX = isHorizontalCenter
+    ? '-50%'
+    : position === 'left'
+      ? 4
+      : position === 'right'
+        ? -4
+        : 0;
+  const initialY =
+    position === 'top'
+      ? 4
+      : position === 'bottom'
+        ? -4
+        : isVerticalCenter
+          ? '-50%'
+          : 0;
+
+  const targetX = isHorizontalCenter ? '-50%' : 0;
+  const targetY = isVerticalCenter ? '-50%' : 0;
+
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover trigger wrapper
     <span
@@ -67,10 +89,21 @@ export function Tooltip({
             initial={{
               opacity: 0,
               scale: 0.95,
-              y: position === 'top' ? 4 : position === 'bottom' ? -4 : 0,
+              x: initialX,
+              y: initialY,
             }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              x: targetX,
+              y: targetY,
+            }}
+            exit={{
+              opacity: 0,
+              scale: 0.95,
+              x: targetX,
+              y: initialY,
+            }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
           >
             {content}

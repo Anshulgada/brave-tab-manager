@@ -3,23 +3,30 @@ import {
   autoKCluster,
   canonicalizeUrl,
   clusterTabs,
+  compressTabSnapshot,
+  computeMinHashSignature,
   computePairwiseCosine,
   createVectorStore,
   decodeBase64Wasm,
+  decompressTabSnapshot,
   deduplicateUrls,
   dequantizeEmbeddings,
   extractHtmlContent,
   fastTokenize,
+  findNearDuplicates,
   fuzzyScore,
   fuzzySearchTabs,
   getVectorStoreTabId,
   initWasm,
   isWasmAvailable,
   matryoshkaSlice,
+  minhashJaccard,
   pureJsAutoK,
   pureJsCanonicalizeUrl,
+  pureJsCompressLz,
   pureJsCosineSimilarity,
   pureJsCreateVectorStore,
+  pureJsDecompressLz,
   pureJsDeduplicateUrls,
   pureJsDequantizeSQ8,
   pureJsDotProduct,
@@ -28,6 +35,8 @@ import {
   pureJsFuzzySearch,
   pureJsGetVectorStoreTabId,
   pureJsMatryoshkaSlice,
+  pureJsMinHashSignature,
+  pureJsMinhashJaccard,
   pureJsPairwiseCosine,
   pureJsQuantizeSQ8,
   pureJsSearchVectorStore,
@@ -40,6 +49,7 @@ import {
   searchTopKTabsQuantized,
   searchVectorStore,
   setWasmActive,
+  TabmanHnswIndex,
 } from '../src/rust-wasm';
 import {
   TABMAN_WASM_BASE64,
@@ -834,11 +844,98 @@ describe('Rust WASM SIMD Acceleration Engine', () => {
     });
   });
 
-  describe('Comprehensive 10-Kernel Empirical Benchmark Suite', () => {
-    it('executes full benchmark and verifies speedups across all 10 kernels', async () => {
+  describe('Option 2: SIMD MinHash LSH Near-Duplicate Detector', () => {
+    it('produces identical 64-element signatures between WASM and pure JS', async () => {
+      await initWasm();
+      const text = 'https://github.com/brave-tab-manager/extension#overview';
+      const wasmSig = computeMinHashSignature(text);
+      const jsSig = pureJsMinHashSignature(text);
+
+      expect(wasmSig.length).toBe(64);
+      expect(jsSig.length).toBe(64);
+      for (let i = 0; i < 64; i++) {
+        expect(wasmSig[i]).toBe(jsSig[i]);
+      }
+    });
+
+    it('detects near-duplicate URLs while rejecting distinct domains', async () => {
+      await initWasm();
+      const url1 = 'https://en.wikipedia.org/wiki/WebAssembly?action=edit';
+      const url2 = 'https://en.m.wikipedia.org/wiki/WebAssembly#Syntax';
+      const url3 = 'https://cooking.nytimes.com/recipes/chocolate-chip-cookies';
+
+      const sig1 = computeMinHashSignature(url1);
+      const sig2 = computeMinHashSignature(url2);
+      const sig3 = computeMinHashSignature(url3);
+
+      const sim12 = minhashJaccard(sig1, sig2);
+      const sim13 = minhashJaccard(sig1, sig3);
+      const pureJsSim12 = pureJsMinhashJaccard(sig1, sig2);
+
+      expect(sim12).toBeCloseTo(pureJsSim12, 4);
+      expect(sim12).toBeGreaterThan(0.35);
+      expect(sim13).toBeLessThan(0.15);
+
+      const dupes = findNearDuplicates([sig1, sig2, sig3], 0.35);
+      expect(dupes.length).toBe(1);
+      expect(dupes[0]).toEqual([0, 1]);
+    });
+  });
+
+  describe('Option 4: In-Memory HNSW Vector Graph Index', () => {
+    it('inserts vectors and retrieves approximate nearest neighbors in O(log N)', async () => {
+      await initWasm();
+      const dim = 16;
+      const index = new TabmanHnswIndex(dim, 8, 16);
+
+      const v0 = new Float32Array(dim);
+      v0[0] = 1.0;
+      const v1 = new Float32Array(dim);
+      v1[1] = 1.0;
+      const v2 = new Float32Array(dim);
+      v2[2] = 1.0;
+
+      index.insert(10, v0);
+      index.insert(20, v1);
+      index.insert(30, v2);
+
+      const query = new Float32Array(dim);
+      query[0] = 0.98;
+      query[1] = 0.05;
+
+      const results = index.search(query, 2, 16);
+      expect(results.length).toBe(2);
+      expect(results[0]?.id).toBe(10);
+      expect(results[0]?.score).toBeGreaterThan(0.9);
+
+      index.dispose();
+    });
+  });
+
+  describe('Option 3: Fast Tab Snapshot LZ Compressor & Decompressor', () => {
+    it('compresses HTML snapshots by > 30% and recovers exact text losslessly', async () => {
+      await initWasm();
+      const html =
+        '<!DOCTYPE html><html><head><title>Tabman Deep Search</title></head><body><h1>Tabman</h1><p>High performance SIMD tab clustering, near-duplicate detection, and offline snapshot storage.</p></body></html>';
+      const compressed = compressTabSnapshot(html);
+      expect(compressed.length).toBeGreaterThan(0);
+      expect(compressed.length).toBeLessThan(html.length);
+
+      const decompressed = decompressTabSnapshot(compressed);
+      expect(decompressed).toBe(html);
+
+      // Pure JS fallback roundtrip
+      const jsComp = pureJsCompressLz(new TextEncoder().encode(html));
+      const jsDecomp = new TextDecoder().decode(pureJsDecompressLz(jsComp));
+      expect(jsDecomp).toBe(html);
+    });
+  });
+
+  describe('Comprehensive 13-Kernel Empirical Benchmark Suite', () => {
+    it('executes full benchmark and verifies speedups across all 13 kernels', async () => {
       const report = await runWasmVsJsBenchmark();
       expect(report.isWasmActive).toBe(true);
-      expect(report.entries.length).toBe(10);
+      expect(report.entries.length).toBe(13);
 
       for (const entry of report.entries) {
         expect(entry.jsLatencyMs).toBeGreaterThan(0);
@@ -887,6 +984,24 @@ describe('Rust WASM SIMD Acceleration Engine', () => {
         e.name.includes('Vector Store Search'),
       );
       expect(storeBench).toBeDefined();
+
+      // Check MinHash LSH speedup
+      const minhashBench = report.entries.find((e) =>
+        e.name.includes('MinHash LSH'),
+      );
+      expect(minhashBench).toBeDefined();
+
+      // Check HNSW Vector Graph speedup
+      const hnswBench = report.entries.find((e) =>
+        e.name.includes('HNSW Vector Graph'),
+      );
+      expect(hnswBench).toBeDefined();
+
+      // Check Fast Snapshot LZ Compression speedup
+      const lzBench = report.entries.find((e) =>
+        e.name.includes('Fast Tab Snapshot LZ'),
+      );
+      expect(lzBench).toBeDefined();
     });
   });
 });

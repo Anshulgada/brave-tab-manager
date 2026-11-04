@@ -5,9 +5,12 @@
 //! at native silicon speeds.
 
 pub mod clustering;
+pub mod compress;
 pub mod fuzzy;
+pub mod hnsw;
 pub mod html;
 pub mod index;
+pub mod minhash;
 pub mod quant;
 pub mod store;
 pub mod tokenizer;
@@ -579,5 +582,176 @@ pub extern "C" fn tabman_html_extract(
         lens[2] = b_len as u32;
 
         b_len
+    }
+}
+
+/// Generate a 64-element 64-bit MinHash signature for text.
+#[no_mangle]
+pub extern "C" fn tabman_minhash_64(
+    text_ptr: *const u8,
+    text_len: usize,
+    out_sig_ptr: *mut u64,
+) {
+    if text_ptr.is_null() || out_sig_ptr.is_null() {
+        return;
+    }
+    unsafe {
+        let text = slice::from_raw_parts(text_ptr, text_len);
+        let out_sig = slice::from_raw_parts_mut(out_sig_ptr, minhash::MINHASH_NUM_PERMUTATIONS);
+        let mut sig_arr = [0u64; minhash::MINHASH_NUM_PERMUTATIONS];
+        minhash::compute_minhash_signature(text, &mut sig_arr);
+        out_sig.copy_from_slice(&sig_arr);
+    }
+}
+
+/// Compute Jaccard similarity between two 64-element MinHash signatures.
+#[no_mangle]
+pub extern "C" fn tabman_minhash_jaccard(
+    sig_a_ptr: *const u64,
+    sig_b_ptr: *const u64,
+) -> f32 {
+    if sig_a_ptr.is_null() || sig_b_ptr.is_null() {
+        return 0.0;
+    }
+    unsafe {
+        let sig_a = slice::from_raw_parts(sig_a_ptr, minhash::MINHASH_NUM_PERMUTATIONS);
+        let sig_b = slice::from_raw_parts(sig_b_ptr, minhash::MINHASH_NUM_PERMUTATIONS);
+        let mut arr_a = [0u64; minhash::MINHASH_NUM_PERMUTATIONS];
+        let mut arr_b = [0u64; minhash::MINHASH_NUM_PERMUTATIONS];
+        arr_a.copy_from_slice(sig_a);
+        arr_b.copy_from_slice(sig_b);
+        minhash::minhash_jaccard_similarity(&arr_a, &arr_b)
+    }
+}
+
+/// Find pairs of near-duplicate tab signatures with similarity >= threshold.
+#[no_mangle]
+pub extern "C" fn tabman_batch_near_duplicates(
+    sigs_ptr: *const u64,
+    n: usize,
+    threshold: f32,
+    out_pairs_ptr: *mut u32,
+    max_pairs: usize,
+) -> usize {
+    if sigs_ptr.is_null() || out_pairs_ptr.is_null() || n < 2 || max_pairs == 0 {
+        return 0;
+    }
+    unsafe {
+        let total_u64 = n * minhash::MINHASH_NUM_PERMUTATIONS;
+        let raw_sigs = slice::from_raw_parts(sigs_ptr, total_u64);
+        let mut sig_vec: Vec<[u64; minhash::MINHASH_NUM_PERMUTATIONS]> = Vec::with_capacity(n);
+        for chunk in raw_sigs.chunks_exact(minhash::MINHASH_NUM_PERMUTATIONS) {
+            let mut arr = [0u64; minhash::MINHASH_NUM_PERMUTATIONS];
+            arr.copy_from_slice(chunk);
+            sig_vec.push(arr);
+        }
+
+        let mut out_tuples: Vec<(u32, u32)> = vec![(0, 0); max_pairs];
+        let written = minhash::find_near_duplicate_pairs(&sig_vec, threshold, &mut out_tuples);
+
+        let out_flat = slice::from_raw_parts_mut(out_pairs_ptr, written * 2);
+        for i in 0..written {
+            out_flat[i * 2] = out_tuples[i].0;
+            out_flat[i * 2 + 1] = out_tuples[i].1;
+        }
+
+        written
+    }
+}
+
+/// Create a new in-memory HNSW index.
+#[no_mangle]
+pub extern "C" fn tabman_hnsw_new(dim: usize, m: usize, ef_construction: usize) -> *mut hnsw::HnswIndex {
+    let index = Box::new(hnsw::HnswIndex::new(dim, m, ef_construction));
+    Box::into_raw(index)
+}
+
+/// Insert a vector into the HNSW index.
+#[no_mangle]
+pub extern "C" fn tabman_hnsw_insert(index_ptr: *mut hnsw::HnswIndex, id: u32, vector_ptr: *const f32) {
+    if index_ptr.is_null() || vector_ptr.is_null() {
+        return;
+    }
+    unsafe {
+        let index = &mut *index_ptr;
+        let vec = slice::from_raw_parts(vector_ptr, index.dim);
+        index.insert(id, vec);
+    }
+}
+
+/// Search top-K nearest neighbors using the HNSW index.
+#[no_mangle]
+pub extern "C" fn tabman_hnsw_search(
+    index_ptr: *const hnsw::HnswIndex,
+    query_ptr: *const f32,
+    k: usize,
+    ef_search: usize,
+    out_ids_ptr: *mut u32,
+    out_scores_ptr: *mut f32,
+) -> usize {
+    if index_ptr.is_null() || query_ptr.is_null() || out_ids_ptr.is_null() || out_scores_ptr.is_null() || k == 0 {
+        return 0;
+    }
+    unsafe {
+        let index = &*index_ptr;
+        let query = slice::from_raw_parts(query_ptr, index.dim);
+        let results = index.search(query, k, ef_search);
+        let count = results.len();
+
+        let out_ids = slice::from_raw_parts_mut(out_ids_ptr, count);
+        let out_scores = slice::from_raw_parts_mut(out_scores_ptr, count);
+
+        for (i, (id, score)) in results.into_iter().enumerate() {
+            out_ids[i] = id;
+            out_scores[i] = score;
+        }
+
+        count
+    }
+}
+
+/// Free an allocated HNSW index.
+#[no_mangle]
+pub extern "C" fn tabman_hnsw_free(index_ptr: *mut hnsw::HnswIndex) {
+    if !index_ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(index_ptr);
+        }
+    }
+}
+
+/// Compress raw bytes using fast byte-level LZ.
+#[no_mangle]
+pub extern "C" fn tabman_compress_lz(
+    src_ptr: *const u8,
+    src_len: usize,
+    out_ptr: *mut u8,
+    max_out_len: usize,
+) -> usize {
+    if src_ptr.is_null() || out_ptr.is_null() || src_len == 0 || max_out_len == 0 {
+        return 0;
+    }
+    unsafe {
+        let src = slice::from_raw_parts(src_ptr, src_len);
+        let out = slice::from_raw_parts_mut(out_ptr, max_out_len);
+        compress::compress_lz(src, out)
+    }
+}
+
+/// Decompress raw LZ bytes into original byte stream.
+#[no_mangle]
+pub extern "C" fn tabman_decompress_lz(
+    src_ptr: *const u8,
+    src_len: usize,
+    out_ptr: *mut u8,
+    max_out_len: usize,
+) -> usize {
+    if src_ptr.is_null() || out_ptr.is_null() || src_len == 0 || max_out_len == 0 {
+        return 0;
+    }
+    unsafe {
+        let src = slice::from_raw_parts(src_ptr, src_len);
+        let out = slice::from_raw_parts_mut(out_ptr, max_out_len);
+        compress::decompress_lz(src, out)
     }
 }
