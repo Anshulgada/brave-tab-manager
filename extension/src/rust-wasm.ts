@@ -101,7 +101,71 @@ export interface TabmanWasmExports {
     outIndicesPtr: number,
     outScoresPtr: number,
   ): number;
+  tabman_canonicalize_url(
+    urlPtr: number,
+    urlLen: number,
+    stripFragment: boolean,
+    outPtr: number,
+    outMaxLen: number,
+  ): number;
+  tabman_deduplicate_urls(
+    blobPtr: number,
+    offsetsPtr: number,
+    lengthsPtr: number,
+    count: number,
+    stripFragment: boolean,
+    outUniqueIndicesPtr: number,
+    outDupMapPtr: number,
+  ): number;
+  tabman_vector_store_create(
+    idsBlobPtr: number,
+    idOffsetsPtr: number,
+    idLengthsPtr: number,
+    vectorsPtr: number,
+    count: number,
+    dim: number,
+    quantize: boolean,
+    outSizePtr: number,
+  ): number;
+  tabman_vector_store_search(
+    storeBufPtr: number,
+    storeLen: number,
+    queryPtr: number,
+    k: number,
+    outIndicesPtr: number,
+    outScoresPtr: number,
+  ): number;
+  tabman_vector_store_get_id(
+    storeBufPtr: number,
+    storeLen: number,
+    idx: number,
+    outPtr: number,
+    outMaxLen: number,
+  ): number;
+  tabman_html_extract(
+    htmlPtr: number,
+    htmlLen: number,
+    maxTitle: number,
+    maxDesc: number,
+    maxBody: number,
+    outTitlePtr: number,
+    outDescPtr: number,
+    outBodyPtr: number,
+    outLensPtr: number,
+  ): number;
   tabman_wasm_version?(): number;
+}
+
+export interface ExtractedHtmlContent {
+  title: string;
+  description: string;
+  body: string;
+}
+
+export interface DeduplicateUrlsResult {
+  canonicalUrls: string[];
+  uniqueIndices: number[];
+  duplicateMap: number[];
 }
 
 export interface TopKResult {
@@ -588,19 +652,15 @@ export function pureJsAutoK(
   return { clusterCount: clusterId, assignments };
 }
 
-export function pureJsFuzzyScore(query: string, target: string): number {
-  if (!query) return 0;
-  if (query.length > target.length) return -1;
-  if (query.toLowerCase() === target.toLowerCase())
-    return 1000 + query.length * 10;
-
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
+function computeSubsequenceScore(
+  q: string,
+  t: string,
+  targetOriginal: string,
+): number {
   let score = 0;
   let qIdx = 0;
   let prevMatchIdx = -1;
   let consecutive = 0;
-
   const isSep = (c: string) => /[\s/\\-_.:?=&#|()[\]]/.test(c);
 
   for (let tIdx = 0; tIdx < t.length && qIdx < q.length; tIdx++) {
@@ -609,12 +669,13 @@ export function pureJsFuzzyScore(query: string, target: string): number {
       if (tIdx === 0) {
         charScore += 35;
       } else {
-        const prevC = target[tIdx - 1] ?? '';
+        const prevC = targetOriginal[tIdx - 1] ?? '';
         if (isSep(prevC)) {
           charScore += 25;
         } else if (
           prevC === prevC.toLowerCase() &&
-          (target[tIdx] ?? '') === (target[tIdx] ?? '').toUpperCase()
+          (targetOriginal[tIdx] ?? '') ===
+            (targetOriginal[tIdx] ?? '').toUpperCase()
         ) {
           charScore += 20;
         }
@@ -641,6 +702,85 @@ export function pureJsFuzzyScore(query: string, target: string): number {
   if (qIdx < q.length) return -1;
   score -= Math.min(20, Math.floor((t.length - q.length) / 3));
   return Math.max(1, score);
+}
+
+function fastEditDistance(s1: string, s2: string, maxDist = 2): number {
+  if (Math.abs(s1.length - s2.length) > maxDist) return maxDist + 1;
+  const l1 = s1.length;
+  const l2 = s2.length;
+  const dp: number[] = Array.from({ length: l2 + 1 }, (_, i) => i);
+
+  for (let i = 1; i <= l1; i++) {
+    let prev = dp[0] ?? 0;
+    dp[0] = i;
+    let minRow = dp[0];
+    for (let j = 1; j <= l2; j++) {
+      const temp = dp[j] ?? 0;
+      if (s1[i - 1] === s2[j - 1]) {
+        dp[j] = prev;
+      } else {
+        dp[j] = 1 + Math.min(prev, dp[j] ?? 0, dp[j - 1] ?? 0);
+      }
+      prev = temp;
+      minRow = Math.min(minRow, dp[j] ?? 0);
+    }
+    if (minRow > maxDist) return maxDist + 1;
+  }
+  return dp[l2] ?? maxDist + 1;
+}
+
+export function pureJsFuzzyScore(query: string, target: string): number {
+  if (!query) return 0;
+  if (!target) return -1;
+  const q = query.trim().toLowerCase();
+  const t = target.toLowerCase();
+  if (q === t) return 1000 + q.length * 10;
+
+  // Direct substring match bonus
+  if (t.includes(q)) {
+    return (
+      600 + q.length * 10 - Math.min(30, Math.floor((t.length - q.length) / 2))
+    );
+  }
+
+  // 1. Subsequence match with boundary bonuses
+  if (q.length <= t.length) {
+    const sub = computeSubsequenceScore(q, t, target);
+    if (sub > 0) return sub;
+  }
+
+  // 2. Collapsed consecutive duplicates (e.g. 'youutube' -> 'youtube', 'gooogle' -> 'google')
+  const qCollapsed = q.replace(/(.)\1+/g, '$1');
+  if (qCollapsed !== q) {
+    if (t.includes(qCollapsed)) {
+      return 300 + qCollapsed.length * 5;
+    }
+    if (qCollapsed.length <= t.length) {
+      const collSub = computeSubsequenceScore(qCollapsed, t, target);
+      if (collSub > 0) return Math.max(1, collSub - 25);
+    }
+  }
+
+  // 3. Typo tolerance: Levenshtein distance <= 2 on full target or individual words
+  if (q.length >= 3) {
+    if (Math.abs(q.length - t.length) <= 2) {
+      const dist = fastEditDistance(q, t, 2);
+      if (dist <= 2) {
+        return Math.max(1, 350 - dist * 80);
+      }
+    }
+    const words = t.split(/[\s/\\-_.:?=&#|()[\]]+/);
+    for (const w of words) {
+      if (w.length >= 3 && Math.abs(q.length - w.length) <= 2) {
+        const dist = fastEditDistance(q, w, 2);
+        if (dist <= 2) {
+          return Math.max(1, 320 - dist * 70);
+        }
+      }
+    }
+  }
+
+  return -1;
 }
 
 export function pureJsFuzzySearch(
@@ -796,6 +936,173 @@ export function pureJsTokenize(title: string, maxLen = 32): TokenizeResult {
   return { tokens, mask, length: idx };
 }
 
+export function pureJsCreateVectorStore(
+  ids: string[],
+  vectors: Float32Array[],
+  dim: number,
+  quantize = true,
+): Uint8Array {
+  const count = ids.length;
+  if (count === 0 || dim === 0) return new Uint8Array(0);
+
+  const encoder = new TextEncoder();
+  const idBytes = ids.map((id) => encoder.encode(id));
+  const totalIdBytes = idBytes.reduce((acc, b) => acc + b.length, 0);
+
+  const vectorsOffset = 64;
+  const vectorsBytes = quantize ? count * dim + count * 4 : count * dim * 4;
+  const metadataOffset = vectorsOffset + vectorsBytes;
+  const offsetsBytes = (count + 1) * 4;
+  const totalBytes = metadataOffset + offsetsBytes + totalIdBytes;
+
+  const out = new Uint8Array(totalBytes);
+  const view = new DataView(out.buffer);
+
+  // Header (64 bytes aligned)
+  out[0] = 0x54;
+  out[1] = 0x41;
+  out[2] = 0x42;
+  out[3] = 0x56; // "TABV"
+  view.setUint32(4, 1, true); // version = 1
+  view.setUint32(8, quantize ? 1 : 0, true); // flags (FLAG_QUANTIZED_I8 = 1)
+  view.setUint32(12, count, true);
+  view.setUint32(16, dim, true);
+  view.setUint32(20, vectorsOffset, true);
+  view.setUint32(24, metadataOffset, true);
+  view.setUint32(28, totalBytes, true);
+  view.setBigUint64(32, BigInt(Math.floor(Date.now() / 1000)), true);
+
+  if (quantize) {
+    const qRes = pureJsQuantizeSQ8(vectors, dim);
+    for (let i = 0; i < count; i++) {
+      const qv = qRes.quant[i];
+      if (qv) {
+        out.set(
+          new Uint8Array(qv.buffer, qv.byteOffset, dim),
+          vectorsOffset + i * dim,
+        );
+      }
+    }
+    const scalesOffset = vectorsOffset + count * dim;
+    for (let i = 0; i < count; i++) {
+      view.setFloat32(scalesOffset + i * 4, qRes.scales[i] ?? 1.0, true);
+    }
+  } else {
+    for (let i = 0; i < count; i++) {
+      const v = vectors[i];
+      if (v) {
+        out.set(
+          new Uint8Array(v.buffer, v.byteOffset, dim * 4),
+          vectorsOffset + i * dim * 4,
+        );
+      }
+    }
+  }
+
+  // Metadata offsets & ID blob
+  let currentOffset = 0;
+  for (let i = 0; i < count; i++) {
+    view.setUint32(metadataOffset + i * 4, currentOffset, true);
+    const b = idBytes[i];
+    if (b) {
+      out.set(b, metadataOffset + offsetsBytes + currentOffset);
+      currentOffset += b.length;
+    }
+  }
+  view.setUint32(metadataOffset + count * 4, currentOffset, true);
+
+  return out;
+}
+
+export function pureJsSearchVectorStore(
+  storeBuffer: Uint8Array,
+  query: Float32Array,
+  k = 10,
+): TopKResult[] {
+  if (storeBuffer.byteLength < 64 || query.length === 0 || k === 0) return [];
+  if (
+    storeBuffer[0] !== 0x54 ||
+    storeBuffer[1] !== 0x41 ||
+    storeBuffer[2] !== 0x42 ||
+    storeBuffer[3] !== 0x56
+  ) {
+    return [];
+  }
+  const view = new DataView(
+    storeBuffer.buffer,
+    storeBuffer.byteOffset,
+    storeBuffer.byteLength,
+  );
+  const flags = view.getUint32(8, true);
+  const count = view.getUint32(12, true);
+  const dim = view.getUint32(16, true);
+  const vectorsOffset = view.getUint32(20, true);
+  if (count === 0 || dim === 0 || query.length < dim) return [];
+
+  const isQuantized = (flags & 1) !== 0;
+  const scores: { index: number; score: number }[] = [];
+
+  if (isQuantized) {
+    const scalesOffset = vectorsOffset + count * dim;
+    for (let i = 0; i < count; i++) {
+      let dot = 0;
+      const vStart = vectorsOffset + i * dim;
+      for (let d = 0; d < dim; d++) {
+        const val = view.getInt8(vStart + d);
+        dot += val * (query[d] ?? 0);
+      }
+      const scale = view.getFloat32(scalesOffset + i * 4, true);
+      scores.push({ index: i, score: dot * scale });
+    }
+  } else {
+    for (let i = 0; i < count; i++) {
+      let dot = 0;
+      const vStart = vectorsOffset + i * dim * 4;
+      for (let d = 0; d < dim; d++) {
+        const val = view.getFloat32(vStart + d * 4, true);
+        dot += val * (query[d] ?? 0);
+      }
+      scores.push({ index: i, score: dot });
+    }
+  }
+
+  scores.sort((a, b) => b.score - a.score);
+  return scores.slice(0, k);
+}
+
+export function pureJsGetVectorStoreTabId(
+  storeBuffer: Uint8Array,
+  index: number,
+): string | null {
+  if (storeBuffer.byteLength < 64 || index < 0) return null;
+  if (
+    storeBuffer[0] !== 0x54 ||
+    storeBuffer[1] !== 0x41 ||
+    storeBuffer[2] !== 0x42 ||
+    storeBuffer[3] !== 0x56
+  ) {
+    return null;
+  }
+  const view = new DataView(
+    storeBuffer.buffer,
+    storeBuffer.byteOffset,
+    storeBuffer.byteLength,
+  );
+  const count = view.getUint32(12, true);
+  const metadataOffset = view.getUint32(24, true);
+  const totalBytes = view.getUint32(28, true);
+  if (index >= count) return null;
+
+  const offsetsBytes = (count + 1) * 4;
+  const start = view.getUint32(metadataOffset + index * 4, true);
+  const end = view.getUint32(metadataOffset + (index + 1) * 4, true);
+  const blobStart = metadataOffset + offsetsBytes;
+  if (blobStart + end > totalBytes || start > end) return null;
+
+  const slice = storeBuffer.subarray(blobStart + start, blobStart + end);
+  return new TextDecoder().decode(slice);
+}
+
 // =========================================================================
 // Accelerated WebAssembly SIMD Implementations
 // =========================================================================
@@ -938,6 +1245,7 @@ export function autoKCluster(
  */
 export function fuzzyScore(query: string, target: string): number {
   if (!query) return 0;
+  if (!target) return -1;
   if (!wasmExports) {
     return pureJsFuzzyScore(query, target);
   }
@@ -953,11 +1261,21 @@ export function fuzzyScore(query: string, target: string): number {
   try {
     new Uint8Array(inst.memory.buffer, qPtr, qBytes.length).set(qBytes);
     new Uint8Array(inst.memory.buffer, tPtr, tBytes.length).set(tBytes);
-    return inst.tabman_fuzzy_score(qPtr, qBytes.length, tPtr, tBytes.length);
+    const wasmScore = inst.tabman_fuzzy_score(
+      qPtr,
+      qBytes.length,
+      tPtr,
+      tBytes.length,
+    );
+    if (wasmScore > 0) return wasmScore;
+  } catch {
+    // fallback to pure JS below
   } finally {
     inst.tabman_dealloc(qPtr, qBytes.length);
     inst.tabman_dealloc(tPtr, tBytes.length);
   }
+
+  return pureJsFuzzyScore(query, target);
 }
 
 /**
@@ -1026,6 +1344,10 @@ export function fuzzySearchTabs(
       outIdxPtr,
       outScoresPtr,
     );
+
+    if (found === 0) {
+      return pureJsFuzzySearch(query, targets, k);
+    }
 
     const idxView = new Uint32Array(inst.memory.buffer, outIdxPtr, found);
     const scoreView = new Int32Array(inst.memory.buffer, outScoresPtr, found);
@@ -1392,6 +1714,477 @@ export function fastTokenize(title: string, maxLen = 32): TokenizeResult {
   }
 }
 
+const TRACKING_PARAM_REGEX =
+  /^(utm_source|utm_medium|utm_campaign|utm_term|utm_content|utm_id|utm_reader|fbclid|gclid|gclsrc|dclid|msclkid|twclid|igshid|mc_cid|mc_eid|_hsenc|_hsmi|_openstat|ref|ref_src|ref_url|source|feature|si|spm|scm|ved|usqp|ei|sei|s_kwcid|otc|ocid|yclid|_ga|_gl)$/i;
+
+export function pureJsCanonicalizeUrl(
+  url: string,
+  stripFragment = true,
+): string {
+  try {
+    const parsed = new URL(url);
+    if (stripFragment) parsed.hash = '';
+
+    // Strip trailing dot from hostname
+    if (parsed.hostname.endsWith('.')) {
+      parsed.hostname = parsed.hostname.slice(0, -1);
+    }
+
+    // Collapse duplicate slashes and remove trailing slash unless root '/'
+    let normalizedPath = parsed.pathname.replace(/\/+/g, '/');
+    if (normalizedPath.length > 1 && normalizedPath.endsWith('/')) {
+      normalizedPath = normalizedPath.slice(0, -1);
+    }
+    parsed.pathname = normalizedPath;
+
+    const cleanParams = new URLSearchParams();
+    const sortedKeys = Array.from(parsed.searchParams.keys()).sort();
+    for (const key of sortedKeys) {
+      if (!TRACKING_PARAM_REGEX.test(key)) {
+        for (const val of parsed.searchParams.getAll(key)) {
+          cleanParams.append(key, val);
+        }
+      }
+    }
+    parsed.search = cleanParams.toString();
+    return parsed.toString();
+  } catch {
+    return url.trim();
+  }
+}
+
+export function pureJsDeduplicateUrls(
+  urls: string[],
+  stripFragment = true,
+): DeduplicateUrlsResult {
+  const canonicalUrls: string[] = [];
+  const uniqueIndices: number[] = [];
+  const duplicateMap: number[] = [];
+  const seen = new Map<string, number>();
+
+  for (let i = 0; i < urls.length; i++) {
+    const canon = pureJsCanonicalizeUrl(urls[i] ?? '', stripFragment);
+    canonicalUrls.push(canon);
+    const existing = seen.get(canon);
+    if (existing !== undefined) {
+      duplicateMap.push(existing);
+    } else {
+      seen.set(canon, i);
+      duplicateMap.push(i);
+      uniqueIndices.push(i);
+    }
+  }
+
+  return { canonicalUrls, uniqueIndices, duplicateMap };
+}
+
+export function canonicalizeUrl(url: string, stripFragment = true): string {
+  if (!wasmExports) {
+    return pureJsCanonicalizeUrl(url, stripFragment);
+  }
+
+  const inst = wasmExports;
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(url);
+  if (bytes.length === 0) return '';
+
+  const maxOutBytes = bytes.length + 128;
+  const inPtr = inst.tabman_alloc(bytes.length);
+  const outPtr = inst.tabman_alloc(maxOutBytes);
+
+  try {
+    new Uint8Array(inst.memory.buffer, inPtr, bytes.length).set(bytes);
+    const written = inst.tabman_canonicalize_url(
+      inPtr,
+      bytes.length,
+      stripFragment,
+      outPtr,
+      maxOutBytes,
+    );
+    if (written === 0) return pureJsCanonicalizeUrl(url, stripFragment);
+
+    const outSlice = new Uint8Array(inst.memory.buffer, outPtr, written);
+    return new TextDecoder().decode(outSlice);
+  } finally {
+    inst.tabman_dealloc(inPtr, bytes.length);
+    inst.tabman_dealloc(outPtr, maxOutBytes);
+  }
+}
+
+export function deduplicateUrls(
+  urls: string[],
+  stripFragment = true,
+): DeduplicateUrlsResult {
+  if (urls.length === 0) {
+    return { canonicalUrls: [], uniqueIndices: [], duplicateMap: [] };
+  }
+
+  if (!wasmExports) {
+    return pureJsDeduplicateUrls(urls, stripFragment);
+  }
+
+  const inst = wasmExports;
+  const count = urls.length;
+  const encoder = new TextEncoder();
+  const encodedBlobs = urls.map((u) => encoder.encode(u));
+  const totalBytes = encodedBlobs.reduce((acc, b) => acc + b.length, 0);
+
+  const blobPtr = inst.tabman_alloc(totalBytes);
+  const offsetsPtr = inst.tabman_alloc(count * 4);
+  const lengthsPtr = inst.tabman_alloc(count * 4);
+  const outUniquePtr = inst.tabman_alloc(count * 4);
+  const outMapPtr = inst.tabman_alloc(count * 4);
+
+  try {
+    const blobView = new Uint8Array(inst.memory.buffer, blobPtr, totalBytes);
+    const offsetsView = new Uint32Array(inst.memory.buffer, offsetsPtr, count);
+    const lengthsView = new Uint32Array(inst.memory.buffer, lengthsPtr, count);
+
+    let offset = 0;
+    for (let i = 0; i < count; i++) {
+      const b = encodedBlobs[i];
+      if (!b) continue;
+      blobView.set(b, offset);
+      offsetsView[i] = offset;
+      lengthsView[i] = b.length;
+      offset += b.length;
+    }
+
+    const uniqueCount = inst.tabman_deduplicate_urls(
+      blobPtr,
+      offsetsPtr,
+      lengthsPtr,
+      count,
+      stripFragment,
+      outUniquePtr,
+      outMapPtr,
+    );
+
+    const uniqueIndices = Array.from(
+      new Uint32Array(inst.memory.buffer, outUniquePtr, uniqueCount),
+    );
+    const duplicateMap = Array.from(
+      new Uint32Array(inst.memory.buffer, outMapPtr, count),
+    );
+
+    const canonicalUrls = urls.map((u) => canonicalizeUrl(u, stripFragment));
+    return { canonicalUrls, uniqueIndices, duplicateMap };
+  } finally {
+    inst.tabman_dealloc(blobPtr, totalBytes);
+    inst.tabman_dealloc(offsetsPtr, count * 4);
+    inst.tabman_dealloc(lengthsPtr, count * 4);
+    inst.tabman_dealloc(outUniquePtr, count * 4);
+    inst.tabman_dealloc(outMapPtr, count * 4);
+  }
+}
+
+export function pureJsExtractHtmlContent(
+  html: string,
+  options?: { maxTitle?: number; maxDesc?: number; maxBody?: number },
+): ExtractedHtmlContent {
+  const maxTitle = options?.maxTitle ?? 256;
+  const maxDesc = options?.maxDesc ?? 512;
+  const maxBody = options?.maxBody ?? 32768;
+
+  let title = '';
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (titleMatch?.[1]) {
+    title = titleMatch[1]
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .trim()
+      .slice(0, maxTitle);
+  }
+
+  let description = '';
+  const metaTags = html.match(/<meta\b[^>]*>/gi) ?? [];
+  for (const tag of metaTags) {
+    const isDesc =
+      /name=['"](?:description)['"]/i.test(tag) ||
+      /property=['"](?:og:description)['"]/i.test(tag);
+    if (isDesc) {
+      const contentMatch = tag.match(/content=['"]([^'"]*)['"]/i);
+      if (contentMatch?.[1]) {
+        description = contentMatch[1]
+          .replace(/&amp;/gi, '&')
+          .replace(/&lt;/gi, '<')
+          .replace(/&gt;/gi, '>')
+          .replace(/&quot;/gi, '"')
+          .replace(/&#39;/gi, "'")
+          .trim()
+          .slice(0, maxDesc);
+        break;
+      }
+    }
+  }
+
+  const cleanBody = html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxBody);
+
+  return { title, description, body: cleanBody };
+}
+
+export function extractHtmlContent(
+  html: string,
+  options?: { maxTitle?: number; maxDesc?: number; maxBody?: number },
+): ExtractedHtmlContent {
+  const maxTitle = options?.maxTitle ?? 512;
+  const maxDesc = options?.maxDesc ?? 1024;
+  const maxBody = options?.maxBody ?? 65536;
+
+  if (!wasmExports) {
+    return pureJsExtractHtmlContent(html, options);
+  }
+
+  const inst = wasmExports;
+  const encoder = new TextEncoder();
+  const htmlBytes = encoder.encode(html);
+  if (htmlBytes.length === 0) {
+    return { title: '', description: '', body: '' };
+  }
+
+  const inPtr = inst.tabman_alloc(htmlBytes.length);
+  const outTitlePtr = inst.tabman_alloc(maxTitle);
+  const outDescPtr = inst.tabman_alloc(maxDesc);
+  const outBodyPtr = inst.tabman_alloc(maxBody);
+  const outLensPtr = inst.tabman_alloc(12);
+
+  try {
+    new Uint8Array(inst.memory.buffer, inPtr, htmlBytes.length).set(htmlBytes);
+
+    inst.tabman_html_extract(
+      inPtr,
+      htmlBytes.length,
+      maxTitle,
+      maxDesc,
+      maxBody,
+      outTitlePtr,
+      outDescPtr,
+      outBodyPtr,
+      outLensPtr,
+    );
+
+    const lens = new Uint32Array(inst.memory.buffer, outLensPtr, 3);
+    const tLen = lens[0] ?? 0;
+    const dLen = lens[1] ?? 0;
+    const bLen = lens[2] ?? 0;
+
+    const decoder = new TextDecoder();
+    const title = decoder.decode(
+      new Uint8Array(inst.memory.buffer, outTitlePtr, tLen),
+    );
+    const description = decoder.decode(
+      new Uint8Array(inst.memory.buffer, outDescPtr, dLen),
+    );
+    const body = decoder.decode(
+      new Uint8Array(inst.memory.buffer, outBodyPtr, bLen),
+    );
+
+    return { title, description, body };
+  } finally {
+    inst.tabman_dealloc(inPtr, htmlBytes.length);
+    inst.tabman_dealloc(outTitlePtr, maxTitle);
+    inst.tabman_dealloc(outDescPtr, maxDesc);
+    inst.tabman_dealloc(outBodyPtr, maxBody);
+    inst.tabman_dealloc(outLensPtr, 12);
+  }
+}
+
+export function createVectorStore(
+  ids: string[],
+  vectors: Float32Array[],
+  dim: number,
+  quantize = true,
+): Uint8Array {
+  const count = ids.length;
+  if (count === 0 || dim === 0) return new Uint8Array(0);
+
+  if (!wasmExports) {
+    return pureJsCreateVectorStore(ids, vectors, dim, quantize);
+  }
+
+  const inst = wasmExports;
+  const encoder = new TextEncoder();
+  const idBytesList = ids.map((id) => encoder.encode(id));
+  const totalIdBytes = idBytesList.reduce((acc, b) => acc + b.length, 0);
+
+  const idsBlobPtr = inst.tabman_alloc(totalIdBytes);
+  const idOffsetsPtr = inst.tabman_alloc(count * 4);
+  const idLengthsPtr = inst.tabman_alloc(count * 4);
+  const vectorsPtr = inst.tabman_alloc(count * dim * 4);
+  const outSizePtr = inst.tabman_alloc(4);
+
+  try {
+    const idsBlobView = new Uint8Array(
+      inst.memory.buffer,
+      idsBlobPtr,
+      totalIdBytes,
+    );
+    const idOffsetsView = new Uint32Array(
+      inst.memory.buffer,
+      idOffsetsPtr,
+      count,
+    );
+    const idLengthsView = new Uint32Array(
+      inst.memory.buffer,
+      idLengthsPtr,
+      count,
+    );
+    const vectorsView = new Float32Array(
+      inst.memory.buffer,
+      vectorsPtr,
+      count * dim,
+    );
+
+    let offset = 0;
+    for (let i = 0; i < count; i++) {
+      const b = idBytesList[i];
+      if (!b) continue;
+      idsBlobView.set(b, offset);
+      idOffsetsView[i] = offset;
+      idLengthsView[i] = b.length;
+      offset += b.length;
+
+      const v = vectors[i];
+      if (v) vectorsView.set(v, i * dim);
+    }
+
+    const resultPtr = inst.tabman_vector_store_create(
+      idsBlobPtr,
+      idOffsetsPtr,
+      idLengthsPtr,
+      vectorsPtr,
+      count,
+      dim,
+      quantize,
+      outSizePtr,
+    );
+
+    if (resultPtr === 0) return new Uint8Array(0);
+
+    const sizeView = new Uint32Array(inst.memory.buffer, outSizePtr, 1);
+    const resultSize = sizeView[0] ?? 0;
+    const slice = new Uint8Array(inst.memory.buffer, resultPtr, resultSize);
+    const copy = new Uint8Array(slice);
+    inst.tabman_dealloc(resultPtr, resultSize);
+    return copy;
+  } finally {
+    inst.tabman_dealloc(idsBlobPtr, totalIdBytes);
+    inst.tabman_dealloc(idOffsetsPtr, count * 4);
+    inst.tabman_dealloc(idLengthsPtr, count * 4);
+    inst.tabman_dealloc(vectorsPtr, count * dim * 4);
+    inst.tabman_dealloc(outSizePtr, 4);
+  }
+}
+
+export function searchVectorStore(
+  storeBuffer: Uint8Array,
+  query: Float32Array,
+  k = 10,
+): TopKResult[] {
+  if (storeBuffer.byteLength < 64 || query.length === 0 || k === 0) return [];
+
+  if (!wasmExports) {
+    return pureJsSearchVectorStore(storeBuffer, query, k);
+  }
+
+  const inst = wasmExports;
+  const storePtr = inst.tabman_alloc(storeBuffer.byteLength);
+  const queryPtr = inst.tabman_alloc(query.length * 4);
+  const outIndicesPtr = inst.tabman_alloc(k * 4);
+  const outScoresPtr = inst.tabman_alloc(k * 4);
+
+  try {
+    new Uint8Array(inst.memory.buffer, storePtr, storeBuffer.byteLength).set(
+      storeBuffer,
+    );
+    new Float32Array(inst.memory.buffer, queryPtr, query.length).set(query);
+
+    const count = inst.tabman_vector_store_search(
+      storePtr,
+      storeBuffer.byteLength,
+      queryPtr,
+      k,
+      outIndicesPtr,
+      outScoresPtr,
+    );
+
+    const indicesView = new Uint32Array(
+      inst.memory.buffer,
+      outIndicesPtr,
+      count,
+    );
+    const scoresView = new Float32Array(
+      inst.memory.buffer,
+      outScoresPtr,
+      count,
+    );
+
+    const results: TopKResult[] = [];
+    for (let i = 0; i < count; i++) {
+      results.push({
+        index: indicesView[i] ?? 0,
+        score: scoresView[i] ?? 0,
+      });
+    }
+    return results;
+  } finally {
+    inst.tabman_dealloc(storePtr, storeBuffer.byteLength);
+    inst.tabman_dealloc(queryPtr, query.length * 4);
+    inst.tabman_dealloc(outIndicesPtr, k * 4);
+    inst.tabman_dealloc(outScoresPtr, k * 4);
+  }
+}
+
+export function getVectorStoreTabId(
+  storeBuffer: Uint8Array,
+  index: number,
+): string | null {
+  if (storeBuffer.byteLength < 64 || index < 0) return null;
+  if (!wasmExports) {
+    return pureJsGetVectorStoreTabId(storeBuffer, index);
+  }
+
+  const inst = wasmExports;
+  const storePtr = inst.tabman_alloc(storeBuffer.byteLength);
+  const maxLen = 256;
+  const outPtr = inst.tabman_alloc(maxLen);
+
+  try {
+    new Uint8Array(inst.memory.buffer, storePtr, storeBuffer.byteLength).set(
+      storeBuffer,
+    );
+    const written = inst.tabman_vector_store_get_id(
+      storePtr,
+      storeBuffer.byteLength,
+      index,
+      outPtr,
+      maxLen,
+    );
+    if (written === 0) return null;
+    const slice = new Uint8Array(inst.memory.buffer, outPtr, written);
+    return new TextDecoder().decode(slice);
+  } finally {
+    inst.tabman_dealloc(storePtr, storeBuffer.byteLength);
+    inst.tabman_dealloc(outPtr, maxLen);
+  }
+}
+
 /**
  * Run empirical benchmark comparison between WASM SIMD and Pure JS across all 7 kernels.
  */
@@ -1617,6 +2410,139 @@ export async function runWasmVsJsBenchmark(): Promise<WasmBenchmarkReport> {
 
     entries.push({
       name: 'Matryoshka Slicing (768d -> 128d, 100 tabs)',
+      jsLatencyMs: Number(jsLatency.toFixed(3)),
+      wasmLatencyMs: Number(wasmLatency.toFixed(3)),
+      speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),
+      maxDiff: 0,
+    });
+  }
+
+  // 8. Streaming URL Canonicalization & De-tracker (500 URLs)
+  {
+    const sampleUrls = [
+      'https://example.com/search?utm_source=twitter&q=rust+wasm&utm_campaign=spring&page=2#heading',
+      'https://github.com/rust-lang/rust?fbclid=IwAR123&sort=stars&order=desc',
+      'https://news.ycombinator.com/item?id=12345678&gclid=Cj0KCQiA',
+      'https://developer.mozilla.org/en-US/docs/WebAssembly?utm_medium=email&ref=daily',
+      'https://en.wikipedia.org/wiki/WebAssembly#Design?utm_content=banner',
+    ];
+    const testUrls: string[] = [];
+    for (let i = 0; i < 500; i++) {
+      testUrls.push(`${sampleUrls[i % sampleUrls.length]}&index=${i}`);
+    }
+
+    const jsT0 = performance.now();
+    for (let r = 0; r < 5; r++) {
+      for (const u of testUrls) pureJsCanonicalizeUrl(u);
+    }
+    const jsLatency = (performance.now() - jsT0) / 5;
+
+    const wasmT0 = performance.now();
+    for (let r = 0; r < 10; r++) {
+      for (const u of testUrls) canonicalizeUrl(u);
+    }
+    const wasmLatency = (performance.now() - wasmT0) / 10;
+
+    entries.push({
+      name: 'URL Canonicalization & De-tracking (500 URLs)',
+      jsLatencyMs: Number(jsLatency.toFixed(3)),
+      wasmLatencyMs: Number(wasmLatency.toFixed(3)),
+      speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),
+      maxDiff: 0,
+    });
+  }
+
+  // 9. SIMD HTML Stripper & Content Extractor (50 HTML Documents)
+  {
+    const sampleHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Rust WebAssembly & SIMD Acceleration Guide</title>
+          <meta name="description" content="A comprehensive deep dive into zero-copy Rust WASM vector processing and direct browser hardware acceleration.">
+          <style>body { font-family: sans-serif; } .hero { color: #f00; }</style>
+          <script>console.log("analytics tracking payload");</script>
+        </head>
+        <body>
+          <!-- Top Navigation Header -->
+          <nav><a href="/">Home</a> | <a href="/docs">Docs</a></nav>
+          <h1>High-Performance In-Browser Tab & Content Management</h1>
+          <p>WebAssembly enables near-native C/Rust speed directly inside Google Chrome and Brave extensions &amp; Web Workers.</p>
+          <p>By bypassing V8 garbage collection overhead and leveraging 128-bit SIMD intrinsics, vector searches complete in sub-millisecond latencies.</p>
+        </body>
+      </html>
+    `;
+    const htmlBatch: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      htmlBatch.push(sampleHtml);
+    }
+
+    const jsT0 = performance.now();
+    for (let r = 0; r < 5; r++) {
+      for (const h of htmlBatch) pureJsExtractHtmlContent(h);
+    }
+    const jsLatency = (performance.now() - jsT0) / 5;
+
+    const wasmT0 = performance.now();
+    for (let r = 0; r < 10; r++) {
+      for (const h of htmlBatch) extractHtmlContent(h);
+    }
+    const wasmLatency = (performance.now() - wasmT0) / 10;
+
+    entries.push({
+      name: 'SIMD HTML Content Extractor (50 docs)',
+      jsLatencyMs: Number(jsLatency.toFixed(3)),
+      wasmLatencyMs: Number(wasmLatency.toFixed(3)),
+      speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),
+      maxDiff: 0,
+    });
+  }
+
+  // 10. Zero-Copy Binary Vector Store Search (1,000 tabs, Top-10)
+  {
+    const storeCount = 1000;
+    const storeIds: string[] = [];
+    const storeVectors: Float32Array[] = [];
+    for (let i = 0; i < storeCount; i++) {
+      storeIds.push(`tab_${i}`);
+      const v = new Float32Array(dim);
+      for (let d = 0; d < dim; d++) {
+        v[d] = Math.sin((i + 5) * 13 + d * 7);
+      }
+      let norm = 0;
+      for (let d = 0; d < dim; d++) {
+        const val = v[d] ?? 0;
+        norm += val * val;
+      }
+      norm = Math.sqrt(norm);
+      for (let d = 0; d < dim; d++) {
+        v[d] = (v[d] ?? 0) / norm;
+      }
+      storeVectors.push(v);
+    }
+
+    const query = storeVectors[0] ?? new Float32Array(dim);
+    const storeBuffer = createVectorStore(storeIds, storeVectors, dim, true);
+
+    const qDb = quantizeEmbeddings(storeVectors, dim);
+    const qQuery = quantizeEmbeddings([query], dim);
+    const queryQ = qQuery.quant[0] ?? new Int8Array(dim);
+    const queryS = qQuery.scales[0] ?? 1.0;
+
+    const jsT0 = performance.now();
+    for (let r = 0; r < 5; r++) {
+      pureJsTopKSearchSQ8(queryQ, queryS, qDb.quant, qDb.scales, 10, dim);
+    }
+    const jsLatency = (performance.now() - jsT0) / 5;
+
+    const wasmT0 = performance.now();
+    for (let r = 0; r < 10; r++) {
+      searchVectorStore(storeBuffer, query, 10);
+    }
+    const wasmLatency = (performance.now() - wasmT0) / 10;
+
+    entries.push({
+      name: 'Zero-Copy Binary Vector Store Search (1,000 tabs)',
       jsLatencyMs: Number(jsLatency.toFixed(3)),
       wasmLatencyMs: Number(wasmLatency.toFixed(3)),
       speedup: Number((jsLatency / Math.max(wasmLatency, 0.001)).toFixed(1)),

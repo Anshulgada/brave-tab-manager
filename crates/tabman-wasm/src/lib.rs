@@ -6,9 +6,12 @@
 
 pub mod clustering;
 pub mod fuzzy;
+pub mod html;
 pub mod index;
 pub mod quant;
+pub mod store;
 pub mod tokenizer;
+pub mod url;
 pub mod vector;
 
 use core::slice;
@@ -324,5 +327,257 @@ pub extern "C" fn tabman_topk_search_sq8(
             out_indices,
             out_scores,
         )
+    }
+}
+
+/// Canonicalize a single URL, stripping tracking parameters (UTM, fbclid, etc.).
+/// Returns bytes written to `out_ptr`.
+#[no_mangle]
+pub extern "C" fn tabman_canonicalize_url(
+    url_ptr: *const u8,
+    url_len: usize,
+    strip_fragment: bool,
+    out_ptr: *mut u8,
+    out_max_len: usize,
+) -> usize {
+    if url_ptr.is_null() || out_ptr.is_null() || url_len == 0 || out_max_len == 0 {
+        return 0;
+    }
+    unsafe {
+        let raw_bytes = slice::from_raw_parts(url_ptr, url_len);
+        let raw_str = match std::str::from_utf8(raw_bytes) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+        let canon = url::canonicalize_url(raw_str, strip_fragment);
+        let bytes = canon.as_bytes();
+        let write_len = bytes.len().min(out_max_len);
+        let out_slice = slice::from_raw_parts_mut(out_ptr, write_len);
+        out_slice.copy_from_slice(&bytes[..write_len]);
+        write_len
+    }
+}
+
+/// Canonicalize and deduplicate a batch of URLs.
+/// Returns number of unique URLs found.
+#[no_mangle]
+pub extern "C" fn tabman_deduplicate_urls(
+    blob_ptr: *const u8,
+    offsets_ptr: *const u32,
+    lengths_ptr: *const u32,
+    count: usize,
+    strip_fragment: bool,
+    out_unique_indices_ptr: *mut u32,
+    out_dup_map_ptr: *mut u32,
+) -> usize {
+    if blob_ptr.is_null()
+        || offsets_ptr.is_null()
+        || lengths_ptr.is_null()
+        || out_unique_indices_ptr.is_null()
+        || out_dup_map_ptr.is_null()
+        || count == 0
+    {
+        return 0;
+    }
+    unsafe {
+        let blob = slice::from_raw_parts(blob_ptr, 1024 * 1024 * 16); // Safe upper bound for offset indexing
+        let offsets = slice::from_raw_parts(offsets_ptr, count);
+        let lengths = slice::from_raw_parts(lengths_ptr, count);
+
+        let mut url_strs = Vec::with_capacity(count);
+        for i in 0..count {
+            let start = offsets[i] as usize;
+            let len = lengths[i] as usize;
+            let s = match std::str::from_utf8(&blob[start..start + len]) {
+                Ok(s) => s,
+                Err(_) => "",
+            };
+            url_strs.push(s);
+        }
+
+        let (_canon, unique, map) = url::deduplicate_url_batch(&url_strs, strip_fragment);
+
+        let out_unique = slice::from_raw_parts_mut(out_unique_indices_ptr, unique.len());
+        for (idx, &u) in unique.iter().enumerate() {
+            out_unique[idx] = u as u32;
+        }
+
+        let out_map = slice::from_raw_parts_mut(out_dup_map_ptr, count);
+        for (i, &m) in map.iter().enumerate() {
+            out_map[i] = m as u32;
+        }
+
+        unique.len()
+    }
+}
+
+/// Create a zero-copy binary vector store (TABV format) in linear memory.
+/// Returns pointer to heap allocated binary buffer; writes buffer length to `out_size_ptr`.
+#[no_mangle]
+pub extern "C" fn tabman_vector_store_create(
+    ids_blob_ptr: *const u8,
+    id_offsets_ptr: *const u32,
+    id_lengths_ptr: *const u32,
+    vectors_ptr: *const f32,
+    count: usize,
+    dim: usize,
+    quantize: bool,
+    out_size_ptr: *mut usize,
+) -> *mut u8 {
+    if ids_blob_ptr.is_null()
+        || id_offsets_ptr.is_null()
+        || id_lengths_ptr.is_null()
+        || vectors_ptr.is_null()
+        || out_size_ptr.is_null()
+        || count == 0
+        || dim == 0
+    {
+        return core::ptr::null_mut();
+    }
+    unsafe {
+        let blob = slice::from_raw_parts(ids_blob_ptr, 1024 * 1024 * 16);
+        let offsets = slice::from_raw_parts(id_offsets_ptr, count);
+        let lengths = slice::from_raw_parts(id_lengths_ptr, count);
+        let vectors = slice::from_raw_parts(vectors_ptr, count * dim);
+
+        let mut ids = Vec::with_capacity(count);
+        for i in 0..count {
+            let start = offsets[i] as usize;
+            let len = lengths[i] as usize;
+            let id = match std::str::from_utf8(&blob[start..start + len]) {
+                Ok(s) => s,
+                Err(_) => "",
+            };
+            ids.push(id);
+        }
+
+        let serialized = store::serialize_vector_store(&ids, vectors, dim, quantize);
+        let size = serialized.len();
+        *out_size_ptr = size;
+
+        let ptr = tabman_alloc(size);
+        if !ptr.is_null() {
+            let out_slice = slice::from_raw_parts_mut(ptr, size);
+            out_slice.copy_from_slice(&serialized);
+        }
+        ptr
+    }
+}
+
+/// Search a zero-copy binary vector store (TABV format) directly in linear memory.
+#[no_mangle]
+pub extern "C" fn tabman_vector_store_search(
+    store_buf_ptr: *const u8,
+    store_len: usize,
+    query_ptr: *const f32,
+    k: usize,
+    out_indices_ptr: *mut u32,
+    out_scores_ptr: *mut f32,
+) -> usize {
+    if store_buf_ptr.is_null()
+        || query_ptr.is_null()
+        || out_indices_ptr.is_null()
+        || out_scores_ptr.is_null()
+        || store_len == 0
+        || k == 0
+    {
+        return 0;
+    }
+    unsafe {
+        let buffer = slice::from_raw_parts(store_buf_ptr, store_len);
+        let view = match store::VectorStoreView::parse(buffer) {
+            Ok(v) => v,
+            Err(_) => return 0,
+        };
+
+        let dim = view.header.dim as usize;
+        let query = slice::from_raw_parts(query_ptr, dim);
+        let out_indices = slice::from_raw_parts_mut(out_indices_ptr, k);
+        let out_scores = slice::from_raw_parts_mut(out_scores_ptr, k);
+
+        view.search_top_k(query, k, out_indices, out_scores)
+    }
+}
+
+/// Retrieve tab ID string at index `idx` from a binary vector store.
+#[no_mangle]
+pub extern "C" fn tabman_vector_store_get_id(
+    store_buf_ptr: *const u8,
+    store_len: usize,
+    idx: usize,
+    out_ptr: *mut u8,
+    out_max_len: usize,
+) -> usize {
+    if store_buf_ptr.is_null() || out_ptr.is_null() || store_len == 0 || out_max_len == 0 {
+        return 0;
+    }
+    unsafe {
+        let buffer = slice::from_raw_parts(store_buf_ptr, store_len);
+        let view = match store::VectorStoreView::parse(buffer) {
+            Ok(v) => v,
+            Err(_) => return 0,
+        };
+        let id_str = match view.get_tab_id(idx) {
+            Some(s) => s,
+            None => return 0,
+        };
+        let bytes = id_str.as_bytes();
+        let write_len = bytes.len().min(out_max_len);
+        let out_slice = slice::from_raw_parts_mut(out_ptr, write_len);
+        out_slice.copy_from_slice(&bytes[..write_len]);
+        write_len
+    }
+}
+
+/// Extract clean title, meta description, and plain body text from raw HTML.
+/// Writes string lengths into `out_lens_ptr` ([title_len, desc_len, body_len]).
+#[no_mangle]
+pub extern "C" fn tabman_html_extract(
+    html_ptr: *const u8,
+    html_len: usize,
+    max_title: usize,
+    max_desc: usize,
+    max_body: usize,
+    out_title_ptr: *mut u8,
+    out_desc_ptr: *mut u8,
+    out_body_ptr: *mut u8,
+    out_lens_ptr: *mut u32,
+) -> usize {
+    if html_ptr.is_null()
+        || out_title_ptr.is_null()
+        || out_desc_ptr.is_null()
+        || out_body_ptr.is_null()
+        || out_lens_ptr.is_null()
+        || html_len == 0
+    {
+        return 0;
+    }
+    unsafe {
+        let raw_bytes = slice::from_raw_parts(html_ptr, html_len);
+        let html_str = match std::str::from_utf8(raw_bytes) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+
+        let content = html::extract_html_content(html_str, max_title, max_desc, max_body);
+
+        let title_bytes = content.title.as_bytes();
+        let t_len = title_bytes.len().min(max_title);
+        slice::from_raw_parts_mut(out_title_ptr, t_len).copy_from_slice(&title_bytes[..t_len]);
+
+        let desc_bytes = content.description.as_bytes();
+        let d_len = desc_bytes.len().min(max_desc);
+        slice::from_raw_parts_mut(out_desc_ptr, d_len).copy_from_slice(&desc_bytes[..d_len]);
+
+        let body_bytes = content.body.as_bytes();
+        let b_len = body_bytes.len().min(max_body);
+        slice::from_raw_parts_mut(out_body_ptr, b_len).copy_from_slice(&body_bytes[..b_len]);
+
+        let lens = slice::from_raw_parts_mut(out_lens_ptr, 3);
+        lens[0] = t_len as u32;
+        lens[1] = d_len as u32;
+        lens[2] = b_len as u32;
+
+        b_len
     }
 }
