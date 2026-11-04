@@ -1,0 +1,15 @@
+[package]
+name = "tabman-sidecar"
+version = "0.6.2"
+edition = "2021"
+authors = ["Anshul Gada"]
+description = "Native desktop sidecar for Tabman supporting DirectML, OpenVINO NPU, and Chrome/Brave Native Messaging"
+license = "MIT"
+
+[[bin]]
+name = "tabman-sidecar"
+path = "src/main.rs"
+
+[dependencies]
+
+[dev-dependencies]

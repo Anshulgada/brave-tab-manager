@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/tabman-wasm",
+    "crates/tabman-sidecar",
 ]
 resolver = "2"
 
