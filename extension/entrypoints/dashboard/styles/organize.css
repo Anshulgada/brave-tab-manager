@@ -953,6 +953,17 @@
   font-family: ui-monospace, "Cascadia Code", monospace;
   font-size: 12.5px;
   min-width: 240px;
+  height: 34px;
+  box-sizing: border-box;
+}
+
+.storage-input-row .btn {
+  height: 34px;
+  min-height: 34px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .storage-scan-result {

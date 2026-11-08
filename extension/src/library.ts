@@ -29,6 +29,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultView: 'list',
   includeFullUrlInAi: false,
   aiProvider: null,
+  enableRichPreviews: false,
+  iframelyApiKey: null,
 };
 
 export async function ensureSettings(

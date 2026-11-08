@@ -1134,6 +1134,8 @@ export function App() {
                 }
                 onDragStartTab={(tabId) => setDraggingTabId(tabId)}
                 onDragEndTab={() => setDraggingTabId(undefined)}
+                enableRichPreviews={settings?.enableRichPreviews}
+                iframelyApiKey={settings?.iframelyApiKey}
               />
             ) : null
           ) : null}

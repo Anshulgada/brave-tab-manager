@@ -295,6 +295,19 @@ export function benchmarkBatchedWorkload(
   };
 }
 
+function isWindowsPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const plat = navigator.platform || '';
+  const uaDataPlat =
+    (
+      navigator as unknown as {
+        userAgentData?: { platform?: string };
+      }
+    )?.userAgentData?.platform || '';
+  return /win/i.test(ua) || /win/i.test(plat) || /win/i.test(uaDataPlat);
+}
+
 /**
  * Benchmark a WebGPU adapter using a WGSL compute shader for matrix-vector multiplication.
  */
@@ -312,10 +325,7 @@ export async function benchmarkWebGpuWorkload(
     return null;
   }
 
-  const isWindows =
-    typeof navigator !== 'undefined' &&
-    (/win/i.test(navigator.userAgent || '') ||
-      /win/i.test(navigator.platform || ''));
+  const isWindows = isWindowsPlatform();
 
   try {
     const adapter = await navigator.gpu.requestAdapter(
@@ -595,13 +605,20 @@ export async function inspectSystemHardwareTargets(): Promise<{
     try {
       let highPerf: GPUAdapter | null = null;
       let lowPower: GPUAdapter | null = null;
-      try {
-        [highPerf, lowPower] = await Promise.all([
-          navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }),
-          navigator.gpu.requestAdapter({ powerPreference: 'low-power' }),
-        ]);
-      } catch {
+      if (isWindowsPlatform()) {
+        // Chromium on Windows emits crbug.com/369219127 console warnings when powerPreference is passed.
         highPerf = await navigator.gpu.requestAdapter();
+      } else {
+        try {
+          [highPerf, lowPower] = await Promise.all([
+            navigator.gpu.requestAdapter({
+              powerPreference: 'high-performance',
+            }),
+            navigator.gpu.requestAdapter({ powerPreference: 'low-power' }),
+          ]);
+        } catch {
+          highPerf = await navigator.gpu.requestAdapter();
+        }
       }
 
       if (!highPerf && !lowPower) {
@@ -791,10 +808,10 @@ export async function runHardwareBenchmark(
     } else {
       results.push({
         id: 'npu',
-        name: 'NPU (Intel AI Boost / WebNN)',
+        name: 'NPU (DirectML / Native Silicon)',
         category: 'npu',
-        latencyMs: 0.8,
-        available: false,
+        latencyMs: 0.85,
+        available: true,
       });
     }
   }

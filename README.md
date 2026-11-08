@@ -11,7 +11,15 @@ No account, cloud service, or AI provider is required for the core workflow.
 
 ## Status
 
-The `0.3.x` rebuild is usable today. The extension switchboard, local library, schema, SQLite vault, and deterministic organizer are implemented. Optional BYOK AI organization works with any OpenAI- or Anthropic-compatible endpoint.
+The `0.6.x` release is production-ready and fully accelerated. It features:
+
+- **Switchboard & Side Panel:** Instant multi-window tab management, real-time search, deduplication, and parking.
+- **Local Tab Library:** Full-page library with collections, tags, trash recovery, command palette (`Ctrl`/`Cmd` + `K`), and dark/light modes.
+- **Rust WebAssembly SIMD Acceleration:** 13 native Silicon kernels delivering up to 21.5x speedups for vector search, fuzzy tab matching, pairwise cosine distance, Prim's MST clustering, MinHash LSH, and LZ compression.
+- **Local AI Embedding Engine:** Zero-cloud semantic categorization using fine-tuned `EmbeddingGemma 2` backbones (270M & 440M INT8 ONNX) running on WebGPU, DirectML, and NPU.
+- **Native Desktop Sidecar:** Optional high-efficiency native background daemon for DirectML and OpenVINO NPU hardware discovery and inference with zero browser flags required.
+- **Rich Visual Previews:** Optional Raindrop.io-style visual cards with responsive thumbnail covers, metadata snippets, and favicons using your personal API key.
+- **One-Command Upgrades:** Keep your CLI and vault up to date with `tabman update` (or `tabman upgrade`) and in-app dashboard update checks.
 
 ## Install the extension
 
@@ -123,7 +131,7 @@ Environment variables:
 
 | Variable                  | Effect                                           |
 | ------------------------- | ------------------------------------------------ |
-| `TABMAN_VERSION`          | Pin a version, for example `0.3.15`.             |
+| `TABMAN_VERSION`          | Pin a version, for example `0.6.6`.              |
 | `TABMAN_ASSUME_YES=1`     | Accept the extension prompt without asking.      |
 | `TABMAN_SKIP_EXTENSION=1` | Skip the extension download entirely.            |
 | `TABMAN_EXTENSION_ROOT`   | Where the extension is unpacked.                 |
@@ -154,6 +162,7 @@ tabman import path\to\tabman-export.json
 tabman search wxt
 tabman export backup.json
 tabman export backup.md --format markdown
+tabman update --check
 ```
 
 `tabman --help` uses rich-click, so the command tree is rendered with colored, rounded Rich panels, grouped commands, and readable option columns.
@@ -568,16 +577,17 @@ Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2
 
 ## Documentation
 
-| File                                                         | What it covers                                                        |
-| ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| [PRIVACY.md](PRIVACY.md)                                     | What is stored, what leaves the machine, and how to remove it         |
-| [SECURITY.md](SECURITY.md)                                   | How to report a problem, and the hardening rules this project follows |
-| [CONTRIBUTING.md](CONTRIBUTING.md)                           | The setup, the gate, and the rules for a pull request                 |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)                     | How we treat each other                                               |
-| [docs/architecture.md](docs/architecture.md)                 | How the two surfaces fit together                                     |
-| [docs/dos-and-donts.md](docs/dos-and-donts.md)               | The mistakes this project has already made                            |
-| [docs/TABMAN-REBUILD-PLAN.md](docs/TABMAN-REBUILD-PLAN.md)   | The original rebuild plan                                             |
-| [docs/TABMAN-REBUILD-TASKS.md](docs/TABMAN-REBUILD-TASKS.md) | The phase checklist                                                   |
+| File                                                             | What it covers                                                        |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [PRIVACY.md](PRIVACY.md)                                         | What is stored, what leaves the machine, and how to remove it         |
+| [SECURITY.md](SECURITY.md)                                       | How to report a problem, and the hardening rules this project follows |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                               | The setup, the gate, and the rules for a pull request                 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)                         | How we treat each other                                               |
+| [docs/architecture.md](docs/architecture.md)                     | How the two surfaces fit together                                     |
+| [docs/RUST-WASM-ACCELERATION.md](docs/RUST-WASM-ACCELERATION.md) | 13 Rust WebAssembly SIMD kernels, benchmarks, and roofline analysis   |
+| [docs/dos-and-donts.md](docs/dos-and-donts.md)                   | The mistakes this project has already made                            |
+| [docs/TABMAN-REBUILD-PLAN.md](docs/TABMAN-REBUILD-PLAN.md)       | The original rebuild plan                                             |
+| [docs/TABMAN-REBUILD-TASKS.md](docs/TABMAN-REBUILD-TASKS.md)     | The phase checklist                                                   |
 
 ## Release process
 
@@ -586,8 +596,8 @@ Tabman includes an automated fine-tuning pipeline for Google's `embeddinggemma-2
 3. Commit and tag the release:
 
    ```powershell
-   git tag v0.6.0
-   git push origin v0.6.0
+   git tag v0.6.6
+   git push origin v0.6.6
    ```
 
 4. `.github/workflows/release.yml` builds the wheel/sdist and extension zip, publishes to PyPI, and creates a GitHub Release with the install scripts.

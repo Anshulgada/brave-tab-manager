@@ -34,11 +34,11 @@ export function WelcomeState({
       <img
         src="/logo.png"
         alt="Tabman Logo"
-        width="68"
-        height="68"
+        width="88"
+        height="88"
         style={{
           objectFit: 'contain',
-          marginBottom: '4px',
+          marginBottom: '6px',
           filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.3))',
         }}
       />

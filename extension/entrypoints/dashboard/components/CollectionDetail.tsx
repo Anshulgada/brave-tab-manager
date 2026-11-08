@@ -54,6 +54,8 @@ export interface CollectionDetailProps {
   onPinTab: (tab: TabRecord) => void;
   onDragStartTab: (tabId: string) => void;
   onDragEndTab: () => void;
+  enableRichPreviews?: boolean;
+  iframelyApiKey?: string | null;
 }
 
 export function CollectBar({
@@ -147,6 +149,8 @@ export function CollectionDetail({
   onPinTab,
   onDragStartTab,
   onDragEndTab,
+  enableRichPreviews,
+  iframelyApiKey,
 }: CollectionDetailProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -472,6 +476,8 @@ export function CollectionDetail({
                   onPin={() => onPinTab(tab)}
                   onDragStart={() => onDragStartTab(tab.id)}
                   onDragEnd={onDragEndTab}
+                  enableRichPreviews={enableRichPreviews}
+                  iframelyApiKey={iframelyApiKey}
                 />
               ))}
             </motion.div>
@@ -499,6 +505,8 @@ export function CollectionDetail({
                   onPin={() => onPinTab(tab)}
                   onDragStart={() => onDragStartTab(tab.id)}
                   onDragEnd={onDragEndTab}
+                  enableRichPreviews={enableRichPreviews}
+                  iframelyApiKey={iframelyApiKey}
                 />
               ))}
             </motion.div>

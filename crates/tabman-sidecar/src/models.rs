@@ -18,7 +18,13 @@ pub fn get_default_model_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            return Path::new(&local_app_data).join("tabman").join("models");
+            let p_upper = Path::new(&local_app_data).join("Tabman").join("models");
+            if p_upper.exists() {
+                return p_upper;
+            }
+            let p_lower = Path::new(&local_app_data).join("tabman").join("models");
+            let _ = std::fs::create_dir_all(&p_lower);
+            return p_lower;
         }
         PathBuf::from("C:\\tabman\\models")
     }
@@ -38,6 +44,7 @@ pub fn get_default_model_dir() -> PathBuf {
 /// Scans the target model directory for existing weights.
 pub fn scan_local_models(dir: &Path) -> Vec<LocalModelInfo> {
     let mut found = Vec::new();
+    let _ = std::fs::create_dir_all(dir);
     if !dir.exists() || !dir.is_dir() {
         return found;
     }
@@ -62,22 +69,32 @@ pub fn scan_local_models(dir: &Path) -> Vec<LocalModelInfo> {
                     is_verified: true,
                 });
             } else if path.is_dir() {
-                // Check if directory contains model files
+                // Check if directory actually contains ONNX / model weight files
                 let mut dir_size = 0u64;
+                let mut has_model_weights = false;
                 if let Ok(sub) = std::fs::read_dir(&path) {
                     for f in sub.flatten() {
+                        let sub_name = f.file_name().to_string_lossy().to_string();
+                        if sub_name.ends_with(".onnx")
+                            || sub_name.ends_with(".bin")
+                            || sub_name.ends_with(".safetensors")
+                        {
+                            has_model_weights = true;
+                        }
                         if let Ok(meta) = f.metadata() {
                             dir_size += meta.len();
                         }
                     }
                 }
-                let size_mb = (dir_size as f64) / (1024.0 * 1024.0);
-                found.push(LocalModelInfo {
-                    name,
-                    path: path.to_string_lossy().to_string(),
-                    size_mb: (size_mb * 10.0).round() / 10.0,
-                    is_verified: true,
-                });
+                if has_model_weights && dir_size > 0 {
+                    let size_mb = (dir_size as f64) / (1024.0 * 1024.0);
+                    found.push(LocalModelInfo {
+                        name,
+                        path: path.to_string_lossy().to_string(),
+                        size_mb: (size_mb * 10.0).round() / 10.0,
+                        is_verified: true,
+                    });
+                }
             }
         }
     }

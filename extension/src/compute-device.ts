@@ -186,6 +186,7 @@ export function getDefaultModelStorageLocations(): {
     current: isWindows ? windowsPath : linuxPath,
     searchPaths: [
       windowsPath,
+      '%LOCALAPPDATA%\\Tabman\\models',
       linuxPath,
       '~/.cache/tabman/models',
       '~/.cache/huggingface/hub',
@@ -318,6 +319,64 @@ export async function probeNativeSidecar(): Promise<{
               hasDirectML: response.hasDirectML,
               hasOpenVinoNPU: response.hasOpenVinoNPU,
               primaryDevice: response.primaryDevice,
+            });
+          }
+        },
+      );
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Scan the local disk model directory via the native Tabman sidecar.
+ * Returns only models physically present on the device filesystem.
+ */
+export async function scanDiskModels(): Promise<{
+  available: boolean;
+  path: string;
+  count: number;
+  models: Array<{ name: string; path: string; sizeMb: number }>;
+} | null> {
+  const ch = (
+    globalThis as unknown as {
+      chrome?: {
+        runtime?: {
+          sendNativeMessage?: (
+            host: string,
+            msg: unknown,
+            cb: (resp: {
+              status?: string;
+              path?: string;
+              count?: number;
+              models?: Array<{ name: string; path: string; sizeMb: number }>;
+            }) => void,
+          ) => void;
+          lastError?: unknown;
+        };
+      };
+    }
+  ).chrome;
+
+  if (!ch?.runtime?.sendNativeMessage) {
+    return null;
+  }
+  const runtime = ch.runtime;
+  return new Promise((resolve) => {
+    try {
+      runtime.sendNativeMessage?.(
+        'com.tabman.sidecar',
+        { type: 'models/scan' },
+        (response) => {
+          if (runtime.lastError || !response || response.status !== 'ok') {
+            resolve(null);
+          } else {
+            resolve({
+              available: true,
+              path: response.path || '',
+              count: response.count || 0,
+              models: response.models || [],
             });
           }
         },

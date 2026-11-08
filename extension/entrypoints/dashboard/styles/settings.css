@@ -52,13 +52,24 @@
 }
 
 .settings-card .segmented-pill-track {
+  align-items: stretch;
+  box-sizing: border-box;
   display: flex;
+  height: 44px;
+  min-height: 44px;
+  padding: 4px;
   width: 100%;
 }
 
 .settings-card .segmented-pill-btn {
+  align-items: center;
+  box-sizing: border-box;
+  display: inline-flex;
   flex: 1;
+  height: 36px;
   justify-content: center;
+  min-height: 36px;
+  padding: 0 16px;
 }
 
 .settings-btn-row {

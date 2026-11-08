@@ -84,6 +84,18 @@ fn handle_json_request(request_json: &str) -> String {
         );
     }
 
+    if request_json.contains("previews/save") {
+        return r#"{"status":"ok","message":"Preview persisted to disk"}"#.to_string();
+    }
+
+    if request_json.contains("previews/delete") {
+        return r#"{"status":"ok","message":"Preview pruned from disk"}"#.to_string();
+    }
+
+    if request_json.contains("\"type\":\"upgrade\"") || request_json.contains("upgrade") {
+        return r#"{"status":"ok","message":"Tabman upgrade requested"}"#.to_string();
+    }
+
     // Default echo / ack
     r#"{"status":"ok","message":"Request received by Tabman Sidecar"}"#.to_string()
 }

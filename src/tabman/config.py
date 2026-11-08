@@ -150,6 +150,18 @@ def default_vault_path() -> Path:
     return user_data_path(APP_NAME, appauthor=False) / "vault.sqlite3"
 
 
+def models_dir() -> Path:
+    path = user_data_path(APP_NAME, appauthor=False) / "models"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def previews_dir() -> Path:
+    path = user_data_path(APP_NAME, appauthor=False) / "previews"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def config_path() -> Path:
     return config_dir() / "config.json"
 

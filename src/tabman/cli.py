@@ -5,6 +5,7 @@ from __future__ import annotations
 import getpass
 import json
 import sqlite3
+import sys
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -54,6 +55,7 @@ from tabman.theme import (
     apply_theme,
     panel,
 )
+from tabman.update import check_latest_version, run_upgrade
 from tabman.vault import Vault, read_document, write_document
 
 VaultPath = click.Path(dir_okay=False, path_type=Path)
@@ -65,7 +67,7 @@ COMMAND_GROUPS: dict[str, list[CommandGroupDict]] = {
     "tabman": [
         panel("Vault", "import", "export", "search"),
         panel("Tabs", "capture", "organize"),
-        panel("Setup", "config", "cdp", "version"),
+        panel("Setup", "config", "cdp", "version", "update", "upgrade"),
     ],
     "tabman config": [
         panel("Read", "show", "list-providers"),
@@ -173,6 +175,66 @@ def app() -> None:
 def version_command() -> None:
     """Print the version sourced from installed package metadata."""
     click.echo(__version__)
+
+
+def _do_update(check: bool, json_format: bool) -> None:
+    info = check_latest_version()
+    if json_format:
+        click.echo(
+            json.dumps(
+                {
+                    "current": info.current,
+                    "latest": info.latest,
+                    "update_available": info.update_available,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    if not info.update_available:
+        console.print(f"[bold green]Tabman is up to date[/] (v{info.current}).")
+        return
+
+    console.print(
+        f"[bold yellow]Update available:[/] v{info.current} -> "
+        f"[bold green]v{info.latest}[/]"
+    )
+    if check:
+        console.print("Run [bold cyan]tabman update[/] to install the latest release.")
+        return
+
+    console.print("Installing update...")
+    success, msg = run_upgrade()
+    if success:
+        console.print(f"[bold green]Successfully updated to v{info.latest}![/]")
+    else:
+        stderr_console.print(f"[bold red]{msg}[/]")
+        sys.exit(1)
+
+
+@app.command(cls=AutoWidthCommand, name="update")
+@click.option(
+    "--check", is_flag=True, help="Only check for updates without installing."
+)
+@click.option(
+    "--json", "json_format", is_flag=True, help="Output version info as JSON."
+)
+def update_command(check: bool, json_format: bool) -> None:
+    """Check for and install the latest release of Tabman."""
+    _do_update(check, json_format)
+
+
+@app.command(cls=AutoWidthCommand, name="upgrade")
+@click.option(
+    "--check", is_flag=True, help="Only check for updates without installing."
+)
+@click.option(
+    "--json", "json_format", is_flag=True, help="Output version info as JSON."
+)
+def upgrade_command(check: bool, json_format: bool) -> None:
+    """Alias for 'tabman update'."""
+    _do_update(check, json_format)
 
 
 @app.command(cls=AutoWidthCommand, name="import")

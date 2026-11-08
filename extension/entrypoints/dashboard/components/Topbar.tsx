@@ -39,8 +39,8 @@ export function Topbar({
           src="/logo.png"
           alt={PRODUCT_NAME}
           className="brand-logo"
-          width="40"
-          height="40"
+          width="48"
+          height="48"
           style={{
             objectFit: 'contain',
             flexShrink: 0,

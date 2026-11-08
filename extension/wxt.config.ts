@@ -19,6 +19,7 @@ export default defineConfig({
       32: 'icon-32.png',
       48: 'icon-48.png',
       128: 'icon-128.png',
+      256: 'icon-256.png',
     },
     action: {
       default_title: 'Open the Tabman library',
