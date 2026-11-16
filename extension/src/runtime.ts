@@ -4,7 +4,9 @@ export async function sendSwitchboardRequest(
   message: SwitchboardRequest,
 ): Promise<SwitchboardResponse> {
   const g = globalThis as unknown as {
-    browser?: { runtime?: { sendMessage?: (msg: unknown) => Promise<unknown> } };
+    browser?: {
+      runtime?: { sendMessage?: (msg: unknown) => Promise<unknown> };
+    };
     chrome?: { runtime?: { sendMessage?: (msg: unknown) => Promise<unknown> } };
   };
   const sendMsg =

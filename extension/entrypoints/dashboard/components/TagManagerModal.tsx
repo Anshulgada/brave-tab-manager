@@ -92,9 +92,16 @@ export function TagManagerModal({
                       );
                       return !usedByOther;
                     }).map((color) => (
-                      <button
+                      <motion.button
                         key={color || 'none'}
                         type="button"
+                        whileHover={{ scale: 1.18 }}
+                        whileTap={{ scale: 0.88 }}
+                        transition={{
+                          type: 'spring',
+                          stiffness: 500,
+                          damping: 25,
+                        }}
                         className={
                           renamingTagColor === color
                             ? 'color-swatch selected'
@@ -141,8 +148,10 @@ export function TagManagerModal({
                     <span className="chip">{tag.name}</span>
                   </div>
                   <div className="tag-actions">
-                    <button
-                      className="btn btn-ghost btn-icon btn-sm"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="btn-sm"
                       type="button"
                       title="Rename tag"
                       aria-label={`Rename ${tag.name}`}
@@ -153,16 +162,18 @@ export function TagManagerModal({
                       }}
                     >
                       <PencilIcon size={13} />
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-icon btn-sm"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="btn-sm"
                       type="button"
                       title="Delete tag"
                       aria-label={`Delete ${tag.name}`}
                       onClick={() => void onDeleteTag(tag.id)}
                     >
                       <TrashIcon size={13} />
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}
@@ -195,9 +206,16 @@ export function TagManagerModal({
               const used = collection.tags.some((t) => t.color === color);
               return !used;
             }).map((color) => (
-              <button
+              <motion.button
                 key={color || 'none'}
                 type="button"
+                whileHover={{ scale: 1.18 }}
+                whileTap={{ scale: 0.88 }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 500,
+                  damping: 25,
+                }}
                 className={
                   newTagColor === color
                     ? 'color-swatch selected'

@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '../../../src/components/ui/button';
 import type { SwitchboardChangedMessage } from '../../../src/messages';
@@ -223,107 +224,122 @@ export function WindowsPanel({ onNotify }: PanelProps) {
         </div>
       ) : (
         <div className="windows-list">
-          {filtered.windows.map((win) => (
-            <article className="window-card" key={win.id}>
-              <header className="window-card-head">
-                <div className="window-card-title">
-                  <WindowIcon size={16} />
-                  <h2>Window {win.id}</h2>
-                  {win.focused && (
-                    <span
-                      className="current-window-badge"
-                      title="Active/Focused Window"
-                    >
-                      <span className="current-window-dot" />
-                      <span>Current window</span>
-                    </span>
-                  )}
-                  <span className="window-tab-count">
-                    {win.tabs.length} {pluralize(win.tabs.length, 'tab')}
-                  </span>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    setParkConfirm({
-                      windowId: win.id,
-                      tabIds: win.tabs.map((t) => t.id),
-                    })
-                  }
-                >
-                  Park window
-                </Button>
-              </header>
-
-              <div className="window-card-tabs">
-                {win.tabs.map((tab) => (
-                  <div className="window-tab-item" key={tab.id}>
-                    {tab.favIconUrl ? (
-                      <img
-                        className="tab-favicon"
-                        src={tab.favIconUrl}
-                        alt=""
-                        onError={(e) => {
-                          e.currentTarget.hidden = true;
-                        }}
-                      />
-                    ) : (
-                      <span className="tab-favicon fallback" aria-hidden="true">
-                        {hostInitial(tab.hostname, tab.url)}
+          <AnimatePresence>
+            {filtered.windows.map((win) => (
+              <motion.article
+                className="window-card"
+                key={win.id}
+                layout
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ duration: 0.18 }}
+              >
+                <header className="window-card-head">
+                  <div className="window-card-title">
+                    <WindowIcon size={16} />
+                    <h2>Window {win.id}</h2>
+                    {win.focused && (
+                      <span
+                        className="current-window-badge"
+                        title="Active/Focused Window"
+                      >
+                        <span className="current-window-dot" />
+                        <span>Current window</span>
                       </span>
                     )}
-
-                    <button
-                      className="window-tab-btn"
-                      type="button"
-                      title={tab.url}
-                      onClick={() => void activateTab(tab)}
-                    >
-                      <strong className="window-tab-title">
-                        {tabLabel(tab.title, tab.hostname, tab.url)}
-                      </strong>
-                      <span className="window-tab-host">
-                        {hostLabel(tab.hostname, tab.url)}
-                      </span>
-                    </button>
-
-                    <div className="window-tab-meta">
-                      {tab.duplicateCount > 1 && (
-                        <span
-                          className="chip chip-warning chip-xs"
-                          title="Duplicate tab"
-                        >
-                          ×{tab.duplicateCount}
-                        </span>
-                      )}
-                      {tab.audible && (
-                        <span className="chip chip-xs" title="Audio playing">
-                          Audio
-                        </span>
-                      )}
-                      {tab.discarded && (
-                        <span className="chip chip-xs" title="Discarded tab">
-                          Sleep
-                        </span>
-                      )}
-                      <button
-                        className="btn btn-ghost btn-icon btn-sm"
-                        type="button"
-                        title="Close tab"
-                        disabled={busy}
-                        onClick={() => void closeTab(tab.id)}
-                      >
-                        <CloseIcon size={13} />
-                      </button>
-                    </div>
+                    <span className="window-tab-count">
+                      {win.tabs.length} {pluralize(win.tabs.length, 'tab')}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </article>
-          ))}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      setParkConfirm({
+                        windowId: win.id,
+                        tabIds: win.tabs.map((t) => t.id),
+                      })
+                    }
+                  >
+                    Park window
+                  </Button>
+                </header>
+
+                <div className="window-card-tabs">
+                  {win.tabs.map((tab) => (
+                    <div className="window-tab-item" key={tab.id}>
+                      {tab.favIconUrl ? (
+                        <img
+                          className="tab-favicon"
+                          src={tab.favIconUrl}
+                          alt=""
+                          onError={(e) => {
+                            e.currentTarget.hidden = true;
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className="tab-favicon fallback"
+                          aria-hidden="true"
+                        >
+                          {hostInitial(tab.hostname, tab.url)}
+                        </span>
+                      )}
+
+                      <button
+                        className="window-tab-btn"
+                        type="button"
+                        title={tab.url}
+                        onClick={() => void activateTab(tab)}
+                      >
+                        <strong className="window-tab-title">
+                          {tabLabel(tab.title, tab.hostname, tab.url)}
+                        </strong>
+                        <span className="window-tab-host">
+                          {hostLabel(tab.hostname, tab.url)}
+                        </span>
+                      </button>
+
+                      <div className="window-tab-meta">
+                        {tab.duplicateCount > 1 && (
+                          <span
+                            className="chip chip-warning chip-xs"
+                            title="Duplicate tab"
+                          >
+                            ×{tab.duplicateCount}
+                          </span>
+                        )}
+                        {tab.audible && (
+                          <span className="chip chip-xs" title="Audio playing">
+                            Audio
+                          </span>
+                        )}
+                        {tab.discarded && (
+                          <span className="chip chip-xs" title="Discarded tab">
+                            Sleep
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="btn-sm"
+                          type="button"
+                          title="Close tab"
+                          disabled={busy}
+                          onClick={() => void closeTab(tab.id)}
+                        >
+                          <CloseIcon size={13} />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.article>
+            ))}
+          </AnimatePresence>
         </div>
       )}
 

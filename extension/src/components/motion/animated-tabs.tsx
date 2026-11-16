@@ -30,10 +30,7 @@ export function AnimatedTabs<T extends string = string>({
   activeClassName,
 }: AnimatedTabsProps<T>) {
   return (
-    <div
-      role="tablist"
-      className={cn('segmented-pill-track', className)}
-    >
+    <div role="tablist" className={cn('segmented-pill-track', className)}>
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (

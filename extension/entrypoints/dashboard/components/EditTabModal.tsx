@@ -1,7 +1,6 @@
-import type { TabRecord } from '../../../src/database';
-
 import { motion } from 'framer-motion';
 import { Button } from '../../../src/components/ui/button';
+import type { TabRecord } from '../../../src/database';
 
 export interface EditTabModalProps {
   tab: TabRecord | undefined;

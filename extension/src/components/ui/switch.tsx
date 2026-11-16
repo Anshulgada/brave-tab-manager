@@ -14,9 +14,7 @@ export const Switch = React.forwardRef<
     {...props}
     ref={ref}
   >
-    <SwitchPrimitives.Thumb
-      className="switch-thumb pointer-events-none block rounded-full"
-    />
+    <SwitchPrimitives.Thumb className="switch-thumb pointer-events-none block rounded-full" />
   </SwitchPrimitives.Root>
 ));
 Switch.displayName = SwitchPrimitives.Root.displayName;

@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import { pluralize } from '../../../src/ui/format';
@@ -50,39 +51,50 @@ export function TrashPanel({
         </div>
       ) : (
         <div className="trash-list">
-          {collections.map((collection) => (
-            <article className="trash-item" key={collection.id}>
-              <div>
-                <strong>{collection.name}</strong>
-                <span>
-                  {collection.tabs.length} saved{' '}
-                  {pluralize(collection.tabs.length, 'tab')}
-                </span>
-              </div>
-              <div className="trash-actions">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onRestore(collection.id)}
-                >
-                  <RestoreIcon size={14} />
-                  Restore
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onDelete(collection.id)}
-                >
-                  <TrashIcon size={14} />
-                  Delete forever
-                </Button>
-              </div>
-            </article>
-          ))}
+          <AnimatePresence>
+            {collections.map((collection) => (
+              <motion.article
+                className="trash-item"
+                key={collection.id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                whileHover={{ y: -2 }}
+                transition={{ duration: 0.18 }}
+              >
+                <div>
+                  <strong>{collection.name}</strong>
+                  <span>
+                    {collection.tabs.length} saved{' '}
+                    {pluralize(collection.tabs.length, 'tab')}
+                  </span>
+                </div>
+                <div className="trash-actions">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onRestore(collection.id)}
+                  >
+                    <RestoreIcon size={14} />
+                    Restore
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onDelete(collection.id)}
+                  >
+                    <TrashIcon size={14} />
+                    Delete forever
+                  </Button>
+                </div>
+              </motion.article>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </section>

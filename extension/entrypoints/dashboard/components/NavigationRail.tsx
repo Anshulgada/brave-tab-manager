@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import type { DragEvent, RefObject } from 'react';
 import { NumberTicker } from '../../../src/components/motion/number-ticker';
 import { Button } from '../../../src/components/ui/button';
@@ -81,47 +82,65 @@ export function NavigationRail({
   return (
     <aside className="rail">
       <nav className="rail-nav" aria-label="Library sections">
-        <button
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'home' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('home')}
         >
           <HomeIcon />
           <span>Home</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'windows' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('windows')}
         >
           <WindowIcon />
           <span>Windows</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'organize' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('organize')}
         >
           <LayersIcon />
           <span>Organize</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'providers' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('providers')}
         >
           <ZapIcon />
           <span>Providers</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'rules' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('rules')}
         >
           <LayersIcon />
           <span>Rules</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'trash' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('trash')}
@@ -131,15 +150,18 @@ export function NavigationRail({
           <span className="rail-count">
             <NumberTicker value={trashedCount} />
           </span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'settings' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('settings')}
         >
           <SettingsIcon />
           <span>Preferences</span>
-        </button>
+        </motion.button>
       </nav>
 
       <div className="rail-section">
@@ -206,7 +228,10 @@ export function NavigationRail({
                   .join(' ')}
                 key={collection.id}
               >
-                <button
+                <motion.button
+                  whileHover={{ x: 2 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                   className="rail-item"
                   type="button"
                   onClick={() => onSelectCollection(collection.id)}
@@ -230,7 +255,7 @@ export function NavigationRail({
                       {pluralize(collection.tabs.length, 'tab')}
                     </small>
                   </span>
-                </button>
+                </motion.button>
                 <button
                   className="rail-menu"
                   type="button"

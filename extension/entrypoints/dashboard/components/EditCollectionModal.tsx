@@ -80,9 +80,12 @@ export function EditCollectionModal({
           <span>Color</span>
           <div className="color-swatches">
             {SWATCH_COLORS.map((c) => (
-              <button
+              <motion.button
                 key={c || 'none'}
                 type="button"
+                whileHover={{ scale: 1.18 }}
+                whileTap={{ scale: 0.88 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 25 }}
                 className={
                   color === c ? 'color-swatch selected' : 'color-swatch'
                 }

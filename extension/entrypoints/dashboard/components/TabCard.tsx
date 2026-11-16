@@ -67,7 +67,13 @@ export function TabCard({
   }, [tab.url, enableRichPreviews, iframelyApiKey, preview]);
 
   return (
-    <article
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 8, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      whileHover={{ y: -3, transition: { duration: 0.16, ease: 'easeOut' } }}
+      transition={{ duration: 0.2 }}
       className={[
         'tab-card',
         selected ? 'selected' : '',
@@ -81,8 +87,9 @@ export function TabCard({
       }}
       draggable
       onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', tab.id);
+        const dragEvent = event as unknown as React.DragEvent;
+        dragEvent.dataTransfer.effectAllowed = 'move';
+        dragEvent.dataTransfer.setData('text/plain', tab.id);
         onDragStart();
       }}
       onDragEnd={onDragEnd}
@@ -217,7 +224,7 @@ export function TabCard({
           ))}
         </div>
       )}
-    </article>
+    </motion.article>
   );
 }
 
@@ -238,7 +245,13 @@ export function TabRow({
   const tagColor = tags.find((t) => Boolean(t.color))?.color;
 
   return (
-    <article
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      whileHover={{ x: 2, transition: { duration: 0.15 } }}
+      transition={{ duration: 0.18 }}
       className={[
         'tab-row',
         selected ? 'selected' : '',
@@ -252,8 +265,9 @@ export function TabRow({
       }}
       draggable
       onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', tab.id);
+        const dragEvent = event as unknown as React.DragEvent;
+        dragEvent.dataTransfer.effectAllowed = 'move';
+        dragEvent.dataTransfer.setData('text/plain', tab.id);
         onDragStart();
       }}
       onDragEnd={onDragEnd}
@@ -354,6 +368,6 @@ export function TabRow({
           <CloseIcon size={15} />
         </motion.button>
       </div>
-    </article>
+    </motion.article>
   );
 }

@@ -120,6 +120,7 @@ export function HomePanel({
           className="stat-card"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -2 }}
           transition={{ duration: 0.2 }}
         >
           <span className="stat-icon">
@@ -136,6 +137,7 @@ export function HomePanel({
           className="stat-card"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -2 }}
           transition={{ duration: 0.2, delay: 0.05 }}
         >
           <span className="stat-icon">
@@ -152,6 +154,7 @@ export function HomePanel({
           className="stat-card"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -2 }}
           transition={{ duration: 0.2, delay: 0.1 }}
         >
           <span className="stat-icon">
@@ -273,11 +276,13 @@ export function HomePanel({
               return (
                 <motion.div
                   key={collection.id}
+                  layout
                   className={`collection-card ${isSelected ? 'selected' : ''}`}
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ y: -3, transition: { duration: 0.16 } }}
                   transition={{
-                    duration: 0.15,
+                    duration: 0.18,
                     delay: Math.min(index * 0.02, 0.3),
                   }}
                 >

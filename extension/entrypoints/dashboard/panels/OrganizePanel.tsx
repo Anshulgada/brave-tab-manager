@@ -397,13 +397,14 @@ export function OrganizePanel({
         </p>
         {sourceCollection && onBackToCollection && (
           <div style={{ marginTop: '8px' }}>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
-              className="btn btn-ghost btn-sm"
               onClick={onBackToCollection}
             >
               ← Back to {sourceCollection.name}
-            </button>
+            </Button>
           </div>
         )}
       </header>
@@ -480,16 +481,18 @@ export function OrganizePanel({
                 layoutId="organizeProposalViewPill"
               />
 
-              <button
-                className="btn btn-ghost btn-sm"
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 onClick={approveAll}
                 title="Approve and include all tabs"
               >
                 Approve all
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 onClick={() => {
                   if (allCollapsed) {
@@ -500,7 +503,7 @@ export function OrganizePanel({
                 }}
               >
                 {allCollapsed ? 'Expand all' : 'Collapse all'}
-              </button>
+              </Button>
               {showAddGroup ? (
                 <div className="kanban-add-group-form">
                   <input
@@ -655,20 +658,24 @@ export function OrganizePanel({
                           >
                             {name}
                           </strong>
-                          <button
-                            className="btn btn-ghost btn-icon btn-xs kanban-rename-btn"
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="btn-xs kanban-rename-btn"
                             type="button"
                             title="Rename group"
                             onClick={() => startRenamingGroup(name)}
                           >
                             <PencilIcon size={11} />
-                          </button>
+                          </Button>
                         </>
                       )}
                       <span className="badge">{items.length}</span>
                     </div>
-                    <button
-                      className={`btn btn-ghost btn-icon btn-sm kanban-col-toggle ${
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`btn-sm kanban-col-toggle ${
                         isCollapsed ? 'collapsed' : ''
                       }`}
                       type="button"
@@ -683,7 +690,7 @@ export function OrganizePanel({
                       onClick={() => toggleCollapse(name)}
                     >
                       <ChevronDownIcon size={14} />
-                    </button>
+                    </Button>
                   </header>
 
                   {!isCollapsed && (

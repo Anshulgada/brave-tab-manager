@@ -2,10 +2,7 @@ import type { Config } from 'tailwindcss';
 
 export default {
   darkMode: ['class', '[data-theme="dark"]'],
-  content: [
-    './entrypoints/**/*.{html,ts,tsx}',
-    './src/**/*.{ts,tsx}',
-  ],
+  content: ['./entrypoints/**/*.{html,ts,tsx}', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
@@ -78,7 +75,7 @@ export default {
             'offset-distance': '100%',
           },
         },
-        'shimmer': {
+        shimmer: {
           '0%, 90%, 100%': {
             'background-position': 'calc(-100% - var(--shimmer-width, 100%)) 0',
           },
@@ -92,8 +89,9 @@ export default {
         },
       },
       animation: {
-        'border-beam': 'border-beam calc(var(--duration, 8)*1s) infinite linear',
-        'shimmer': 'shimmer 8s infinite',
+        'border-beam':
+          'border-beam calc(var(--duration, 8)*1s) infinite linear',
+        shimmer: 'shimmer 8s infinite',
         'pulse-subtle': 'pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },
