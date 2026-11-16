@@ -9,6 +9,7 @@ import {
   getCachedBenchmarkReport,
   type HardwareBenchmarkReport,
   inspectSystemHardwareTargets,
+  isWindowsPlatform,
 } from './hardware-benchmark';
 
 export type ComputeDevice = 'npu' | 'webgpu' | 'cpu';
@@ -173,9 +174,7 @@ export function getDefaultModelStorageLocations(): {
   current: string;
   searchPaths: string[];
 } {
-  const isWindows =
-    typeof navigator !== 'undefined' &&
-    /win/i.test(navigator.userAgent || navigator.platform || '');
+  const isWindows = isWindowsPlatform();
 
   const windowsPath = '%LOCALAPPDATA%\\tabman\\models';
   const linuxPath = '~/.local/share/tabman/models';

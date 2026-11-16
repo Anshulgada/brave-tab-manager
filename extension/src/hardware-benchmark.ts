@@ -295,17 +295,72 @@ export function benchmarkBatchedWorkload(
   };
 }
 
-function isWindowsPlatform(): boolean {
+let detectedWindows: boolean | null = null;
+
+export async function detectIsWindows(): Promise<boolean> {
+  if (detectedWindows !== null) return detectedWindows;
+  const ch =
+    typeof globalThis !== 'undefined' && 'chrome' in globalThis
+      ? (
+          globalThis as {
+            chrome?: {
+              runtime?: {
+                getPlatformInfo?: () => Promise<{ os: string }>;
+              };
+            };
+          }
+        ).chrome
+      : undefined;
+
+  if (ch?.runtime?.getPlatformInfo) {
+    try {
+      const info = await ch.runtime.getPlatformInfo();
+      if (info?.os) {
+        detectedWindows = info.os === 'win';
+        return detectedWindows;
+      }
+    } catch {
+      // Fall through to heuristic detection
+    }
+  }
+  detectedWindows = isWindowsPlatform();
+  return detectedWindows;
+}
+
+export function isWindowsPlatform(): boolean {
+  if (detectedWindows !== null) return detectedWindows;
+  if (
+    typeof process !== 'undefined' &&
+    (process.platform === 'win32' ||
+      Boolean(
+        (process.env as Record<string, string | undefined>)?.OS?.includes(
+          'Windows',
+        ),
+      ))
+  ) {
+    detectedWindows = true;
+    return true;
+  }
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  const plat = navigator.platform || '';
+  const plat = (navigator as unknown as { platform?: string }).platform || '';
+  const appVer = navigator.appVersion || '';
   const uaDataPlat =
     (
       navigator as unknown as {
         userAgentData?: { platform?: string };
       }
     )?.userAgentData?.platform || '';
-  return /win/i.test(ua) || /win/i.test(plat) || /win/i.test(uaDataPlat);
+  const isWin =
+    /win/i.test(ua) ||
+    /win/i.test(plat) ||
+    /win/i.test(appVer) ||
+    /win/i.test(uaDataPlat);
+  if (isWin) {
+    detectedWindows = true;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -325,7 +380,7 @@ export async function benchmarkWebGpuWorkload(
     return null;
   }
 
-  const isWindows = isWindowsPlatform();
+  const isWindows = await detectIsWindows();
 
   try {
     const adapter = await navigator.gpu.requestAdapter(
@@ -605,7 +660,8 @@ export async function inspectSystemHardwareTargets(): Promise<{
     try {
       let highPerf: GPUAdapter | null = null;
       let lowPower: GPUAdapter | null = null;
-      if (isWindowsPlatform()) {
+      const isWindows = await detectIsWindows();
+      if (isWindows) {
         // Chromium on Windows emits crbug.com/369219127 console warnings when powerPreference is passed.
         highPerf = await navigator.gpu.requestAdapter();
       } else {
@@ -746,8 +802,10 @@ export async function runHardwareBenchmark(
   const results: BenchmarkDeviceResult[] = [];
   const hardware = await inspectSystemHardwareTargets();
 
-  if (hardware.hasDualGpu) {
-    // Dual GPU: Benchmark both Discrete (high-perf) and Integrated (low-power)
+  const isWindows = await detectIsWindows();
+
+  if (hardware.hasDualGpu && !isWindows) {
+    // Dual GPU on non-Windows: Benchmark both Discrete (high-perf) and Integrated (low-power)
     const [dGpuRes, iGpuRes] = await Promise.all([
       benchmarkWebGpuWorkload('high-performance'),
       benchmarkWebGpuWorkload('low-power'),
