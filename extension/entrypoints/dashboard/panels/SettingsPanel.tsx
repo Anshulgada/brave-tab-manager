@@ -1,5 +1,15 @@
-import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../src/components/ui/dialog';
+import { Switch } from '../../../src/components/ui/switch';
 import { testIframelyApiKey } from '../../../src/iframely';
 import type { Settings } from '../../../src/schema';
 import {
@@ -210,9 +220,11 @@ export function SettingsPanel({
             gap: '6px',
           }}
         >
-          <button
+          <Button
             type="button"
-            className="btn btn-primary"
+            variant="default"
+            disabled={updateChecking}
+            onClick={() => void handleCheckUpdates()}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -221,15 +233,13 @@ export function SettingsPanel({
               fontSize: '13px',
               fontWeight: 600,
             }}
-            disabled={updateChecking}
-            onClick={() => void handleCheckUpdates()}
           >
             <RefreshIcon
               size={14}
               className={updateChecking ? 'benchmark-spin' : ''}
             />
             {updateChecking ? 'Checking Updates...' : 'Check for Updates'}
-          </button>
+          </Button>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             v{CURRENT_VERSION} · CLI Vault &amp; WASM Engine
           </span>
@@ -256,13 +266,14 @@ export function SettingsPanel({
                   <span style={{ color: 'var(--brand-text)', fontWeight: 600 }}>
                     v{updateStatus.latest} available!
                   </span>
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-sm btn-primary"
+                    size="sm"
+                    variant="default"
                     onClick={() => setShowUpdateModal(true)}
                   >
                     Upgrade
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <span
@@ -292,41 +303,22 @@ export function SettingsPanel({
               <p>Match the browser or pick a side.</p>
             </div>
           </div>
-          <div className="segmented-pill-track">
-            {(['system', 'light', 'dark'] as const).map((theme) => (
-              <button
-                type="button"
-                key={theme}
-                className={`segmented-pill-btn ${
-                  draft.theme === theme ? 'active' : ''
-                }`}
-                aria-pressed={draft.theme === theme}
-                onClick={() => {
-                  onApplyTheme(theme);
-                  handleUpdate((prev) => ({ ...prev, theme }));
-                }}
-              >
-                {draft.theme === theme && (
-                  <motion.div
-                    layoutId="settingsThemePill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  {theme === 'system'
-                    ? 'System'
-                    : theme === 'light'
-                      ? 'Light'
-                      : 'Dark'}
-                </span>
-              </button>
-            ))}
-          </div>
+          <AnimatedTabs<'system' | 'light' | 'dark'>
+            tabs={[
+              { id: 'system', label: 'System' },
+              { id: 'light', label: 'Light' },
+              { id: 'dark', label: 'Dark' },
+            ]}
+            activeTab={draft.theme}
+            onChange={(theme: 'system' | 'light' | 'dark') => {
+              onApplyTheme(theme);
+              handleUpdate((prev) => ({ ...prev, theme }));
+            }}
+            layoutId="settingsThemePill"
+            size="default"
+            className="w-full flex"
+            tabClassName="flex-1"
+          />
         </div>
 
         <div className="settings-card">
@@ -339,36 +331,20 @@ export function SettingsPanel({
               <p>How saved collections open.</p>
             </div>
           </div>
-          <div className="segmented-pill-track">
-            {(['grid', 'list'] as const).map((defaultView) => (
-              <button
-                type="button"
-                key={defaultView}
-                className={`segmented-pill-btn ${
-                  draft.defaultView === defaultView ? 'active' : ''
-                }`}
-                aria-pressed={draft.defaultView === defaultView}
-                onClick={() =>
-                  handleUpdate((prev) => ({ ...prev, defaultView }))
-                }
-              >
-                {draft.defaultView === defaultView && (
-                  <motion.div
-                    layoutId="settingsViewPill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  {defaultView === 'grid' ? 'Grid' : 'List'}
-                </span>
-              </button>
-            ))}
-          </div>
+          <AnimatedTabs<'grid' | 'list'>
+            tabs={[
+              { id: 'grid', label: 'Grid' },
+              { id: 'list', label: 'List' },
+            ]}
+            activeTab={draft.defaultView}
+            onChange={(defaultView: 'grid' | 'list') =>
+              handleUpdate((prev) => ({ ...prev, defaultView }))
+            }
+            layoutId="settingsViewPill"
+            size="default"
+            className="w-full flex"
+            tabClassName="flex-1"
+          />
         </div>
 
         <div className="settings-card">
@@ -381,22 +357,19 @@ export function SettingsPanel({
               <p>Control what an optional AI request may contain.</p>
             </div>
           </div>
-          <label className="settings-toggle">
+          <div className="settings-toggle">
             <span>Include full URLs in AI requests</span>
-            <input
-              className="switch"
-              type="checkbox"
-              role="switch"
-              aria-checked={draft.includeFullUrlInAi}
+            <Switch
               checked={draft.includeFullUrlInAi}
-              onChange={(event) =>
+              onCheckedChange={(checked: boolean) =>
                 handleUpdate((prev) => ({
                   ...prev,
-                  includeFullUrlInAi: event.target.checked,
+                  includeFullUrlInAi: checked,
                 }))
               }
+              aria-label="Include full URLs in AI requests"
             />
-          </label>
+          </div>
           <p className="settings-note">
             Off sends only titles and hostnames. Tabman never reads the page
             body.
@@ -413,62 +386,23 @@ export function SettingsPanel({
               <p>Default way organized tabs are saved to your library.</p>
             </div>
           </div>
-          <div className="segmented-pill-track">
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                organizeMode === 'single' ? 'active' : ''
-              }`}
-              aria-pressed={organizeMode === 'single'}
-              onClick={() => {
-                setOrganizeMode('single');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'single');
-                } catch {}
-              }}
-            >
-              {organizeMode === 'single' && (
-                <motion.div
-                  layoutId="settingsDestPill"
-                  className="segmented-pill-slider"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
-              <span className="segmented-pill-text">
-                Single collection with tags
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                organizeMode === 'multiple' ? 'active' : ''
-              }`}
-              aria-pressed={organizeMode === 'multiple'}
-              onClick={() => {
-                setOrganizeMode('multiple');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'multiple');
-                } catch {}
-              }}
-            >
-              {organizeMode === 'multiple' && (
-                <motion.div
-                  layoutId="settingsDestPill"
-                  className="segmented-pill-slider"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
-              <span className="segmented-pill-text">Separate collections</span>
-            </button>
-          </div>
+          <AnimatedTabs<'single' | 'multiple'>
+            tabs={[
+              { id: 'single', label: 'Single collection with tags' },
+              { id: 'multiple', label: 'Separate collections' },
+            ]}
+            activeTab={organizeMode}
+            onChange={(val: 'single' | 'multiple') => {
+              setOrganizeMode(val);
+              try {
+                localStorage.setItem('tabman-organize-mode', val);
+              } catch {}
+            }}
+            layoutId="settingsDestPill"
+            size="default"
+            className="w-full flex"
+            tabClassName="flex-1"
+          />
           <p className="settings-note">
             {organizeMode === 'single'
               ? 'Puts all tabs into one dated collection and tags them with their group name.'
@@ -494,23 +428,16 @@ export function SettingsPanel({
                 <p>Visual cards with covers, favicons, and metadata.</p>
               </div>
             </div>
-            <label
-              className="toggle-switch"
-              title="Toggle rich visual preview cards"
-            >
-              <input
-                type="checkbox"
-                checked={draft.enableRichPreviews ?? false}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  handleUpdate((prev) => ({
-                    ...prev,
-                    enableRichPreviews: checked,
-                  }));
-                }}
-              />
-              <span className="toggle-slider" />
-            </label>
+            <Switch
+              checked={draft.enableRichPreviews ?? false}
+              onCheckedChange={(checked: boolean) => {
+                handleUpdate((prev) => ({
+                  ...prev,
+                  enableRichPreviews: checked,
+                }));
+              }}
+              aria-label="Toggle rich visual preview cards"
+            />
           </div>
 
           <div
@@ -546,14 +473,15 @@ export function SettingsPanel({
                   }));
                 }}
               />
-              <button
+              <Button
                 type="button"
-                className="btn btn-sm"
+                variant="secondary"
+                size="sm"
                 disabled={iframelyTesting || !draft.iframelyApiKey}
                 onClick={() => void handleTestIframely()}
               >
                 {iframelyTesting ? 'Testing...' : 'Test Key'}
-              </button>
+              </Button>
             </div>
             {iframelyStatus && (
               <p
@@ -643,70 +571,43 @@ export function SettingsPanel({
         </div>
       </div>
 
-      {showUpdateModal && (
-        <div className="overlay">
-          <button
-            className="overlay-backdrop"
-            type="button"
-            aria-label="Cancel"
-            onClick={() => {
-              if (!isUpdating) setShowUpdateModal(false);
-            }}
-          />
-          <div
-            className="dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Upgrade Tabman"
-            style={{ width: '440px', maxWidth: 'calc(100vw - 32px)' }}
-          >
-            <h2>Upgrade Tabman</h2>
-            <p>
+      <Dialog open={showUpdateModal} onOpenChange={setShowUpdateModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upgrade Tabman</DialogTitle>
+            <DialogDescription>
               Are you sure you want to upgrade Tabman from{' '}
-              <strong>v{CURRENT_VERSION}</strong> to{' '}
-              <strong>v{updateStatus?.latest}</strong>?
-            </p>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              This will update your CLI vault and background acceleration
-              services using your package manager.
-            </p>
-            {updateLog && (
-              <pre
-                style={{
-                  fontSize: '11px',
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'var(--surface-muted)',
-                  border: '1px solid var(--border)',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  marginTop: '4px',
-                }}
-              >
-                {updateLog}
-              </pre>
-            )}
-            <div className="dialog-actions" style={{ marginTop: '12px' }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={isUpdating}
-                onClick={() => setShowUpdateModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={isUpdating}
-                onClick={() => void handleConfirmUpgrade()}
-              >
-                {isUpdating ? 'Upgrading...' : 'Confirm & Upgrade'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <strong className="text-foreground">v{CURRENT_VERSION}</strong> to{' '}
+              <strong className="text-brand">v{updateStatus?.latest}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            This will update your CLI vault and background acceleration services
+            using your package manager.
+          </p>
+          {updateLog && (
+            <pre className="text-xs p-2.5 rounded-lg bg-surface-muted border border-border whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+              {updateLog}
+            </pre>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0 mt-3">
+            <Button
+              variant="ghost"
+              disabled={isUpdating}
+              onClick={() => setShowUpdateModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              disabled={isUpdating}
+              onClick={() => void handleConfirmUpgrade()}
+            >
+              {isUpdating ? 'Upgrading...' : 'Confirm & Upgrade'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

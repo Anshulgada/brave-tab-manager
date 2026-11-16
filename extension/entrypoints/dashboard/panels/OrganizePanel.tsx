@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion';
 import { useRef, useState } from 'react';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
 import { recordCorrection } from '../../../src/corrections';
 import { TabmanDatabase } from '../../../src/database';
 import type { LibraryCollection } from '../../../src/library';
@@ -409,73 +411,41 @@ export function OrganizePanel({
       <div className="organize-toolbar">
         <div className="organize-toolbar-left">
           <span className="organize-mode-label">Destination:</span>
-          <div className="segmented-pill-track">
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                destinationMode === 'single' ? 'active' : ''
-              }`}
-              onClick={() => {
-                setDestinationMode('single');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'single');
-                } catch {}
-              }}
-            >
-              {destinationMode === 'single' && (
-                <motion.div
-                  layoutId="destPill"
-                  className="segmented-pill-slider"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="segmented-pill-text">
-                Single collection (with tags)
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                destinationMode === 'multiple' ? 'active' : ''
-              }`}
-              onClick={() => {
-                setDestinationMode('multiple');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'multiple');
-                } catch {}
-              }}
-            >
-              {destinationMode === 'multiple' && (
-                <motion.div
-                  layoutId="destPill"
-                  className="segmented-pill-slider"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="segmented-pill-text">Separate collections</span>
-            </button>
-          </div>
+          <AnimatedTabs<'single' | 'multiple'>
+            tabs={[
+              { id: 'single', label: 'Single collection (with tags)' },
+              { id: 'multiple', label: 'Separate collections' },
+            ]}
+            activeTab={destinationMode}
+            onChange={(val) => {
+              setDestinationMode(val);
+              try {
+                localStorage.setItem('tabman-organize-mode', val);
+              } catch {}
+            }}
+            layoutId="organizeDestPill"
+          />
         </div>
 
         <div className="organize-toolbar-right">
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="default"
             type="button"
             disabled={busy}
             onClick={() => void preview('provider')}
           >
             <SparkIcon size={15} />
             Preview with provider
-          </button>
-          <button
-            className="btn"
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             disabled={busy}
             onClick={() => void preview('deterministic')}
           >
             <LayersIcon size={15} />
             Preview with local rules
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -500,50 +470,15 @@ export function OrganizePanel({
               </span>
             </div>
             <div className="proposal-toolbar">
-              <div className="segmented-pill-track">
-                <button
-                  type="button"
-                  className={`segmented-pill-btn ${
-                    organizeView === 'board' ? 'active' : ''
-                  }`}
-                  onClick={() => setOrganizeView('board')}
-                  aria-label="Board view"
-                >
-                  {organizeView === 'board' && (
-                    <motion.div
-                      layoutId="organizeViewPill"
-                      className="segmented-pill-slider"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 500,
-                        damping: 35,
-                      }}
-                    />
-                  )}
-                  <span className="segmented-pill-text">Board</span>
-                </button>
-                <button
-                  type="button"
-                  className={`segmented-pill-btn ${
-                    organizeView === 'grid' ? 'active' : ''
-                  }`}
-                  onClick={() => setOrganizeView('grid')}
-                  aria-label="Grid view"
-                >
-                  {organizeView === 'grid' && (
-                    <motion.div
-                      layoutId="organizeViewPill"
-                      className="segmented-pill-slider"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 500,
-                        damping: 35,
-                      }}
-                    />
-                  )}
-                  <span className="segmented-pill-text">Grid</span>
-                </button>
-              </div>
+              <AnimatedTabs<'board' | 'grid'>
+                tabs={[
+                  { id: 'board', label: 'Board' },
+                  { id: 'grid', label: 'Grid' },
+                ]}
+                activeTab={organizeView}
+                onChange={setOrganizeView}
+                layoutId="organizeProposalViewPill"
+              />
 
               <button
                 className="btn btn-ghost btn-sm"

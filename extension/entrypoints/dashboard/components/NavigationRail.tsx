@@ -1,4 +1,6 @@
 import type { DragEvent, RefObject } from 'react';
+import { NumberTicker } from '../../../src/components/motion/number-ticker';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import { pluralize } from '../../../src/ui/format';
 import {
@@ -126,7 +128,9 @@ export function NavigationRail({
         >
           <TrashIcon />
           <span>Trash</span>
-          <span className="rail-count">{trashedCount}</span>
+          <span className="rail-count">
+            <NumberTicker value={trashedCount} />
+          </span>
         </button>
         <button
           className={section === 'settings' ? 'rail-link active' : 'rail-link'}
@@ -172,13 +176,14 @@ export function NavigationRail({
                 }
               }}
             />
-            <button
-              className="btn btn-primary btn-sm"
+            <Button
+              variant="default"
+              size="sm"
               type="submit"
               disabled={busy || !newCollectionName.trim()}
             >
               Add
-            </button>
+            </Button>
           </form>
         )}
 
@@ -221,7 +226,7 @@ export function NavigationRail({
                   <span className="rail-item-copy">
                     <strong>{collection.name}</strong>
                     <small>
-                      {collection.tabs.length}{' '}
+                      <NumberTicker value={collection.tabs.length} />{' '}
                       {pluralize(collection.tabs.length, 'tab')}
                     </small>
                   </span>
@@ -276,10 +281,16 @@ export function NavigationRail({
       <div className="rail-footer">
         <div className="rail-stats">
           <span>
-            <strong>{savedTabCount}</strong> saved tabs
+            <strong>
+              <NumberTicker value={savedTabCount} />
+            </strong>{' '}
+            saved tabs
           </span>
           <span>
-            <strong>{tagCount}</strong> {pluralize(tagCount, 'tag')}
+            <strong>
+              <NumberTicker value={tagCount} />
+            </strong>{' '}
+            {pluralize(tagCount, 'tag')}
           </span>
         </div>
         <p className="rail-note">

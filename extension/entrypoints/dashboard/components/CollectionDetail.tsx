@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { type FormEvent, type RefObject, useEffect, useRef } from 'react';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
 import type { TabRecord } from '../../../src/database';
 import type { LibraryCollection } from '../../../src/library';
 import { CustomSelect } from '../../../src/ui/CustomSelect';
@@ -243,8 +245,8 @@ export function CollectionDetail({
 
         <div className="collection-actions">
           {onOrganizeCollection && (
-            <button
-              className="btn btn-primary"
+            <Button
+              variant="default"
               type="button"
               disabled={busy || collection.tabs.length === 0}
               onClick={onOrganizeCollection}
@@ -252,26 +254,26 @@ export function CollectionDetail({
             >
               <SparkIcon size={15} />
               Organize
-            </button>
+            </Button>
           )}
-          <button
-            className="btn"
+          <Button
+            variant="secondary"
             type="button"
             disabled={busy || collection.tabs.length === 0}
             onClick={onRestoreCollection}
           >
             <RestoreIcon size={15} />
             Restore in new window
-          </button>
-          <button
-            className="btn btn-danger"
+          </Button>
+          <Button
+            variant="destructive"
             type="button"
             disabled={busy}
             onClick={onTrashCollection}
           >
             <TrashIcon size={15} />
             Trash
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -348,56 +350,15 @@ export function CollectionDetail({
               onChange={onSortOrderChange}
               ariaLabel="Sort saved tabs"
             />
-            <div className="segmented-pill-track">
-              <button
-                type="button"
-                className={`segmented-pill-btn ${
-                  view === 'grid' ? 'active' : ''
-                }`}
-                aria-pressed={view === 'grid'}
-                aria-label="Grid view"
-                onClick={() => onViewChange('grid')}
-              >
-                {view === 'grid' && (
-                  <motion.div
-                    layoutId="viewPill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  <GridIcon size={14} />
-                </span>
-              </button>
-              <button
-                type="button"
-                className={`segmented-pill-btn ${
-                  view === 'list' ? 'active' : ''
-                }`}
-                aria-pressed={view === 'list'}
-                aria-label="List view"
-                onClick={() => onViewChange('list')}
-              >
-                {view === 'list' && (
-                  <motion.div
-                    layoutId="viewPill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  <ListIcon size={14} />
-                </span>
-              </button>
-            </div>
+            <AnimatedTabs<'grid' | 'list'>
+              tabs={[
+                { id: 'grid', label: <GridIcon size={14} /> },
+                { id: 'list', label: <ListIcon size={14} /> },
+              ]}
+              activeTab={view}
+              onChange={onViewChange}
+              layoutId="collectionDetailViewPill"
+            />
           </div>
         </div>
 

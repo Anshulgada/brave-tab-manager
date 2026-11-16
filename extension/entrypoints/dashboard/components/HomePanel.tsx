@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import { NumberTicker } from '../../../src/components/motion/number-ticker';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import {
   CheckIcon,
@@ -49,14 +51,14 @@ export function WelcomeState({
         browser profile.
       </p>
       <div className="welcome-actions">
-        <button className="btn btn-primary" type="button" onClick={onCollect}>
+        <Button variant="default" type="button" onClick={onCollect}>
           <ZapIcon size={15} />
           Collect every open tab
-        </button>
-        <button className="btn" type="button" onClick={onCreate}>
+        </Button>
+        <Button variant="secondary" type="button" onClick={onCreate}>
           <PlusIcon size={15} />
           New collection
-        </button>
+        </Button>
       </div>
       <ol className="welcome-steps">
         <li>
@@ -124,7 +126,9 @@ export function HomePanel({
             <FolderIcon size={20} />
           </span>
           <div>
-            <strong>{collections.length}</strong>
+            <strong>
+              <NumberTicker value={collections.length} />
+            </strong>
             <span>Collections</span>
           </div>
         </motion.article>
@@ -138,7 +142,9 @@ export function HomePanel({
             <WindowIcon size={20} />
           </span>
           <div>
-            <strong>{savedTabCount}</strong>
+            <strong>
+              <NumberTicker value={savedTabCount} />
+            </strong>
             <span>Saved tabs</span>
           </div>
         </motion.article>
@@ -152,7 +158,9 @@ export function HomePanel({
             <TagIcon size={20} />
           </span>
           <div>
-            <strong>{tagCount}</strong>
+            <strong>
+              <NumberTicker value={tagCount} />
+            </strong>
             <span>Tags</span>
           </div>
         </motion.article>
@@ -160,14 +168,14 @@ export function HomePanel({
 
       {collections.length > 0 && (
         <section className="home-actions" aria-label="Quick actions">
-          <button className="btn btn-primary" type="button" onClick={onCollect}>
+          <Button variant="default" type="button" onClick={onCollect}>
             <ZapIcon size={16} />
             Collect every open tab
-          </button>
-          <button className="btn" type="button" onClick={onCreate}>
+          </Button>
+          <Button variant="secondary" type="button" onClick={onCreate}>
             <PlusIcon size={16} />
             New collection
-          </button>
+          </Button>
         </section>
       )}
 
@@ -177,21 +185,23 @@ export function HomePanel({
             <h2>Collections</h2>
             <div className="home-section-actions">
               {selectedIds.size > 0 ? (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   type="button"
-                  className="btn btn-ghost btn-sm"
                   onClick={() => setSelectedIds(new Set())}
                 >
                   Clear selection
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   type="button"
-                  className="btn btn-ghost btn-sm"
                   onClick={selectAll}
                 >
                   Select all
-                </button>
+                </Button>
               )}
             </div>
           </header>
@@ -220,18 +230,20 @@ export function HomePanel({
                   className="home-bulk-actions"
                   style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     type="button"
-                    className="btn btn-ghost btn-sm"
                     onClick={selectAll}
                   >
                     {selectedIds.size === collections.length
                       ? 'Deselect all'
                       : 'Select all'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     type="button"
-                    className="btn btn-danger btn-sm"
                     onClick={() => {
                       onDeleteCollections(Array.from(selectedIds));
                       setSelectedIds(new Set());
@@ -239,16 +251,17 @@ export function HomePanel({
                   >
                     <TrashIcon size={14} />
                     Move to trash
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     type="button"
-                    className="btn btn-ghost btn-icon btn-sm"
                     title="Cancel selection"
                     aria-label="Cancel selection"
                     onClick={() => setSelectedIds(new Set())}
                   >
                     <CloseIcon size={14} />
-                  </button>
+                  </Button>
                 </div>
               </motion.div>
             )}

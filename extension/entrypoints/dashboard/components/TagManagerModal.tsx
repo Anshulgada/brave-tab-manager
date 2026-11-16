@@ -1,4 +1,6 @@
+import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import { PencilIcon, PlusIcon, TrashIcon } from '../../../src/ui/icons';
 
@@ -51,11 +53,15 @@ export function TagManagerModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div
+      <motion.div
         className="dialog dialog-wide"
         role="dialog"
         aria-modal="true"
         aria-label="Manage tags"
+        initial={{ opacity: 0, scale: 0.98, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: -6 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <h2>Tags in {collection.name}</h2>
         <p className="settings-intro">
@@ -203,22 +209,23 @@ export function TagManagerModal({
               />
             ))}
           </div>
-          <button
-            className="btn btn-primary btn-sm"
+          <Button
+            variant="default"
+            size="sm"
             type="submit"
             disabled={!newTagName.trim()}
           >
             <PlusIcon size={14} />
             Add tag
-          </button>
+          </Button>
         </form>
 
         <div className="dialog-actions">
-          <button className="btn" type="button" onClick={onClose}>
+          <Button variant="ghost" type="button" onClick={onClose}>
             Done
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

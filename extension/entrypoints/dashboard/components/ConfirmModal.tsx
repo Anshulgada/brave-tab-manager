@@ -1,4 +1,6 @@
+import { motion } from 'framer-motion';
 import { useEffect } from 'react';
+import { Button } from '../../../src/components/ui/button';
 import type { ConfirmRequest } from '../types';
 
 export function ConfirmDialog({
@@ -28,29 +30,31 @@ export function ConfirmDialog({
         aria-label="Cancel"
         onClick={onCancel}
       />
-      <div
+      <motion.div
         className="dialog"
         role="alertdialog"
         aria-modal="true"
         aria-label={request.title}
+        initial={{ opacity: 0, scale: 0.98, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: -6 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <h2>{request.title}</h2>
         <p>{request.body}</p>
         <div className="dialog-actions">
-          <button className="btn" type="button" onClick={onCancel}>
+          <Button variant="ghost" type="button" onClick={onCancel}>
             Cancel
-          </button>
-          <button
-            className={
-              request.tone === 'danger' ? 'btn btn-danger' : 'btn btn-primary'
-            }
+          </Button>
+          <Button
+            variant={request.tone === 'danger' ? 'destructive' : 'default'}
             type="button"
             onClick={onConfirm}
           >
             {request.confirmLabel}
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

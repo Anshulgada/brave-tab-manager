@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion';
 import { useMemo, useState } from 'react';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import { CustomSelect } from '../../../src/ui/CustomSelect';
 
@@ -56,11 +58,15 @@ export function CollectModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div
+      <motion.div
         className="dialog"
         role="dialog"
         aria-modal="true"
         aria-label="Collect open tabs"
+        initial={{ opacity: 0, scale: 0.98, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: -6 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <h2>Collect open tabs</h2>
         <p className="settings-intro">
@@ -68,49 +74,17 @@ export function CollectModal({
         </p>
 
         {hasExisting && (
-          <div
-            className="segmented-pill-track"
-            style={{ width: '100%', marginBottom: '14px' }}
-          >
-            <button
-              type="button"
-              className={`segmented-pill-btn ${mode === 'new' ? 'active' : ''}`}
-              style={{ flex: 1 }}
-              onClick={() => handleModeChange('new')}
-            >
-              {mode === 'new' && (
-                <motion.div
-                  layoutId="collectModalModePill"
-                  className="segmented-pill-slider"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
-              <span className="segmented-pill-text">New collection</span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-pill-btn ${mode === 'existing' ? 'active' : ''}`}
-              style={{ flex: 1 }}
-              onClick={() => handleModeChange('existing')}
-            >
-              {mode === 'existing' && (
-                <motion.div
-                  layoutId="collectModalModePill"
-                  className="segmented-pill-slider"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
-              <span className="segmented-pill-text">Add to existing</span>
-            </button>
-          </div>
+          <AnimatedTabs<'new' | 'existing'>
+            tabs={[
+              { id: 'new', label: 'New collection' },
+              { id: 'existing', label: 'Add to existing' },
+            ]}
+            activeTab={mode}
+            onChange={handleModeChange}
+            layoutId="collectModalModePill"
+            className="w-full mb-3.5"
+            tabClassName="flex-1"
+          />
         )}
 
         {mode === 'new' || !hasExisting ? (
@@ -147,11 +121,11 @@ export function CollectModal({
         )}
 
         <div className="dialog-actions">
-          <button className="btn" type="button" onClick={onClose}>
+          <Button variant="ghost" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
+            variant="default"
             type="button"
             disabled={busy}
             onClick={() => {
@@ -166,9 +140,9 @@ export function CollectModal({
             }}
           >
             {mode === 'existing' ? 'Add tabs' : 'Collect'}
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

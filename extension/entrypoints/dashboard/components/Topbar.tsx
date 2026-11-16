@@ -1,4 +1,5 @@
 import type { ChangeEvent, RefObject } from 'react';
+import { Button } from '../../../src/components/ui/button';
 import { PRODUCT_NAME } from '../../../src/product';
 import {
   DownloadIcon,
@@ -60,26 +61,29 @@ export function Topbar({
       </button>
 
       <div className="topbar-actions">
-        <button
-          className="btn btn-ghost btn-icon"
+        <Button
+          variant="ghost"
+          size="icon"
           type="button"
           title="Import an export"
           aria-label="Import an export"
           onClick={() => importInputRef.current?.click()}
         >
           <UploadIcon />
-        </button>
-        <button
-          className="btn btn-ghost btn-icon"
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           type="button"
           title="Export the library"
           aria-label="Export the library"
           onClick={onExport}
         >
           <DownloadIcon />
-        </button>
-        <button
-          className="btn btn-ghost btn-icon"
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           type="button"
           title={
             currentTheme === 'dark'
@@ -94,25 +98,27 @@ export function Topbar({
           onClick={onToggleTheme}
         >
           {currentTheme === 'dark' ? <MoonIcon /> : <SunIcon />}
-        </button>
-        <button
-          className="btn btn-ghost btn-icon"
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           type="button"
           title="Help & Concepts Guide"
           aria-label="Help & Concepts Guide"
           onClick={onOpenHelp}
         >
           <HelpIcon />
-        </button>
-        <button
-          className="btn btn-ghost btn-icon"
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           type="button"
           title="Preferences"
           aria-label="Preferences"
           onClick={onOpenSettings}
         >
           <SettingsIcon />
-        </button>
+        </Button>
       </div>
 
       <input

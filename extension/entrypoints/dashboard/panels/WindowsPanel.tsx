@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button } from '../../../src/components/ui/button';
 import type { SwitchboardChangedMessage } from '../../../src/messages';
 import { sendSwitchboardRequest } from '../../../src/runtime';
 import {
@@ -192,13 +193,14 @@ export function WindowsPanel({ onNotify }: PanelProps) {
           onChange={(e) => setQuery(e.target.value)}
         />
         {query && (
-          <button
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={() => setQuery('')}
           >
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
@@ -240,8 +242,9 @@ export function WindowsPanel({ onNotify }: PanelProps) {
                     {win.tabs.length} {pluralize(win.tabs.length, 'tab')}
                   </span>
                 </div>
-                <button
-                  className="btn btn-secondary btn-sm"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   type="button"
                   disabled={busy}
                   onClick={() =>
@@ -252,7 +255,7 @@ export function WindowsPanel({ onNotify }: PanelProps) {
                   }
                 >
                   Park window
-                </button>
+                </Button>
               </header>
 
               <div className="window-card-tabs">
@@ -345,15 +348,15 @@ export function WindowsPanel({ onNotify }: PanelProps) {
               into a collection in your library.
             </p>
             <div className="dialog-actions">
-              <button
-                className="btn btn-ghost"
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => setParkConfirm(undefined)}
               >
                 Cancel
-              </button>
-              <button
-                className="btn btn-secondary"
+              </Button>
+              <Button
+                variant="secondary"
                 type="button"
                 onClick={() => {
                   const target = parkConfirm;
@@ -362,9 +365,9 @@ export function WindowsPanel({ onNotify }: PanelProps) {
                 }}
               >
                 Keep window open
-              </button>
-              <button
-                className="btn btn-danger"
+              </Button>
+              <Button
+                variant="destructive"
                 type="button"
                 onClick={() => {
                   const target = parkConfirm;
@@ -373,7 +376,7 @@ export function WindowsPanel({ onNotify }: PanelProps) {
                 }}
               >
                 Close window
-              </button>
+              </Button>
             </div>
           </div>
         </div>

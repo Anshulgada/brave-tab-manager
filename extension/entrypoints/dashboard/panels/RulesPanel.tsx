@@ -1,6 +1,7 @@
-import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { DEFAULT_PREBUILT_RULES_JSONL } from '../../../src/ai';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
 import {
   CheckIcon,
   CloseIcon,
@@ -211,40 +212,15 @@ export function RulesPanel({
 
       <div className="rules-toolbar">
         <div className="rules-toolbar-left">
-          <div className="segmented-pill-track">
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                mode === 'visual' ? 'active' : ''
-              }`}
-              aria-pressed={mode === 'visual'}
-              onClick={() => setMode('visual')}
-            >
-              {mode === 'visual' && (
-                <motion.div
-                  layoutId="rulesModePill"
-                  className="segmented-pill-slider"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="segmented-pill-text">Visual cards</span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-pill-btn ${mode === 'code' ? 'active' : ''}`}
-              aria-pressed={mode === 'code'}
-              onClick={() => setMode('code')}
-            >
-              {mode === 'code' && (
-                <motion.div
-                  layoutId="rulesModePill"
-                  className="segmented-pill-slider"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="segmented-pill-text">JSONL code</span>
-            </button>
-          </div>
+          <AnimatedTabs<'visual' | 'code'>
+            tabs={[
+              { id: 'visual', label: 'Visual cards' },
+              { id: 'code', label: 'JSONL code' },
+            ]}
+            activeTab={mode}
+            onChange={setMode}
+            layoutId="rulesModePill"
+          />
           {savedToast && (
             <span
               style={{
@@ -262,37 +238,41 @@ export function RulesPanel({
 
         <div className="rules-toolbar-right">
           {mode === 'code' && (
-            <button
-              className="btn btn-ghost btn-sm"
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               onClick={formatJSONL}
             >
               Format JSONL
-            </button>
+            </Button>
           )}
-          <button
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={resetToDefaults}
           >
             Reset to defaults
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={exportRules}
           >
             <DownloadIcon size={13} />
             Export
-          </button>
-          <button
-            className="btn btn-ghost btn-sm"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={importRules}
           >
             <UploadIcon size={13} />
             Import
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -433,13 +413,14 @@ export function RulesPanel({
               Format: One JSON object per line with <code>name</code> and{' '}
               <code>patterns</code> array.
             </span>
-            <button
-              className="btn btn-primary btn-sm"
+            <Button
+              variant="default"
+              size="sm"
               type="button"
               onClick={() => saveToStorage(rules)}
             >
               Save rules
-            </button>
+            </Button>
           </div>
         </div>
       )}

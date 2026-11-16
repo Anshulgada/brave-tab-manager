@@ -1,5 +1,8 @@
 import type { TabRecord } from '../../../src/database';
 
+import { motion } from 'framer-motion';
+import { Button } from '../../../src/components/ui/button';
+
 export interface EditTabModalProps {
   tab: TabRecord | undefined;
   title: string;
@@ -29,11 +32,15 @@ export function EditTabModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div
+      <motion.div
         className="dialog"
         role="dialog"
         aria-modal="true"
         aria-label="Edit tab"
+        initial={{ opacity: 0, scale: 0.98, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: -6 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <h2>Edit tab</h2>
         <label className="field">
@@ -54,19 +61,19 @@ export function EditTabModal({
           />
         </label>
         <div className="dialog-actions">
-          <button className="btn" type="button" onClick={onClose}>
+          <Button variant="ghost" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
+            variant="default"
             type="button"
             disabled={!title.trim() || !url.trim()}
             onClick={onSave}
           >
             Save
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

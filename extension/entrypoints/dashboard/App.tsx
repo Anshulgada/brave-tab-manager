@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { DEFAULT_PREBUILT_RULES_JSONL } from '../../src/ai';
+import { Toaster, toast } from '../../src/components/ui/toaster';
 import { TabmanDatabase, type TabRecord } from '../../src/database';
 import {
   createCollection,
@@ -57,7 +58,6 @@ import {
   LoadingState,
   NavigationRail,
   TagManagerModal,
-  ToastStack,
   Topbar,
 } from './components';
 import {
@@ -74,7 +74,6 @@ import {
   type ConfirmRequest,
   type Section,
   type SortOrder,
-  type Toast,
   VIEW_STORAGE_KEY,
   type View,
 } from './types';
@@ -109,7 +108,6 @@ export function App() {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const loadGeneration = useRef(0);
   const busyRef = useRef(false);
-  const toastId = useRef(0);
 
   const [route, setRoute] = useHashRoute();
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>();
@@ -147,7 +145,6 @@ export function App() {
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>();
 
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -166,19 +163,17 @@ export function App() {
   );
 
   const pushToast = useCallback(
-    (message: string, tone: Toast['tone'] = 'info') => {
-      const id = ++toastId.current;
-      setToasts((current) => [...current, { id, message, tone }]);
-      window.setTimeout(() => {
-        setToasts((current) => current.filter((toast) => toast.id !== id));
-      }, 4200);
+    (message: string, tone: 'info' | 'success' | 'danger' = 'info') => {
+      if (tone === 'success') {
+        toast.success(message);
+      } else if (tone === 'danger') {
+        toast.error(message);
+      } else {
+        toast.info(message);
+      }
     },
     [],
   );
-
-  const dismissToast = useCallback((id: number) => {
-    setToasts((current) => current.filter((toast) => toast.id !== id));
-  }, []);
 
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -1316,7 +1311,7 @@ export function App() {
 
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <Toaster />
     </div>
   );
 }

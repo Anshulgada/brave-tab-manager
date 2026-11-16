@@ -4,6 +4,9 @@ import type {
   ProviderProfile,
   ProviderSettings,
 } from '../../../src/ai';
+import { BorderBeam } from '../../../src/components/motion/border-beam';
+import { CardSpotlight } from '../../../src/components/motion/card-spotlight';
+import { NumberTicker } from '../../../src/components/motion/number-ticker';
 import {
   type ComputeDeviceChoice,
   detectHardwareProfile,
@@ -19,6 +22,7 @@ import {
   type HardwareBenchmarkReport,
   runHardwareBenchmark,
 } from '../../../src/hardware-benchmark';
+import { cn } from '../../../src/lib/utils';
 import { sendSwitchboardRequest } from '../../../src/runtime';
 import {
   CheckIcon,
@@ -182,14 +186,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
   });
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [downloadedRepos, setDownloadedRepos] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem('tabman.downloadedModels');
-      return raw ? (JSON.parse(raw) as string[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [downloadedRepos, setDownloadedRepos] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -858,9 +855,12 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                         opacity: 0.8,
                         fontSize: '11px',
                         marginLeft: '4px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
                       }}
                     >
-                      {opsPerSec.toLocaleString()} ops/s
+                      <NumberTicker value={opsPerSec} />
+                      <span style={{ marginLeft: '3px' }}>ops/s</span>
                     </span>
                     {isFastest && (
                       <span
@@ -900,10 +900,21 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
             );
 
             return (
-              <article
+              <CardSpotlight
                 key={hfModel.id}
-                className={isActive ? 'hf-model-card active' : 'hf-model-card'}
+                className={cn(
+                  'hf-model-card relative overflow-hidden transition-all duration-200',
+                  isActive ? 'active ring-1 ring-brand' : '',
+                )}
               >
+                {isActive && (
+                  <BorderBeam
+                    size={70}
+                    duration={6}
+                    colorFrom="var(--brand)"
+                    colorTo="#60a5fa"
+                  />
+                )}
                 <div className="hf-model-card-head">
                   <div className="hf-model-title">
                     <div className="hf-model-title-row">
@@ -989,7 +1000,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     </span>
                   </div>
                 </div>
-              </article>
+              </CardSpotlight>
             );
           })}
         </div>
