@@ -7,3 +7,6 @@
 @import "./styles/settings.css";
 @import "./styles/overlays.css";
 @import "./styles/theme.css";
+
+@tailwind components;
+@tailwind utilities;
