@@ -33,16 +33,33 @@ def _git(*args: str) -> str:
 
 
 def changed_paths(check_all: bool) -> set[str]:
-    """Return repository-relative paths included in the push."""
+    """Return repository-relative paths included in the commit or push."""
     if check_all:
         return {"pyproject.toml", "extension/package.json", "packages/schema/"}
 
+    # Staged changes take precedence in pre-commit hooks
+    try:
+        staged_output = _git("diff", "--cached", "--name-only")
+        staged = {
+            path.replace("\\", "/") for path in staged_output.splitlines() if path
+        }
+        if staged:
+            return staged
+    except Exception:
+        pass
+
     from_ref = os.environ.get("PRE_COMMIT_FROM_REF", "")
     if not from_ref or from_ref == ZERO_REF:
-        from_ref = _git("merge-base", "HEAD", "origin/main")
+        try:
+            from_ref = _git("merge-base", "HEAD", "origin/main")
+        except Exception:
+            from_ref = "HEAD~1"
 
-    output = _git("diff", "--name-only", f"{from_ref}..HEAD")
-    return {path.replace("\\", "/") for path in output.splitlines() if path}
+    try:
+        output = _git("diff", "--name-only", f"{from_ref}..HEAD")
+        return {path.replace("\\", "/") for path in output.splitlines() if path}
+    except Exception:
+        return set()
 
 
 def _matches(paths: set[str], prefixes: tuple[str, ...]) -> bool:
