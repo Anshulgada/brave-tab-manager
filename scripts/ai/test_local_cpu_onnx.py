@@ -15,11 +15,11 @@ import gc
 import os
 import time
 
-import numpy as np  # ty: ignore[unresolved-import]
-import onnxruntime as ort  # ty: ignore[unresolved-import]
-import psutil  # ty: ignore[unresolved-import]
-from huggingface_hub import hf_hub_download  # ty: ignore[unresolved-import]
-from tokenizers import Tokenizer  # ty: ignore[unresolved-import]
+import numpy as np  # ty: ignore[import-not-found]
+import onnxruntime as ort  # ty: ignore[import-not-found]
+import psutil  # ty: ignore[import-not-found]
+from huggingface_hub import hf_hub_download  # ty: ignore[import-not-found]
+from tokenizers import Tokenizer  # ty: ignore[import-not-found]
 
 REPO_ID = "Anshulgada/tabman-embeddinggemma-2-270m"
 

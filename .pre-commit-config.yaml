@@ -43,14 +43,14 @@ repos:
 
       - id: biome
         name: Biome check
-        entry: scripts/run_if_present.sh bun --cwd extension run check
+        entry: scripts/run_if_present.sh bun run --cwd extension check
         language: system
         pass_filenames: false
         files: ^extension/
 
       - id: typescript
         name: TypeScript type check
-        entry: scripts/run_if_present.sh bun --cwd extension run typecheck
+        entry: scripts/run_if_present.sh bun run --cwd extension typecheck
         language: system
         pass_filenames: false
         files: ^extension/

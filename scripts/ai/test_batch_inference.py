@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np  # ty: ignore[unresolved-import]
+import numpy as np  # ty: ignore[import-not-found]
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:

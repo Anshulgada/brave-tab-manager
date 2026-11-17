@@ -24,8 +24,7 @@ import {
   ZapIcon,
 } from '../../../src/ui/icons';
 import { modifierKey } from '../../../src/ui/platform';
-
-const CURRENT_VERSION = '0.6.6';
+import { APP_VERSION } from '../../../src/version';
 
 export function SettingsPanel({
   settings,
@@ -156,8 +155,8 @@ export function SettingsPanel({
       });
       if (resp.ok) {
         const data = (await resp.json()) as { info?: { version?: string } };
-        const latest = data.info?.version || CURRENT_VERSION;
-        const currentParts = CURRENT_VERSION.split('.').map(Number);
+        const latest = data.info?.version || APP_VERSION;
+        const currentParts = APP_VERSION.split('.').map(Number);
         const latestParts = latest.split('.').map(Number);
         let hasUpdate = false;
         for (
@@ -173,18 +172,18 @@ export function SettingsPanel({
           }
           if (l < c) break;
         }
-        setUpdateStatus({ current: CURRENT_VERSION, latest, hasUpdate });
+        setUpdateStatus({ current: APP_VERSION, latest, hasUpdate });
       } else {
         setUpdateStatus({
-          current: CURRENT_VERSION,
-          latest: CURRENT_VERSION,
+          current: APP_VERSION,
+          latest: APP_VERSION,
           hasUpdate: false,
         });
       }
     } catch {
       setUpdateStatus({
-        current: CURRENT_VERSION,
-        latest: CURRENT_VERSION,
+        current: APP_VERSION,
+        latest: APP_VERSION,
         hasUpdate: false,
       });
     } finally {
@@ -241,7 +240,7 @@ export function SettingsPanel({
             {updateChecking ? 'Checking Updates...' : 'Check for Updates'}
           </Button>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            v{CURRENT_VERSION} · CLI Vault &amp; WASM Engine
+            v{APP_VERSION} · CLI Vault &amp; WASM Engine
           </span>
           {updateStatus && (
             <div
@@ -577,7 +576,7 @@ export function SettingsPanel({
             <DialogTitle>Upgrade Tabman</DialogTitle>
             <DialogDescription>
               Are you sure you want to upgrade Tabman from{' '}
-              <strong className="text-foreground">v{CURRENT_VERSION}</strong> to{' '}
+              <strong className="text-foreground">v{APP_VERSION}</strong> to{' '}
               <strong className="text-brand">v{updateStatus?.latest}</strong>?
             </DialogDescription>
           </DialogHeader>
