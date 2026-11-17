@@ -352,11 +352,11 @@ uv run python scripts\ci_local.py extension
 uv run python scripts\ci_local.py changed
 ```
 
-The pre-push hook runs the same gates for the files you are about to push, so a branch cannot reach `main` unchecked. Every script in `scripts/` uses rich-click, so they all share the same look and the same options:
+The pre-commit hook runs the same path-filtered gates for the files you are about to commit, so broken code or unbuildable extensions cannot be committed. Every script in `scripts/` uses rich-click, so they all share the same look and the same options:
 
 ```powershell
 uv run python scripts\ci_local.py --help
-uv run python scripts\pre_push.py --help
+uv run python scripts\ci_gates.py --help
 uv run python scripts\preview_ui.py --help
 ```
 

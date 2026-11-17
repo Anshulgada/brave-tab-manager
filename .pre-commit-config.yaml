@@ -77,7 +77,7 @@ repos:
 
       - id: path-filtered-gates
         name: Path-filtered build and test gates
-        entry: uv run python scripts/pre_push.py
+        entry: uv run python scripts/ci_gates.py
         language: system
         pass_filenames: false
         stages: [pre-commit]

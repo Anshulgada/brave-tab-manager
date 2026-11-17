@@ -1,4 +1,4 @@
-"""Run path-filtered pre-push gates for the Python and extension stacks.
+"""Run path-filtered pre-commit gates for the Python and extension stacks.
 
 The gates mirror the continuous integration jobs, so a branch is verified the
 same way it will be verified on main without spending any runner minutes.
@@ -82,7 +82,7 @@ def _run(command: list[str], cwd: Path = ROOT) -> None:
     help="Run every gate instead of only the ones for the changed paths.",
 )
 def main(check_all: bool) -> None:
-    """Run the pre-push gates for the paths in the outgoing commit."""
+    """Run the pre-commit gates for the paths in the outgoing commit."""
     paths = changed_paths(check_all)
     python_changed = _matches(
         paths,
