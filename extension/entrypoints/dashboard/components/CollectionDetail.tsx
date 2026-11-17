@@ -76,15 +76,16 @@ export function CollectBar({
           open in the browser.
         </span>
       </div>
-      <button
-        className="btn btn-primary"
+      <Button
+        variant="secondary"
+        size="sm"
         type="button"
         disabled={busy}
         onClick={onCollect}
       >
         <ZapIcon size={15} />
         Collect all open tabs
-      </button>
+      </Button>
     </section>
   );
 }
@@ -110,9 +111,9 @@ export function EmptyCollection({
           : 'Park tabs from the side panel, or import a Tabman JSON export to fill it in one go.'}
       </p>
       {filtered && (
-        <button className="btn" type="button" onClick={onClear}>
+        <Button variant="outline" size="sm" type="button" onClick={onClear}>
           Clear filters
-        </button>
+        </Button>
       )}
     </section>
   );
@@ -184,9 +185,7 @@ export function CollectionDetail({
   }, []);
 
   return (
-    <>
-      <CollectBar busy={busy} onCollect={onCollect} />
-
+    <div className="collection-detail">
       <section className="collection-head">
         <div className="collection-title">
           {renaming ? (
@@ -204,16 +203,17 @@ export function CollectionDetail({
                   }
                 }}
               />
-              <button className="btn btn-primary btn-sm" type="submit">
+              <Button variant="default" size="sm" type="submit">
                 Save
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 onClick={onCancelRename}
               >
                 Cancel
-              </button>
+              </Button>
             </form>
           ) : (
             <button
@@ -277,6 +277,8 @@ export function CollectionDetail({
         </div>
       </section>
 
+      <CollectBar busy={busy} onCollect={onCollect} />
+
       <section className="collection-toolbar-redesigned">
         <div className="collection-toolbar-main">
           <div className="collection-toolbar-left">
@@ -307,19 +309,21 @@ export function CollectionDetail({
                 </kbd>
               )}
               {query && (
-                <button
+                <Button
                   type="button"
-                  className="btn btn-ghost btn-icon btn-sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => onQueryChange('')}
                   aria-label="Clear search"
                 >
                   <CloseIcon size={12} />
-                </button>
+                </Button>
               )}
             </div>
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost btn-sm"
+              variant="ghost"
+              size="sm"
               onClick={onToggleSelectAll}
               title={
                 selectedTabs.size === visibleTabs.length &&
@@ -332,7 +336,7 @@ export function CollectionDetail({
               visibleTabs.length > 0
                 ? 'Deselect all'
                 : 'Select all'}
-            </button>
+            </Button>
           </div>
 
           <div className="collection-toolbar-right">
@@ -474,6 +478,6 @@ export function CollectionDetail({
           )}
         </AnimatePresence>
       )}
-    </>
+    </div>
   );
 }

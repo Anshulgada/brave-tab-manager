@@ -7,6 +7,7 @@ import type {
 import { BorderBeam } from '../../../src/components/motion/border-beam';
 import { CardSpotlight } from '../../../src/components/motion/card-spotlight';
 import { NumberTicker } from '../../../src/components/motion/number-ticker';
+import { Button } from '../../../src/components/ui/button';
 import {
   type ComputeDeviceChoice,
   detectHardwareProfile,
@@ -808,21 +809,23 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               </Tooltip>
 
               <Tooltip content="Run empirical matrix benchmark across all detected local GPUs, NPU, and CPU to verify real execution latency.">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
-                  className="btn btn-sm btn-ghost benchmark-btn"
+                  className="benchmark-btn"
                   style={{ marginLeft: 'auto', gap: '6px' }}
                   onClick={() => void handleTriggerBenchmark()}
                   disabled={isBenchmarking}
                 >
                   <RefreshIcon
-                    size={12}
+                    size={13}
                     className={isBenchmarking ? 'benchmark-spin' : ''}
                   />
                   <span>
                     {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
                   </span>
-                </button>
+                </Button>
               </Tooltip>
             </div>
           </div>
@@ -919,6 +922,19 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                   <div className="hf-model-title">
                     <div className="hf-model-title-row">
                       <strong>{hfModel.name}</strong>
+                      {isRecommended && (
+                        <span
+                          className="hf-badge"
+                          style={{
+                            background:
+                              'color-mix(in srgb, var(--brand) 15%, transparent)',
+                            color: 'var(--brand-text)',
+                            borderColor: 'var(--brand)',
+                          }}
+                        >
+                          Recommended
+                        </span>
+                      )}
                     </div>
                     <span>{hfModel.tier}</span>
                   </div>
@@ -929,27 +945,15 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                         Active
                       </span>
                     ) : (
-                      <button
-                        className="btn btn-sm"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         type="button"
                         disabled={busy}
                         onClick={() => void handleActivateHfModel(hfModel)}
                       >
                         Use Model
-                      </button>
-                    )}
-                    {isRecommended && (
-                      <span
-                        className="hf-badge"
-                        style={{
-                          background:
-                            'color-mix(in srgb, var(--brand) 15%, transparent)',
-                          color: 'var(--brand-text)',
-                          borderColor: 'var(--brand)',
-                        }}
-                      >
-                        Recommended
-                      </span>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -1025,16 +1029,18 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
             placeholder={storageLocations.current}
             title="Local folder path where models are saved"
           />
-          <button
-            className="btn btn-sm"
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             onClick={handleResetStoragePath}
             title="Reset to recommended default for this OS"
           >
             Reset to OS Default
-          </button>
-          <button
-            className="btn btn-sm"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             disabled={isScanning}
             onClick={() => void handleScanModels()}
@@ -1042,7 +1048,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
           >
             <SearchIcon size={13} />
             {isScanning ? 'Scanning...' : 'Scan Machine for Models'}
-          </button>
+          </Button>
         </div>
         {scanStatus && (
           <div className="storage-scan-result">
@@ -1071,14 +1077,15 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
             Active & Custom Providers
           </h2>
           {providers.length > 0 && !adding && (
-            <button
-              className="btn btn-sm"
+            <Button
+              variant="outline"
+              size="sm"
               type="button"
               onClick={() => setAdding(true)}
             >
               <PlusIcon size={14} />
               Add a provider
-            </button>
+            </Button>
           )}
         </div>
 
@@ -1092,14 +1099,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               Select an official Hugging Face model above for zero-dependency
               local clustering, or add a custom API provider endpoint.
             </p>
-            <button
-              className="btn btn-primary"
+            <Button
+              variant="default"
               type="button"
               onClick={() => setAdding(true)}
             >
               <PlusIcon size={15} />
               Add a provider
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1126,8 +1133,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     In use
                   </span>
                 ) : (
-                  <button
-                    className="btn btn-sm"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     disabled={busy}
                     onClick={() =>
@@ -1143,7 +1151,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     }
                   >
                     Use
-                  </button>
+                  </Button>
                 )}
               </header>
 
@@ -1247,16 +1255,18 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       value={keyDraft}
                       onChange={(event) => setKeyDraft(event.target.value)}
                     />
-                    <button
-                      className="btn btn-sm"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       disabled={busy || !keyDraft.trim()}
                       onClick={() => void saveKey()}
                     >
                       Save key
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-icon btn-sm"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       type="button"
                       title="Forget the stored key"
                       aria-label="Forget the stored key"
@@ -1273,7 +1283,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       }
                     >
                       <CloseIcon size={14} />
-                    </button>
+                    </Button>
                   </div>
 
                   <label className="settings-toggle provider-remember">
@@ -1297,8 +1307,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     ? '100% private · Neural clustering executes locally in your browser'
                     : 'Session only unless you turn the switch on.'}
                 </span>
-                <button
-                  className="btn btn-danger btn-sm"
+                <Button
+                  variant="destructive"
+                  size="sm"
                   type="button"
                   disabled={busy}
                   onClick={() =>
@@ -1315,7 +1326,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 >
                   <TrashIcon size={14} />
                   Remove
-                </button>
+                </Button>
               </footer>
             </article>
           );
@@ -1427,8 +1438,8 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               </label>
             </div>
             <div className="provider-actions">
-              <button
-                className="btn btn-primary"
+              <Button
+                variant="default"
                 type="submit"
                 disabled={
                   busy || !name.trim() || !baseUrl.trim() || !model.trim()
@@ -1436,9 +1447,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               >
                 <PlusIcon size={15} />
                 Add provider
-              </button>
-              <button
-                className="btn btn-ghost"
+              </Button>
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => {
                   setAdding(false);
@@ -1446,7 +1457,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 }}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         )}

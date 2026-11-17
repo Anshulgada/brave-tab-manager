@@ -13,6 +13,7 @@ import {
   RenameIcon,
   SettingsIcon,
   ShieldIcon,
+  SparkIcon,
   TrashIcon,
   WindowIcon,
   ZapIcon,
@@ -112,7 +113,7 @@ export function NavigationRail({
           type="button"
           onClick={() => onNavigate('organize')}
         >
-          <LayersIcon />
+          <SparkIcon />
           <span>Organize</span>
         </motion.button>
         <motion.button

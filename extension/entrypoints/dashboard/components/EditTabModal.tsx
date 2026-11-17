@@ -32,7 +32,7 @@ export function EditTabModal({
         onClick={onClose}
       />
       <motion.div
-        className="dialog"
+        className="dialog dialog-wide"
         role="dialog"
         aria-modal="true"
         aria-label="Edit tab"

@@ -59,7 +59,7 @@ export function CollectModal({
         onClick={onClose}
       />
       <motion.div
-        className="dialog"
+        className="dialog dialog-wide"
         role="dialog"
         aria-modal="true"
         aria-label="Collect open tabs"

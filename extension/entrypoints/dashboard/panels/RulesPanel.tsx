@@ -383,15 +383,16 @@ export function RulesPanel({
                 }
               }}
             />
-            <button
+            <Button
               type="button"
-              className="btn btn-primary btn-sm"
+              variant="default"
+              size="sm"
               disabled={!newGroupName.trim()}
               onClick={addGroup}
             >
               <PlusIcon size={14} />
               Add group
-            </button>
+            </Button>
           </div>
         </div>
       ) : (

@@ -4,12 +4,14 @@
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  margin-top: 4px;
 }
 
 .card-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-top: 4px;
 }
 
 .tab-card {
@@ -359,9 +361,11 @@
 .welcome-steps span {
   align-items: center;
   background: var(--surface-muted);
+  border: 1px solid var(--border);
   border-radius: 50%;
   color: var(--text-muted);
   display: inline-flex;
+  flex-shrink: 0;
   font-size: 11px;
   font-weight: 600;
   height: 20px;

@@ -916,14 +916,15 @@ export function OrganizePanel({
           >
             <div className="dialog-title">
               <h2>Edit Tab in Proposal</h2>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 type="button"
-                className="btn btn-ghost btn-icon btn-sm"
                 onClick={() => setEditingTabItem(null)}
                 aria-label="Close"
               >
                 <CloseIcon size={14} />
-              </button>
+              </Button>
             </div>
 
             <div className="field">
@@ -984,16 +985,16 @@ export function OrganizePanel({
             )}
 
             <div className="dialog-actions">
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="btn btn-ghost"
                 onClick={() => setEditingTabItem(null)}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="default"
                 type="button"
-                className="btn btn-primary"
                 onClick={() => {
                   let targetGroup = editTabGroup;
                   if (showModalNewGroupInput && modalNewGroupName.trim()) {
@@ -1024,7 +1025,7 @@ export function OrganizePanel({
                 }}
               >
                 Save changes
-              </button>
+              </Button>
             </div>
           </motion.div>
         </div>

@@ -325,7 +325,6 @@ export function WindowsPanel({ onNotify }: PanelProps) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="btn-sm"
                           type="button"
                           title="Close tab"
                           disabled={busy}

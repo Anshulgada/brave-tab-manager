@@ -113,27 +113,31 @@ export function TagManagerModal({
                       />
                     ))}
                   </div>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    type="button"
-                    disabled={!renamingTagName.trim()}
-                    onClick={() => {
-                      void onUpdateTag(
-                        tag.id,
-                        renamingTagName,
-                        renamingTagColor || null,
-                      ).then(() => setRenamingTagId(undefined));
-                    }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    type="button"
-                    onClick={() => setRenamingTagId(undefined)}
-                  >
-                    Cancel
-                  </button>
+                  <div className="tag-actions">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      type="button"
+                      disabled={!renamingTagName.trim()}
+                      onClick={() => {
+                        void onUpdateTag(
+                          tag.id,
+                          renamingTagName,
+                          renamingTagColor || null,
+                        ).then(() => setRenamingTagId(undefined));
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      onClick={() => setRenamingTagId(undefined)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <>
@@ -151,7 +155,6 @@ export function TagManagerModal({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="btn-sm"
                       type="button"
                       title="Rename tag"
                       aria-label={`Rename ${tag.name}`}
@@ -166,7 +169,6 @@ export function TagManagerModal({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="btn-sm"
                       type="button"
                       title="Delete tag"
                       aria-label={`Delete ${tag.name}`}

@@ -326,46 +326,46 @@ export function TabRow({
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className="btn btn-ghost btn-icon btn-sm"
+          className="tab-action-btn"
           type="button"
           title="Restore this tab"
           aria-label="Restore this tab"
           onClick={onRestore}
         >
-          <ArrowUpRightIcon size={15} />
+          <ArrowUpRightIcon size={14} />
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className={`btn btn-ghost btn-icon btn-sm ${tab.pinned ? 'is-pinned' : ''}`}
+          className={`tab-action-btn ${tab.pinned ? 'is-pinned' : ''}`}
           type="button"
           title={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
           aria-label={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
           onClick={onPin}
         >
-          {tab.pinned ? <PinSlashIcon size={15} /> : <PinIcon size={15} />}
+          {tab.pinned ? <PinSlashIcon size={14} /> : <PinIcon size={14} />}
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className="btn btn-ghost btn-icon btn-sm"
+          className="tab-action-btn"
           type="button"
           title="Edit this tab"
           aria-label="Edit this tab"
           onClick={onEdit}
         >
-          <PencilIcon size={15} />
+          <PencilIcon size={14} />
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className="btn btn-ghost btn-icon btn-sm"
+          className="tab-action-btn tab-action-delete"
           type="button"
           title="Delete this tab"
           aria-label="Delete this tab"
           onClick={onDelete}
         >
-          <CloseIcon size={15} />
+          <CloseIcon size={14} />
         </motion.button>
       </div>
     </motion.article>

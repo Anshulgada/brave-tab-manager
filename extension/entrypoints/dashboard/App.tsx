@@ -560,20 +560,26 @@ export function App() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    const replace = window.confirm(
-      'Replace the entire local library with this export? This cannot be undone.',
-    );
-    if (replace) {
-      await runMutation(async () => {
-        const input: unknown = JSON.parse(await file.text());
-        await importLibrary(database, input, true);
-      }, 'Library replaced from export.');
-      return;
+    try {
+      const text = await file.text();
+      const input: unknown = JSON.parse(text);
+      requestConfirm({
+        title: 'Import library backup',
+        body: 'Replace the entire local library with this export? Existing items not in this file will be overwritten.',
+        confirmLabel: 'Replace Library',
+        tone: 'danger',
+        onConfirm: () => {
+          void runMutation(async () => {
+            await importLibrary(database, input, true);
+          }, 'Library replaced from export.');
+        },
+      });
+    } catch (err) {
+      pushToast(
+        err instanceof Error ? err.message : 'Invalid backup JSON file',
+        'danger',
+      );
     }
-    await runMutation(async () => {
-      const input: unknown = JSON.parse(await file.text());
-      await importLibrary(database, input, false);
-    }, 'Export merged into the library.');
   };
 
   const downloadExport = useCallback(async () => {
@@ -868,12 +874,18 @@ export function App() {
           }}
           onTrashCollection={(coll) => {
             setMenuFor(undefined);
-            if (window.confirm(`Move "${coll.name}" to the trash?`)) {
-              void runMutation(
-                () => setCollectionStatus(database, [coll.id], 'trashed'),
-                'Collection moved to trash.',
-              );
-            }
+            requestConfirm({
+              title: 'Move collection to trash?',
+              body: `Are you sure you want to move "${coll.name}" to the trash? You can restore it later from Trash.`,
+              confirmLabel: 'Move to trash',
+              tone: 'danger',
+              onConfirm: () => {
+                void runMutation(
+                  () => setCollectionStatus(database, [coll.id], 'trashed'),
+                  'Collection moved to trash.',
+                );
+              },
+            });
           }}
           dropTargetId={dropTargetId}
           onDragOver={(id, e) => {
@@ -945,16 +957,18 @@ export function App() {
                       navigateTo('collection', id);
                     }}
                     onDeleteCollections={(ids) => {
-                      if (
-                        window.confirm(
-                          `Move ${ids.length} ${pluralize(ids.length, 'collection')} to the trash?`,
-                        )
-                      ) {
-                        void runMutation(
-                          () => setCollectionStatus(database, ids, 'trashed'),
-                          `${pluralize(ids.length, 'collection')} moved to trash.`,
-                        );
-                      }
+                      requestConfirm({
+                        title: 'Move collections to trash?',
+                        body: `Move ${ids.length} ${pluralize(ids.length, 'collection')} to the trash? You can restore them later from Trash.`,
+                        confirmLabel: 'Move to trash',
+                        tone: 'danger',
+                        onConfirm: () => {
+                          void runMutation(
+                            () => setCollectionStatus(database, ids, 'trashed'),
+                            `${pluralize(ids.length, 'collection')} moved to trash.`,
+                          );
+                        },
+                      });
                     }}
                   />
                 ) : currentSection === 'windows' ? (
