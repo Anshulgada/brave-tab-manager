@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import { CustomSelect } from '../../../src/ui/CustomSelect';
 import {
@@ -67,14 +68,15 @@ export function BulkBar({
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
           />
-          <button
-            className="btn btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             type="submit"
             disabled={busy || !tagName.trim()}
           >
             <TagIcon size={14} />
             Tag
-          </button>
+          </Button>
         </form>
         {showSuggestions && suggestions.length > 0 && (
           <ul className="tag-suggestions">
@@ -116,33 +118,36 @@ export function BulkBar({
           }}
         />
       )}
-      <button
-        className="btn btn-sm"
+      <Button
+        variant="secondary"
+        size="sm"
         type="button"
         disabled={busy}
         onClick={onRestore}
       >
         <RestoreIcon size={14} />
         Restore
-      </button>
-      <button
-        className="btn btn-danger btn-sm"
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
         type="button"
         disabled={busy}
         onClick={onDelete}
       >
         <TrashIcon size={14} />
         Delete
-      </button>
-      <button
-        className="btn btn-ghost btn-icon btn-sm"
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
         type="button"
         title="Clear selection"
         aria-label="Clear selection"
         onClick={onClear}
       >
         <CloseIcon size={14} />
-      </button>
+      </Button>
     </section>
   );
 }

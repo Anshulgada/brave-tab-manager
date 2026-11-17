@@ -1,14 +1,31 @@
-import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../src/components/ui/dialog';
+import { Switch } from '../../../src/components/ui/switch';
+import { testIframelyApiKey } from '../../../src/iframely';
 import type { Settings } from '../../../src/schema';
 import {
+  ArrowUpRightIcon,
+  CheckIcon,
+  CloseIcon,
   FolderIcon,
   GridIcon,
+  RefreshIcon,
   ShieldIcon,
+  SparkIcon,
   SunIcon,
   ZapIcon,
 } from '../../../src/ui/icons';
 import { modifierKey } from '../../../src/ui/platform';
+import { APP_VERSION } from '../../../src/version';
 
 export function SettingsPanel({
   settings,
@@ -38,6 +55,23 @@ export function SettingsPanel({
 
   useEffect(() => setDraft(settings), [settings]);
 
+  const [iframelyTesting, setIframelyTesting] = useState(false);
+  const [iframelyStatus, setIframelyStatus] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<{
+    current: string;
+    latest: string;
+    hasUpdate: boolean;
+    failed?: boolean;
+  } | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateLog, setUpdateLog] = useState<string | null>(null);
+
   const handleUpdate = (updater: (prev: Settings) => Settings) => {
     setDraft((prev) => {
       const next = updater(prev);
@@ -46,15 +80,241 @@ export function SettingsPanel({
     });
   };
 
+  const handleConfirmUpgrade = async () => {
+    setIsUpdating(true);
+    setUpdateLog(null);
+    try {
+      const ch = (
+        globalThis as unknown as {
+          chrome?: {
+            runtime?: {
+              sendNativeMessage?: (
+                host: string,
+                msg: unknown,
+                cb: (resp: { status?: string; message?: string }) => void,
+              ) => void;
+            };
+          };
+        }
+      ).chrome;
+
+      if (ch?.runtime?.sendNativeMessage) {
+        ch.runtime.sendNativeMessage(
+          'com.tabman.sidecar',
+          { type: 'upgrade' },
+          (resp) => {
+            setIsUpdating(false);
+            if (resp?.status === 'ok') {
+              setUpdateLog(
+                resp.message || 'Upgrade successful! Restart Tabman.',
+              );
+            } else {
+              setUpdateLog(
+                'To complete: Run "tabman update" or "tabman upgrade" in your terminal.',
+              );
+            }
+          },
+        );
+      } else {
+        await new Promise((r) => setTimeout(r, 600));
+        setIsUpdating(false);
+        setUpdateLog(
+          'Run "tabman update" in your terminal to upgrade automatically.',
+        );
+      }
+    } catch {
+      setIsUpdating(false);
+      setUpdateLog(
+        'Run "tabman update" in your terminal to upgrade automatically.',
+      );
+    }
+  };
+
+  const handleTestIframely = async () => {
+    if (!draft.iframelyApiKey) {
+      setIframelyStatus({
+        ok: false,
+        message: 'Enter your API key first',
+      });
+      return;
+    }
+    setIframelyTesting(true);
+    setIframelyStatus(null);
+    try {
+      const result = await testIframelyApiKey(draft.iframelyApiKey);
+      setIframelyStatus(result);
+    } finally {
+      setIframelyTesting(false);
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    setUpdateChecking(true);
+    setUpdateStatus(null);
+    try {
+      const resp = await fetch('https://pypi.org/pypi/tabman/json', {
+        headers: { Accept: 'application/json' },
+      });
+      if (resp.ok) {
+        const data = (await resp.json()) as { info?: { version?: string } };
+        const latest = data.info?.version || APP_VERSION;
+        const currentParts = APP_VERSION.split('.').map(Number);
+        const latestParts = latest.split('.').map(Number);
+        let hasUpdate = false;
+        for (
+          let i = 0;
+          i < Math.max(currentParts.length, latestParts.length);
+          i++
+        ) {
+          const c = currentParts[i] || 0;
+          const l = latestParts[i] || 0;
+          if (l > c) {
+            hasUpdate = true;
+            break;
+          }
+          if (l < c) break;
+        }
+        setUpdateStatus({
+          current: APP_VERSION,
+          latest,
+          hasUpdate,
+          failed: false,
+        });
+      } else {
+        setUpdateStatus({
+          current: APP_VERSION,
+          latest: APP_VERSION,
+          hasUpdate: false,
+          failed: true,
+        });
+      }
+    } catch {
+      setUpdateStatus({
+        current: APP_VERSION,
+        latest: APP_VERSION,
+        hasUpdate: false,
+        failed: true,
+      });
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
   return (
     <section className="settings">
-      <header className="settings-head">
-        <p className="eyebrow">Preferences</p>
-        <h1>Appearance and privacy</h1>
-        <p className="settings-intro">
-          Tabman keeps everything in this browser profile. Nothing is uploaded,
-          and no page content is ever scraped.
-        </p>
+      <header
+        className="settings-head"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
+        <div>
+          <p className="eyebrow">Preferences</p>
+          <h1>Appearance and privacy</h1>
+          <p className="settings-intro">
+            Tabman keeps everything in this browser profile. Nothing is
+            uploaded, and no page content is ever scraped.
+          </p>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: '6px',
+          }}
+        >
+          <Button
+            type="button"
+            variant="default"
+            disabled={updateChecking}
+            onClick={() => void handleCheckUpdates()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '9px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+            }}
+          >
+            <RefreshIcon
+              size={14}
+              className={updateChecking ? 'benchmark-spin' : ''}
+            />
+            {updateChecking ? 'Checking Updates...' : 'Check for Updates'}
+          </Button>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            v{APP_VERSION} · CLI Vault &amp; WASM Engine
+          </span>
+          {updateStatus && (
+            <div
+              style={{
+                marginTop: '4px',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-sm)',
+                background: updateStatus.failed
+                  ? 'color-mix(in srgb, #ef4444 14%, transparent)'
+                  : updateStatus.hasUpdate
+                    ? 'color-mix(in srgb, var(--brand) 14%, transparent)'
+                    : 'color-mix(in srgb, var(--success) 14%, transparent)',
+                border: `1px solid ${
+                  updateStatus.failed
+                    ? '#ef4444'
+                    : updateStatus.hasUpdate
+                      ? 'var(--brand)'
+                      : 'var(--success)'
+                }`,
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              {updateStatus.failed ? (
+                <span
+                  style={{
+                    color: '#ef4444',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  <CloseIcon size={12} /> Check failed
+                </span>
+              ) : updateStatus.hasUpdate ? (
+                <>
+                  <span style={{ color: 'var(--brand-text)', fontWeight: 600 }}>
+                    v{updateStatus.latest} available!
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    onClick={() => setShowUpdateModal(true)}
+                  >
+                    Upgrade
+                  </Button>
+                </>
+              ) : (
+                <span
+                  style={{
+                    color: 'var(--success)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  <CheckIcon size={12} /> Up to date
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="settings-grid">
@@ -68,41 +328,22 @@ export function SettingsPanel({
               <p>Match the browser or pick a side.</p>
             </div>
           </div>
-          <div className="segmented-pill-track">
-            {(['system', 'light', 'dark'] as const).map((theme) => (
-              <button
-                type="button"
-                key={theme}
-                className={`segmented-pill-btn ${
-                  draft.theme === theme ? 'active' : ''
-                }`}
-                aria-pressed={draft.theme === theme}
-                onClick={() => {
-                  onApplyTheme(theme);
-                  handleUpdate((prev) => ({ ...prev, theme }));
-                }}
-              >
-                {draft.theme === theme && (
-                  <motion.div
-                    layoutId="settingsThemePill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  {theme === 'system'
-                    ? 'System'
-                    : theme === 'light'
-                      ? 'Light'
-                      : 'Dark'}
-                </span>
-              </button>
-            ))}
-          </div>
+          <AnimatedTabs<'system' | 'light' | 'dark'>
+            tabs={[
+              { id: 'system', label: 'System' },
+              { id: 'light', label: 'Light' },
+              { id: 'dark', label: 'Dark' },
+            ]}
+            activeTab={draft.theme}
+            onChange={(theme: 'system' | 'light' | 'dark') => {
+              onApplyTheme(theme);
+              handleUpdate((prev) => ({ ...prev, theme }));
+            }}
+            layoutId="settingsThemePill"
+            size="default"
+            className="w-full flex"
+            tabClassName="flex-1"
+          />
         </div>
 
         <div className="settings-card">
@@ -115,36 +356,20 @@ export function SettingsPanel({
               <p>How saved collections open.</p>
             </div>
           </div>
-          <div className="segmented-pill-track">
-            {(['grid', 'list'] as const).map((defaultView) => (
-              <button
-                type="button"
-                key={defaultView}
-                className={`segmented-pill-btn ${
-                  draft.defaultView === defaultView ? 'active' : ''
-                }`}
-                aria-pressed={draft.defaultView === defaultView}
-                onClick={() =>
-                  handleUpdate((prev) => ({ ...prev, defaultView }))
-                }
-              >
-                {draft.defaultView === defaultView && (
-                  <motion.div
-                    layoutId="settingsViewPill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  {defaultView === 'grid' ? 'Grid' : 'List'}
-                </span>
-              </button>
-            ))}
-          </div>
+          <AnimatedTabs<'grid' | 'list'>
+            tabs={[
+              { id: 'grid', label: 'Grid' },
+              { id: 'list', label: 'List' },
+            ]}
+            activeTab={draft.defaultView}
+            onChange={(defaultView: 'grid' | 'list') =>
+              handleUpdate((prev) => ({ ...prev, defaultView }))
+            }
+            layoutId="settingsViewPill"
+            size="default"
+            className="w-full flex"
+            tabClassName="flex-1"
+          />
         </div>
 
         <div className="settings-card">
@@ -157,22 +382,19 @@ export function SettingsPanel({
               <p>Control what an optional AI request may contain.</p>
             </div>
           </div>
-          <label className="settings-toggle">
+          <div className="settings-toggle">
             <span>Include full URLs in AI requests</span>
-            <input
-              className="switch"
-              type="checkbox"
-              role="switch"
-              aria-checked={draft.includeFullUrlInAi}
+            <Switch
               checked={draft.includeFullUrlInAi}
-              onChange={(event) =>
+              onCheckedChange={(checked: boolean) =>
                 handleUpdate((prev) => ({
                   ...prev,
-                  includeFullUrlInAi: event.target.checked,
+                  includeFullUrlInAi: checked,
                 }))
               }
+              aria-label="Include full URLs in AI requests"
             />
-          </label>
+          </div>
           <p className="settings-note">
             Off sends only titles and hostnames. Tabman never reads the page
             body.
@@ -189,67 +411,142 @@ export function SettingsPanel({
               <p>Default way organized tabs are saved to your library.</p>
             </div>
           </div>
-          <div className="segmented-pill-track">
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                organizeMode === 'single' ? 'active' : ''
-              }`}
-              aria-pressed={organizeMode === 'single'}
-              onClick={() => {
-                setOrganizeMode('single');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'single');
-                } catch {}
-              }}
-            >
-              {organizeMode === 'single' && (
-                <motion.div
-                  layoutId="settingsDestPill"
-                  className="segmented-pill-slider"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
-              <span className="segmented-pill-text">
-                Single collection with tags
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                organizeMode === 'multiple' ? 'active' : ''
-              }`}
-              aria-pressed={organizeMode === 'multiple'}
-              onClick={() => {
-                setOrganizeMode('multiple');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'multiple');
-                } catch {}
-              }}
-            >
-              {organizeMode === 'multiple' && (
-                <motion.div
-                  layoutId="settingsDestPill"
-                  className="segmented-pill-slider"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
-              <span className="segmented-pill-text">Separate collections</span>
-            </button>
-          </div>
+          <AnimatedTabs<'single' | 'multiple'>
+            tabs={[
+              { id: 'single', label: 'Single collection with tags' },
+              { id: 'multiple', label: 'Separate collections' },
+            ]}
+            activeTab={organizeMode}
+            onChange={(val: 'single' | 'multiple') => {
+              setOrganizeMode(val);
+              try {
+                localStorage.setItem('tabman-organize-mode', val);
+              } catch {}
+            }}
+            layoutId="settingsDestPill"
+            size="default"
+            className="w-full flex"
+            tabClassName="flex-1"
+          />
           <p className="settings-note">
             {organizeMode === 'single'
               ? 'Puts all tabs into one dated collection and tags them with their group name.'
               : 'Creates a distinct collection for each group or domain rule.'}
           </p>
+        </div>
+
+        <div className="settings-card">
+          <div
+            className="settings-card-head"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '11px' }}>
+              <span className="settings-icon">
+                <SparkIcon size={16} />
+              </span>
+              <div>
+                <h2>Rich Link Previews</h2>
+                <p>Visual cards with covers, favicons, and metadata.</p>
+              </div>
+            </div>
+            <Switch
+              checked={draft.enableRichPreviews ?? false}
+              onCheckedChange={(checked: boolean) => {
+                handleUpdate((prev) => ({
+                  ...prev,
+                  enableRichPreviews: checked,
+                }));
+              }}
+              aria-label="Toggle rich visual preview cards"
+            />
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              opacity: draft.enableRichPreviews ? 1 : 0.45,
+              pointerEvents: draft.enableRichPreviews ? 'auto' : 'none',
+              transition: 'opacity 0.15s ease',
+            }}
+          >
+            <label
+              htmlFor="iframely-api-key"
+              style={{ fontSize: '12px', color: 'var(--text-muted)' }}
+            >
+              Personal API Key:
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                id="iframely-api-key"
+                type="password"
+                className="input"
+                style={{ flex: 1, fontFamily: 'monospace' }}
+                placeholder="Enter personal preview API key..."
+                value={draft.iframelyApiKey ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const trimmed = val.trim();
+                  handleUpdate((prev) => ({
+                    ...prev,
+                    iframelyApiKey: trimmed ? trimmed : null,
+                  }));
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={iframelyTesting || !draft.iframelyApiKey}
+                onClick={() => void handleTestIframely()}
+              >
+                {iframelyTesting ? 'Testing...' : 'Test Key'}
+              </Button>
+            </div>
+            {iframelyStatus && (
+              <p
+                style={{
+                  fontSize: '11.5px',
+                  color: iframelyStatus.ok ? 'var(--success)' : 'var(--danger)',
+                  marginTop: '2px',
+                }}
+              >
+                {iframelyStatus.ok ? '✓ ' : '✕ '}
+                {iframelyStatus.message}
+              </p>
+            )}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '4px',
+              }}
+            >
+              <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                Offline permanent storage on device.
+              </span>
+              <a
+                href="https://iframely.com"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '11.5px',
+                  color: 'var(--brand)',
+                }}
+              >
+                Get an API key <ArrowUpRightIcon size={12} />
+              </a>
+            </div>
+          </div>
         </div>
 
         <div className="settings-card">
@@ -298,6 +595,44 @@ export function SettingsPanel({
           </ul>
         </div>
       </div>
+
+      <Dialog open={showUpdateModal} onOpenChange={setShowUpdateModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upgrade Tabman</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to upgrade Tabman from{' '}
+              <strong className="text-foreground">v{APP_VERSION}</strong> to{' '}
+              <strong className="text-brand">v{updateStatus?.latest}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            This will update your CLI vault and background acceleration services
+            using your package manager.
+          </p>
+          {updateLog && (
+            <pre className="text-xs p-2.5 rounded-lg bg-surface-muted border border-border whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+              {updateLog}
+            </pre>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0 mt-3">
+            <Button
+              variant="ghost"
+              disabled={isUpdating}
+              onClick={() => setShowUpdateModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              disabled={isUpdating}
+              onClick={() => void handleConfirmUpgrade()}
+            >
+              {isUpdating ? 'Upgrading...' : 'Confirm & Upgrade'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

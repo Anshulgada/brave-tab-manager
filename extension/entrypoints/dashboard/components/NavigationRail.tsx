@@ -1,4 +1,7 @@
+import { motion } from 'framer-motion';
 import type { DragEvent, RefObject } from 'react';
+import { NumberTicker } from '../../../src/components/motion/number-ticker';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import { pluralize } from '../../../src/ui/format';
 import {
@@ -10,6 +13,7 @@ import {
   RenameIcon,
   SettingsIcon,
   ShieldIcon,
+  SparkIcon,
   TrashIcon,
   WindowIcon,
   ZapIcon,
@@ -79,63 +83,86 @@ export function NavigationRail({
   return (
     <aside className="rail">
       <nav className="rail-nav" aria-label="Library sections">
-        <button
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'home' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('home')}
         >
           <HomeIcon />
           <span>Home</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'windows' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('windows')}
         >
           <WindowIcon />
           <span>Windows</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'organize' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('organize')}
         >
-          <LayersIcon />
+          <SparkIcon />
           <span>Organize</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'providers' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('providers')}
         >
           <ZapIcon />
           <span>Providers</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'rules' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('rules')}
         >
           <LayersIcon />
           <span>Rules</span>
-        </button>
-        <button
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'trash' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('trash')}
         >
           <TrashIcon />
           <span>Trash</span>
-          <span className="rail-count">{trashedCount}</span>
-        </button>
-        <button
+          <span className="rail-count">
+            <NumberTicker value={trashedCount} />
+          </span>
+        </motion.button>
+        <motion.button
+          whileHover={{ x: 3 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
           className={section === 'settings' ? 'rail-link active' : 'rail-link'}
           type="button"
           onClick={() => onNavigate('settings')}
         >
           <SettingsIcon />
           <span>Preferences</span>
-        </button>
+        </motion.button>
       </nav>
 
       <div className="rail-section">
@@ -172,13 +199,14 @@ export function NavigationRail({
                 }
               }}
             />
-            <button
-              className="btn btn-primary btn-sm"
+            <Button
+              variant="default"
+              size="sm"
               type="submit"
               disabled={busy || !newCollectionName.trim()}
             >
               Add
-            </button>
+            </Button>
           </form>
         )}
 
@@ -201,7 +229,10 @@ export function NavigationRail({
                   .join(' ')}
                 key={collection.id}
               >
-                <button
+                <motion.button
+                  whileHover={{ x: 2 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                   className="rail-item"
                   type="button"
                   onClick={() => onSelectCollection(collection.id)}
@@ -221,11 +252,11 @@ export function NavigationRail({
                   <span className="rail-item-copy">
                     <strong>{collection.name}</strong>
                     <small>
-                      {collection.tabs.length}{' '}
+                      <NumberTicker value={collection.tabs.length} />{' '}
                       {pluralize(collection.tabs.length, 'tab')}
                     </small>
                   </span>
-                </button>
+                </motion.button>
                 <button
                   className="rail-menu"
                   type="button"
@@ -276,10 +307,16 @@ export function NavigationRail({
       <div className="rail-footer">
         <div className="rail-stats">
           <span>
-            <strong>{savedTabCount}</strong> saved tabs
+            <strong>
+              <NumberTicker value={savedTabCount} />
+            </strong>{' '}
+            saved tabs
           </span>
           <span>
-            <strong>{tagCount}</strong> {pluralize(tagCount, 'tag')}
+            <strong>
+              <NumberTicker value={tagCount} />
+            </strong>{' '}
+            {pluralize(tagCount, 'tag')}
           </span>
         </div>
         <p className="rail-note">

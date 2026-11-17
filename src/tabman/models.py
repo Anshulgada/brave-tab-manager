@@ -178,6 +178,8 @@ class Settings(ContractModel):
     default_view: Literal["list", "grid"]
     include_full_url_in_ai: bool
     ai_provider: ShortName | None
+    enable_rich_previews: bool = False
+    iframely_api_key: str | None = None
 
 
 class ExportDocument(ContractModel):

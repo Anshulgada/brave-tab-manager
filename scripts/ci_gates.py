@@ -1,4 +1,4 @@
-"""Run path-filtered pre-push gates for the Python and extension stacks.
+"""Run path-filtered pre-commit gates for the Python and extension stacks.
 
 The gates mirror the continuous integration jobs, so a branch is verified the
 same way it will be verified on main without spending any runner minutes.
@@ -32,17 +32,42 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
-def changed_paths(check_all: bool) -> set[str]:
-    """Return repository-relative paths included in the push."""
+def changed_paths(check_all: bool, filenames: tuple[str, ...] = ()) -> set[str]:
+    """Return repository-relative paths included in the commit or push."""
     if check_all:
         return {"pyproject.toml", "extension/package.json", "packages/schema/"}
 
+    paths = {path.replace("\\", "/") for path in filenames if path}
+    # Include staged changes and staged deletions
+    try:
+        staged_output = _git("diff", "--cached", "--name-only")
+        staged = {
+            path.replace("\\", "/") for path in staged_output.splitlines() if path
+        }
+        paths.update(staged)
+    except Exception:
+        pass
+
+    if paths:
+        return paths
+
     from_ref = os.environ.get("PRE_COMMIT_FROM_REF", "")
     if not from_ref or from_ref == ZERO_REF:
-        from_ref = _git("merge-base", "HEAD", "origin/main")
+        try:
+            from_ref = _git("merge-base", "HEAD", "origin/main")
+        except Exception:
+            from_ref = "HEAD~1"
 
-    output = _git("diff", "--name-only", f"{from_ref}..HEAD")
-    return {path.replace("\\", "/") for path in output.splitlines() if path}
+    try:
+        output = _git("diff", "--name-only", f"{from_ref}..HEAD")
+        paths = {path.replace("\\", "/") for path in output.splitlines() if path}
+        if paths:
+            return paths
+    except Exception:
+        pass
+
+    # If git cannot determine changed scope, safely run all gates
+    return {"pyproject.toml", "extension/package.json", "packages/schema/"}
 
 
 def _matches(paths: set[str], prefixes: tuple[str, ...]) -> bool:
@@ -64,9 +89,10 @@ def _run(command: list[str], cwd: Path = ROOT) -> None:
     is_flag=True,
     help="Run every gate instead of only the ones for the changed paths.",
 )
-def main(check_all: bool) -> None:
-    """Run the pre-push gates for the paths in the outgoing commit."""
-    paths = changed_paths(check_all)
+@click.argument("filenames", nargs=-1, type=click.Path())
+def main(check_all: bool, filenames: tuple[str, ...]) -> None:
+    """Run the pre-commit gates for the paths in the outgoing commit."""
+    paths = changed_paths(check_all, filenames)
     python_changed = _matches(
         paths,
         (

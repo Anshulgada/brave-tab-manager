@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import { NumberTicker } from '../../../src/components/motion/number-ticker';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import {
   CheckIcon,
@@ -34,11 +36,11 @@ export function WelcomeState({
       <img
         src="/logo.png"
         alt="Tabman Logo"
-        width="68"
-        height="68"
+        width="88"
+        height="88"
         style={{
           objectFit: 'contain',
-          marginBottom: '4px',
+          marginBottom: '6px',
           filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.3))',
         }}
       />
@@ -49,14 +51,14 @@ export function WelcomeState({
         browser profile.
       </p>
       <div className="welcome-actions">
-        <button className="btn btn-primary" type="button" onClick={onCollect}>
+        <Button variant="default" type="button" onClick={onCollect}>
           <ZapIcon size={15} />
           Collect every open tab
-        </button>
-        <button className="btn" type="button" onClick={onCreate}>
+        </Button>
+        <Button variant="secondary" type="button" onClick={onCreate}>
           <PlusIcon size={15} />
           New collection
-        </button>
+        </Button>
       </div>
       <ol className="welcome-steps">
         <li>
@@ -118,13 +120,16 @@ export function HomePanel({
           className="stat-card"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -2 }}
           transition={{ duration: 0.2 }}
         >
           <span className="stat-icon">
             <FolderIcon size={20} />
           </span>
           <div>
-            <strong>{collections.length}</strong>
+            <strong>
+              <NumberTicker value={collections.length} />
+            </strong>
             <span>Collections</span>
           </div>
         </motion.article>
@@ -132,13 +137,16 @@ export function HomePanel({
           className="stat-card"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -2 }}
           transition={{ duration: 0.2, delay: 0.05 }}
         >
           <span className="stat-icon">
             <WindowIcon size={20} />
           </span>
           <div>
-            <strong>{savedTabCount}</strong>
+            <strong>
+              <NumberTicker value={savedTabCount} />
+            </strong>
             <span>Saved tabs</span>
           </div>
         </motion.article>
@@ -146,13 +154,16 @@ export function HomePanel({
           className="stat-card"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -2 }}
           transition={{ duration: 0.2, delay: 0.1 }}
         >
           <span className="stat-icon">
             <TagIcon size={20} />
           </span>
           <div>
-            <strong>{tagCount}</strong>
+            <strong>
+              <NumberTicker value={tagCount} />
+            </strong>
             <span>Tags</span>
           </div>
         </motion.article>
@@ -160,14 +171,14 @@ export function HomePanel({
 
       {collections.length > 0 && (
         <section className="home-actions" aria-label="Quick actions">
-          <button className="btn btn-primary" type="button" onClick={onCollect}>
+          <Button variant="default" type="button" onClick={onCollect}>
             <ZapIcon size={16} />
             Collect every open tab
-          </button>
-          <button className="btn" type="button" onClick={onCreate}>
+          </Button>
+          <Button variant="secondary" type="button" onClick={onCreate}>
             <PlusIcon size={16} />
             New collection
-          </button>
+          </Button>
         </section>
       )}
 
@@ -177,21 +188,23 @@ export function HomePanel({
             <h2>Collections</h2>
             <div className="home-section-actions">
               {selectedIds.size > 0 ? (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   type="button"
-                  className="btn btn-ghost btn-sm"
                   onClick={() => setSelectedIds(new Set())}
                 >
                   Clear selection
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   type="button"
-                  className="btn btn-ghost btn-sm"
                   onClick={selectAll}
                 >
                   Select all
-                </button>
+                </Button>
               )}
             </div>
           </header>
@@ -220,18 +233,20 @@ export function HomePanel({
                   className="home-bulk-actions"
                   style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     type="button"
-                    className="btn btn-ghost btn-sm"
                     onClick={selectAll}
                   >
                     {selectedIds.size === collections.length
                       ? 'Deselect all'
                       : 'Select all'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     type="button"
-                    className="btn btn-danger btn-sm"
                     onClick={() => {
                       onDeleteCollections(Array.from(selectedIds));
                       setSelectedIds(new Set());
@@ -239,16 +254,17 @@ export function HomePanel({
                   >
                     <TrashIcon size={14} />
                     Move to trash
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     type="button"
-                    className="btn btn-ghost btn-icon btn-sm"
                     title="Cancel selection"
                     aria-label="Cancel selection"
                     onClick={() => setSelectedIds(new Set())}
                   >
                     <CloseIcon size={14} />
-                  </button>
+                  </Button>
                 </div>
               </motion.div>
             )}
@@ -260,11 +276,13 @@ export function HomePanel({
               return (
                 <motion.div
                   key={collection.id}
+                  layout
                   className={`collection-card ${isSelected ? 'selected' : ''}`}
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ y: -3, transition: { duration: 0.16 } }}
                   transition={{
-                    duration: 0.15,
+                    duration: 0.18,
                     delay: Math.min(index * 0.02, 0.3),
                   }}
                 >

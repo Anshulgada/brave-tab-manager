@@ -16,10 +16,10 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np  # ty: ignore[unresolved-import]
-import openvino as ov  # ty: ignore[unresolved-import]
-from huggingface_hub import hf_hub_download  # ty: ignore[unresolved-import]
-from tokenizers import Tokenizer  # ty: ignore[unresolved-import]
+import numpy as np  # ty: ignore[import-not-found]
+import openvino as ov  # ty: ignore[import-not-found]
+from huggingface_hub import hf_hub_download  # ty: ignore[import-not-found]
+from tokenizers import Tokenizer  # ty: ignore[import-not-found]
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:

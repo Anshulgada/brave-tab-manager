@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   type ChangeEvent,
   useCallback,
@@ -7,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { DEFAULT_PREBUILT_RULES_JSONL } from '../../src/ai';
+import { Toaster, toast } from '../../src/components/ui/toaster';
 import { TabmanDatabase, type TabRecord } from '../../src/database';
 import {
   createCollection,
@@ -57,7 +59,6 @@ import {
   LoadingState,
   NavigationRail,
   TagManagerModal,
-  ToastStack,
   Topbar,
 } from './components';
 import {
@@ -74,7 +75,6 @@ import {
   type ConfirmRequest,
   type Section,
   type SortOrder,
-  type Toast,
   VIEW_STORAGE_KEY,
   type View,
 } from './types';
@@ -109,7 +109,6 @@ export function App() {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const loadGeneration = useRef(0);
   const busyRef = useRef(false);
-  const toastId = useRef(0);
 
   const [route, setRoute] = useHashRoute();
   const [snapshot, setSnapshot] = useState<LibrarySnapshot>();
@@ -147,7 +146,6 @@ export function App() {
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest>();
 
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -166,19 +164,17 @@ export function App() {
   );
 
   const pushToast = useCallback(
-    (message: string, tone: Toast['tone'] = 'info') => {
-      const id = ++toastId.current;
-      setToasts((current) => [...current, { id, message, tone }]);
-      window.setTimeout(() => {
-        setToasts((current) => current.filter((toast) => toast.id !== id));
-      }, 4200);
+    (message: string, tone: 'info' | 'success' | 'danger' = 'info') => {
+      if (tone === 'success') {
+        toast.success(message);
+      } else if (tone === 'danger') {
+        toast.error(message);
+      } else {
+        toast.info(message);
+      }
     },
     [],
   );
-
-  const dismissToast = useCallback((id: number) => {
-    setToasts((current) => current.filter((toast) => toast.id !== id));
-  }, []);
 
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -564,20 +560,26 @@ export function App() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    const replace = window.confirm(
-      'Replace the entire local library with this export? This cannot be undone.',
-    );
-    if (replace) {
-      await runMutation(async () => {
-        const input: unknown = JSON.parse(await file.text());
-        await importLibrary(database, input, true);
-      }, 'Library replaced from export.');
-      return;
+    try {
+      const text = await file.text();
+      const input: unknown = JSON.parse(text);
+      requestConfirm({
+        title: 'Import library backup',
+        body: 'Merge this backup with your local library? Saved tabs and collections will be merged safely without deleting existing items.',
+        confirmLabel: 'Merge Library',
+        tone: 'brand',
+        onConfirm: () => {
+          void runMutation(async () => {
+            await importLibrary(database, input, false);
+          }, 'Library merged from export.');
+        },
+      });
+    } catch (err) {
+      pushToast(
+        err instanceof Error ? err.message : 'Invalid backup JSON file',
+        'danger',
+      );
     }
-    await runMutation(async () => {
-      const input: unknown = JSON.parse(await file.text());
-      await importLibrary(database, input, false);
-    }, 'Export merged into the library.');
   };
 
   const downloadExport = useCallback(async () => {
@@ -872,12 +874,18 @@ export function App() {
           }}
           onTrashCollection={(coll) => {
             setMenuFor(undefined);
-            if (window.confirm(`Move "${coll.name}" to the trash?`)) {
-              void runMutation(
-                () => setCollectionStatus(database, [coll.id], 'trashed'),
-                'Collection moved to trash.',
-              );
-            }
+            requestConfirm({
+              title: 'Move collection to trash?',
+              body: `Are you sure you want to move "${coll.name}" to the trash? You can restore it later from Trash.`,
+              confirmLabel: 'Move to trash',
+              tone: 'danger',
+              onConfirm: () => {
+                void runMutation(
+                  () => setCollectionStatus(database, [coll.id], 'trashed'),
+                  'Collection moved to trash.',
+                );
+              },
+            });
           }}
           dropTargetId={dropTargetId}
           onDragOver={(id, e) => {
@@ -909,234 +917,279 @@ export function App() {
         />
 
         <main className="content">
-          {loading ? (
-            <LoadingState />
-          ) : currentSection === 'home' || currentSection === 'library' ? (
-            <HomePanel
-              collections={
-                query.trim() ? filteredCollections : activeCollections
-              }
-              savedTabCount={savedTabCount}
-              tagCount={tagCount}
-              onCollect={() => void collectAll()}
-              onCreate={() => setCreating(true)}
-              onSelectCollection={(id) => {
-                setTagFilter('');
-                setSelectedTabs(new Set());
-                navigateTo('collection', id);
-              }}
-              onDeleteCollections={(ids) => {
-                if (
-                  window.confirm(
-                    `Move ${ids.length} ${pluralize(ids.length, 'collection')} to the trash?`,
-                  )
-                ) {
-                  void runMutation(
-                    () => setCollectionStatus(database, ids, 'trashed'),
-                    `${pluralize(ids.length, 'collection')} moved to trash.`,
-                  );
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="w-full flex-1"
+              >
+                <LoadingState />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={
+                  currentSection === 'collection'
+                    ? `collection-${selectedCollection?.id}`
+                    : currentSection
                 }
-              }}
-            />
-          ) : currentSection === 'windows' ? (
-            <WindowsPanel onNotify={pushToast} />
-          ) : currentSection === 'settings' ? (
-            <SettingsPanel
-              settings={
-                settings ??
-                ({
-                  theme: 'system',
-                  defaultView: 'grid',
-                  includeFullUrlInAi: false,
-                } as Settings)
-              }
-              busy={busy}
-              onApplyTheme={applyTheme}
-              onSave={(next) => void saveSettings(next)}
-            />
-          ) : currentSection === 'providers' ? (
-            <ProvidersPanel onNotify={pushToast} />
-          ) : currentSection === 'organize' ? (
-            <OrganizePanel
-              rules={rules}
-              sourceCollection={selectedCollection}
-              onNotify={pushToast}
-              onBackToCollection={() => {
-                if (selectedCollection) {
-                  navigateTo('collection', selectedCollection.id);
-                } else {
-                  navigateTo('home');
-                }
-              }}
-              onApplied={() => {
-                void load();
-                if (selectedCollection) {
-                  navigateTo('collection', selectedCollection.id);
-                } else {
-                  navigateTo('home');
-                }
-              }}
-            />
-          ) : currentSection === 'rules' ? (
-            <RulesPanel rules={rules} onChange={setRules} />
-          ) : currentSection === 'trash' ? (
-            <TrashPanel
-              collections={trashedCollections}
-              busy={busy}
-              onRestore={(collectionId) =>
-                void runMutation(
-                  () => setCollectionStatus(database, [collectionId], 'active'),
-                  'Collection restored.',
-                )
-              }
-              onDelete={(collectionId) =>
-                requestConfirm({
-                  title: 'Delete permanently?',
-                  body: 'The collection and every saved tab inside it are erased from this browser profile. This cannot be undone.',
-                  confirmLabel: 'Delete forever',
-                  tone: 'danger',
-                  onConfirm: () =>
-                    void runMutation(
-                      () =>
-                        permanentlyDeleteCollections(database, [collectionId]),
-                      'Collection permanently deleted.',
-                    ),
-                })
-              }
-              onClearAll={() =>
-                requestConfirm({
-                  title: 'Empty trash permanently?',
-                  body: `All ${trashedCollections.length} trashed ${pluralize(
-                    trashedCollections.length,
-                    'collection',
-                  )} and every saved tab inside them will be erased from this browser profile. This cannot be undone.`,
-                  confirmLabel: 'Empty trash',
-                  tone: 'danger',
-                  onConfirm: () =>
-                    void runMutation(
-                      () =>
-                        permanentlyDeleteCollections(
-                          database,
-                          trashedCollections.map((c) => c.id),
-                        ),
-                      'Trash emptied.',
-                    ),
-                })
-              }
-            />
-          ) : currentSection === 'collection' ? (
-            selectedCollection ? (
-              <CollectionDetail
-                collection={selectedCollection}
-                busy={busy}
-                onCollect={() => void collectAll()}
-                onOrganizeCollection={() =>
-                  navigateTo('organize', selectedCollection.id)
-                }
-                renaming={renaming}
-                renameValue={renameValue}
-                onRenameValueChange={setRenameValue}
-                onStartRename={() => setRenaming(true)}
-                onCancelRename={() => {
-                  setRenaming(false);
-                  setRenameValue(selectedCollection.name);
-                }}
-                onSubmitRename={(e) => {
-                  e.preventDefault();
-                  void runMutation(
-                    () =>
-                      renameCollection(
-                        database,
-                        selectedCollection.id,
-                        renameValue,
-                      ),
-                    'Collection renamed.',
-                    false,
-                  ).then(() => setRenaming(false));
-                }}
-                renameInputRef={renameInputRef}
-                onRestoreCollection={() =>
-                  void restore(selectedCollection.tabs, 'saved tabs', true)
-                }
-                onTrashCollection={() =>
-                  requestConfirm({
-                    title: 'Move to trash?',
-                    body: 'The collection stays recoverable in Trash until you delete it forever.',
-                    confirmLabel: 'Move to trash',
-                    tone: 'brand',
-                    onConfirm: () =>
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: [0.22, 0.61, 0.36, 1] }}
+                className="w-full flex-1 flex flex-col"
+              >
+                {currentSection === 'home' || currentSection === 'library' ? (
+                  <HomePanel
+                    collections={
+                      query.trim() ? filteredCollections : activeCollections
+                    }
+                    savedTabCount={savedTabCount}
+                    tagCount={tagCount}
+                    onCollect={() => void collectAll()}
+                    onCreate={() => setCreating(true)}
+                    onSelectCollection={(id) => {
+                      setTagFilter('');
+                      setSelectedTabs(new Set());
+                      navigateTo('collection', id);
+                    }}
+                    onDeleteCollections={(ids) => {
+                      requestConfirm({
+                        title: 'Move collections to trash?',
+                        body: `Move ${ids.length} ${pluralize(ids.length, 'collection')} to the trash? You can restore them later from Trash.`,
+                        confirmLabel: 'Move to trash',
+                        tone: 'danger',
+                        onConfirm: () => {
+                          void runMutation(
+                            () => setCollectionStatus(database, ids, 'trashed'),
+                            `${pluralize(ids.length, 'collection')} moved to trash.`,
+                          );
+                        },
+                      });
+                    }}
+                  />
+                ) : currentSection === 'windows' ? (
+                  <WindowsPanel onNotify={pushToast} />
+                ) : currentSection === 'settings' ? (
+                  <SettingsPanel
+                    settings={
+                      settings ??
+                      ({
+                        theme: 'system',
+                        defaultView: 'grid',
+                        includeFullUrlInAi: false,
+                      } as Settings)
+                    }
+                    busy={busy}
+                    onApplyTheme={applyTheme}
+                    onSave={(next) => void saveSettings(next)}
+                  />
+                ) : currentSection === 'providers' ? (
+                  <ProvidersPanel onNotify={pushToast} />
+                ) : currentSection === 'organize' ? (
+                  <OrganizePanel
+                    rules={rules}
+                    sourceCollection={selectedCollection}
+                    onNotify={pushToast}
+                    onBackToCollection={() => {
+                      if (selectedCollection) {
+                        navigateTo('collection', selectedCollection.id);
+                      } else {
+                        navigateTo('home');
+                      }
+                    }}
+                    onApplied={() => {
+                      void load();
+                      if (selectedCollection) {
+                        navigateTo('collection', selectedCollection.id);
+                      } else {
+                        navigateTo('home');
+                      }
+                    }}
+                  />
+                ) : currentSection === 'rules' ? (
+                  <RulesPanel rules={rules} onChange={setRules} />
+                ) : currentSection === 'trash' ? (
+                  <TrashPanel
+                    collections={trashedCollections}
+                    busy={busy}
+                    onRestore={(collectionId) =>
                       void runMutation(
                         () =>
                           setCollectionStatus(
                             database,
-                            [selectedCollection.id],
-                            'trashed',
+                            [collectionId],
+                            'active',
                           ),
-                        'Collection moved to trash.',
-                      ),
-                  })
-                }
-                query={query}
-                onQueryChange={setQuery}
-                selectedTabs={selectedTabs}
-                visibleTabs={visibleTabs}
-                onToggleSelectAll={() => {
-                  if (
-                    selectedTabs.size === visibleTabs.length &&
-                    visibleTabs.length > 0
-                  ) {
-                    setSelectedTabs(new Set());
-                  } else {
-                    setSelectedTabs(new Set(visibleTabs.map((t) => t.id)));
-                  }
-                }}
-                sortOrder={sortOrder}
-                onSortOrderChange={(val) => setSortOrder(val)}
-                view={view}
-                onViewChange={applyView}
-                onOpenTagManager={() => setTagManagerOpen(true)}
-                tagFilter={tagFilter}
-                onTagFilterChange={setTagFilter}
-                onToggleTab={toggleTab}
-                onRestoreTab={(tab) =>
-                  void restore(
-                    selectedCollection.tabs.filter((c) => c.id === tab.id),
-                    'tab',
-                  )
-                }
-                onDeleteTab={(tab) =>
-                  requestConfirm({
-                    title: 'Delete saved tab?',
-                    body: 'The tab is removed from this collection. The page itself is not touched.',
-                    confirmLabel: 'Delete tab',
-                    tone: 'danger',
-                    onConfirm: () =>
-                      void runMutation(
-                        () => deleteTabs(database, [tab.id]),
-                        'Saved tab deleted.',
-                      ),
-                  })
-                }
-                onEditTab={(tab) => {
-                  setEditingTab(tab);
-                  setEditTitle(tab.title);
-                  setEditUrl(tab.url);
-                }}
-                onPinTab={(tab) =>
-                  void runMutation(
-                    () =>
-                      updateTab(database, tab.id, {
-                        pinned: !tab.pinned,
-                      }),
-                    tab.pinned ? 'Tab unpinned.' : 'Tab pinned.',
-                    false,
-                  )
-                }
-                onDragStartTab={(tabId) => setDraggingTabId(tabId)}
-                onDragEndTab={() => setDraggingTabId(undefined)}
-              />
-            ) : null
-          ) : null}
+                        'Collection restored.',
+                      )
+                    }
+                    onDelete={(collectionId) =>
+                      requestConfirm({
+                        title: 'Delete permanently?',
+                        body: 'The collection and every saved tab inside it are erased from this browser profile. This cannot be undone.',
+                        confirmLabel: 'Delete forever',
+                        tone: 'danger',
+                        onConfirm: () =>
+                          void runMutation(
+                            () =>
+                              permanentlyDeleteCollections(database, [
+                                collectionId,
+                              ]),
+                            'Collection permanently deleted.',
+                          ),
+                      })
+                    }
+                    onClearAll={() =>
+                      requestConfirm({
+                        title: 'Empty trash permanently?',
+                        body: `All ${trashedCollections.length} trashed ${pluralize(
+                          trashedCollections.length,
+                          'collection',
+                        )} and every saved tab inside them will be erased from this browser profile. This cannot be undone.`,
+                        confirmLabel: 'Empty trash',
+                        tone: 'danger',
+                        onConfirm: () =>
+                          void runMutation(
+                            () =>
+                              permanentlyDeleteCollections(
+                                database,
+                                trashedCollections.map((c) => c.id),
+                              ),
+                            'Trash emptied.',
+                          ),
+                      })
+                    }
+                  />
+                ) : currentSection === 'collection' ? (
+                  selectedCollection ? (
+                    <CollectionDetail
+                      collection={selectedCollection}
+                      busy={busy}
+                      onCollect={() => void collectAll()}
+                      onOrganizeCollection={() =>
+                        navigateTo('organize', selectedCollection.id)
+                      }
+                      renaming={renaming}
+                      renameValue={renameValue}
+                      onRenameValueChange={setRenameValue}
+                      onStartRename={() => setRenaming(true)}
+                      onCancelRename={() => {
+                        setRenaming(false);
+                        setRenameValue(selectedCollection.name);
+                      }}
+                      onSubmitRename={(e) => {
+                        e.preventDefault();
+                        void runMutation(
+                          () =>
+                            renameCollection(
+                              database,
+                              selectedCollection.id,
+                              renameValue,
+                            ),
+                          'Collection renamed.',
+                          false,
+                        ).then(() => setRenaming(false));
+                      }}
+                      renameInputRef={renameInputRef}
+                      onRestoreCollection={() =>
+                        void restore(
+                          selectedCollection.tabs,
+                          'saved tabs',
+                          true,
+                        )
+                      }
+                      onTrashCollection={() =>
+                        requestConfirm({
+                          title: 'Move to trash?',
+                          body: 'The collection stays recoverable in Trash until you delete it forever.',
+                          confirmLabel: 'Move to trash',
+                          tone: 'brand',
+                          onConfirm: () =>
+                            void runMutation(
+                              () =>
+                                setCollectionStatus(
+                                  database,
+                                  [selectedCollection.id],
+                                  'trashed',
+                                ),
+                              'Collection moved to trash.',
+                            ),
+                        })
+                      }
+                      query={query}
+                      onQueryChange={setQuery}
+                      selectedTabs={selectedTabs}
+                      visibleTabs={visibleTabs}
+                      onToggleSelectAll={() => {
+                        if (
+                          selectedTabs.size === visibleTabs.length &&
+                          visibleTabs.length > 0
+                        ) {
+                          setSelectedTabs(new Set());
+                        } else {
+                          setSelectedTabs(
+                            new Set(visibleTabs.map((t) => t.id)),
+                          );
+                        }
+                      }}
+                      sortOrder={sortOrder}
+                      onSortOrderChange={(val) => setSortOrder(val)}
+                      view={view}
+                      onViewChange={applyView}
+                      onOpenTagManager={() => setTagManagerOpen(true)}
+                      tagFilter={tagFilter}
+                      onTagFilterChange={setTagFilter}
+                      onToggleTab={toggleTab}
+                      onRestoreTab={(tab) =>
+                        void restore(
+                          selectedCollection.tabs.filter(
+                            (c) => c.id === tab.id,
+                          ),
+                          'tab',
+                        )
+                      }
+                      onDeleteTab={(tab) =>
+                        requestConfirm({
+                          title: 'Delete saved tab?',
+                          body: 'The tab is removed from this collection. The page itself is not touched.',
+                          confirmLabel: 'Delete tab',
+                          tone: 'danger',
+                          onConfirm: () =>
+                            void runMutation(
+                              () => deleteTabs(database, [tab.id]),
+                              'Saved tab deleted.',
+                            ),
+                        })
+                      }
+                      onEditTab={(tab) => {
+                        setEditingTab(tab);
+                        setEditTitle(tab.title);
+                        setEditUrl(tab.url);
+                      }}
+                      onPinTab={(tab) =>
+                        void runMutation(
+                          () =>
+                            updateTab(database, tab.id, {
+                              pinned: !tab.pinned,
+                            }),
+                          tab.pinned ? 'Tab unpinned.' : 'Tab pinned.',
+                          false,
+                        )
+                      }
+                      onDragStartTab={(tabId) => setDraggingTabId(tabId)}
+                      onDragEndTab={() => setDraggingTabId(undefined)}
+                      enableRichPreviews={settings?.enableRichPreviews}
+                      iframelyApiKey={settings?.iframelyApiKey}
+                    />
+                  ) : null
+                ) : null}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </main>
       </div>
 
@@ -1314,7 +1367,7 @@ export function App() {
 
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
 
-      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      <Toaster />
     </div>
   );
 }

@@ -1,4 +1,6 @@
+import { motion } from 'framer-motion';
 import { useEffect } from 'react';
+import { Button } from '../../../src/components/ui/button';
 import {
   CloseIcon,
   FolderIcon,
@@ -29,25 +31,30 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         aria-label="Close help"
         onClick={onClose}
       />
-      <div
+      <motion.div
         className="dialog help-modal"
         role="dialog"
         aria-modal="true"
         aria-label="Tabman Guide & Concepts"
+        initial={{ opacity: 0, scale: 0.98, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: -6 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <div className="dialog-head">
           <div className="dialog-title">
             <HelpIcon size={18} />
             <h2>Tabman Guide & Concepts</h2>
           </div>
-          <button
-            className="btn btn-ghost btn-icon btn-sm"
+          <Button
+            variant="ghost"
+            size="icon"
             type="button"
             onClick={onClose}
             aria-label="Close"
           >
             <CloseIcon size={14} />
-          </button>
+          </Button>
         </div>
         <div className="help-modal-body">
           <div className="help-grid">
@@ -126,11 +133,11 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <div className="dialog-actions">
-          <button className="btn btn-primary" type="button" onClick={onClose}>
+          <Button variant="default" type="button" onClick={onClose}>
             Got it
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

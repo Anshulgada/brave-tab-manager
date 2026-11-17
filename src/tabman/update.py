@@ -1,0 +1,229 @@
+"""Version checking and self-upgrade for the Tabman CLI."""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import re
+import shutil
+import subprocess  # nosec B404
+import sys
+import urllib.request
+from pathlib import Path
+from typing import NamedTuple
+
+from tabman import __version__
+
+PYPI_URL = "https://pypi.org/pypi/tabman/json"
+GITHUB_RELEASES_URL = (
+    "https://api.github.com/repos/Anshulgada/brave-tab-manager/releases/latest"
+)
+
+
+class VersionInfo(NamedTuple):
+    current: str
+    latest: str
+    update_available: bool
+
+
+def parse_version(v: str) -> tuple[int, ...]:
+    """Extract integer segments for semantic version comparison."""
+    nums = re.findall(r"\d+", v)
+    return tuple(map(int, nums)) if nums else (0,)
+
+
+def check_latest_version(timeout: float = 4.0) -> VersionInfo:
+    """Fetch the latest release version from PyPI, falling back to GitHub."""
+    latest = __version__
+    try:
+        req = urllib.request.Request(
+            PYPI_URL,
+            headers={
+                "User-Agent": (
+                    f"tabman/{__version__} "
+                    "(https://github.com/Anshulgada/brave-tab-manager)"
+                )
+            },
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
+            data = json.loads(resp.read().decode("utf-8"))
+            latest = data.get("info", {}).get("version", __version__)
+    except Exception:
+        # Fallback to GitHub releases
+        with contextlib.suppress(Exception):
+            gh_req = urllib.request.Request(
+                GITHUB_RELEASES_URL,
+                headers={"User-Agent": f"tabman/{__version__}"},
+            )
+            with urllib.request.urlopen(gh_req, timeout=timeout) as resp:  # nosec B310
+                data = json.loads(resp.read().decode("utf-8"))
+                tag = data.get("tag_name", "").lstrip("v")
+                if tag:
+                    latest = tag
+
+    has_update = parse_version(latest) > parse_version(__version__)
+    return VersionInfo(current=__version__, latest=latest, update_available=has_update)
+
+
+def find_uv_binary() -> str | None:
+    """Find uv in PATH or standard installation directories."""
+    found = shutil.which("uv")
+    if found:
+        return found
+
+    from pathlib import Path
+
+    home = Path.home()
+    candidates = [
+        home / ".local" / "bin" / ("uv.exe" if sys.platform == "win32" else "uv"),
+        home / ".cargo" / "bin" / ("uv.exe" if sys.platform == "win32" else "uv"),
+    ]
+    for c in candidates:
+        if c.is_file() and os.access(c, os.X_OK):
+            return str(c)
+    return None
+
+
+def run_upgrade() -> tuple[bool, str]:
+    """Execute the best available package manager upgrade command.
+
+    Supports uv tool, pipx, standard pip, and official one-line release installers.
+    Prioritizes upgrading the active virtual environment if invoked from one.
+    """
+    info = check_latest_version()
+    in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+
+    # 1. If running inside a virtual environment, upgrade that environment directly
+    if in_venv:
+        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "tabman"]
+        with contextlib.suppress(Exception):
+            res = subprocess.run(  # nosec B603
+                cmd, capture_output=True, text=True, check=False
+            )
+            if res.returncode == 0:
+                out = res.stdout or res.stderr
+                return (
+                    True,
+                    f"Successfully upgraded in active virtual environment:\n{out}",
+                )
+
+    # 2. Check uv tool (Used by official one-line install scripts)
+    uv_bin = find_uv_binary()
+    if uv_bin:
+        cmd = [uv_bin, "tool", "upgrade", "tabman"]
+        with contextlib.suppress(Exception):
+            res = subprocess.run(  # nosec B603
+                cmd, capture_output=True, text=True, check=False
+            )
+            if res.returncode == 0:
+                check_cmd = [uv_bin, "tool", "run", "tabman", "--version"]
+                ver_res = subprocess.run(  # nosec B603
+                    check_cmd, capture_output=True, text=True, check=False
+                )
+                installed_ver = (
+                    ver_res.stdout.strip().split()[-1]
+                    if ver_res.returncode == 0
+                    else ""
+                )
+                if (
+                    installed_ver
+                    and installed_ver == info.current
+                    and info.latest != info.current
+                ):
+                    return (
+                        False,
+                        f"Tabman version is pinned at {installed_ver}. "
+                        f"Run '{uv_bin} tool install --force tabman' to update.",
+                    )
+                return (
+                    True,
+                    f"Successfully upgraded via uv:\n{res.stdout or res.stderr}",
+                )
+
+    # 3. Check pipx
+    if shutil.which("pipx"):
+        cmd = ["pipx", "upgrade", "tabman"]
+        with contextlib.suppress(Exception):
+            res = subprocess.run(  # nosec B603
+                cmd, capture_output=True, text=True, check=False
+            )
+            if res.returncode == 0:
+                return (
+                    True,
+                    f"Successfully upgraded via pipx:\n{res.stdout or res.stderr}",
+                )
+
+    # 4. Check official PowerShell / curl release installer if installed via one-liner
+    if sys.platform == "win32":
+        ps = shutil.which("pwsh") or shutil.which("powershell")
+        if ps:
+            script_url = (
+                "https://raw.githubusercontent.com/Anshulgada/"
+                "brave-tab-manager/main/scripts/install.ps1"
+            )
+            install_cmd = [
+                ps,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                f"irm {script_url} | iex",
+            ]
+            with contextlib.suppress(Exception):
+                res = subprocess.run(  # nosec B603
+                    install_cmd, capture_output=True, text=True, check=False
+                )
+                if res.returncode == 0:
+                    return (
+                        True,
+                        f"Successfully upgraded via official installer:\n{res.stdout}",
+                    )
+    else:
+        if shutil.which("curl") and shutil.which("sh"):
+            sh_url = (
+                "https://raw.githubusercontent.com/Anshulgada/"
+                "brave-tab-manager/main/scripts/install.sh"
+            )
+            import tempfile
+
+            tmp_path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    "wb", delete=False, suffix=".sh"
+                ) as tmp:
+                    tmp_path = Path(tmp.name)
+                dl_res = subprocess.run(  # nosec B603 B607
+                    ["curl", "-LsSf", sh_url, "-o", str(tmp_path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if dl_res.returncode == 0 and tmp_path.stat().st_size > 0:
+                    install_res = subprocess.run(  # nosec B603 B607
+                        ["sh", str(tmp_path)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    if install_res.returncode == 0:
+                        out = install_res.stdout
+                        return (
+                            True,
+                            f"Successfully upgraded via official installer:\n{out}",
+                        )
+            except Exception:  # nosec B110
+                pass
+            finally:
+                if tmp_path is not None:
+                    tmp_path.unlink(missing_ok=True)
+
+    # 5. Fallback to pip
+    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "tabman"]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)  # nosec B603
+        if res.returncode == 0:
+            return True, f"Successfully upgraded via pip:\n{res.stdout or res.stderr}"
+        return False, f"Upgrade failed: {res.stderr or res.stdout}"
+    except Exception as e:
+        return False, f"Upgrade execution error: {e}"

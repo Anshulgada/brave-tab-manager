@@ -7,15 +7,40 @@
 
 import 'fake-indexeddb/auto';
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  configure,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../entrypoints/dashboard/App';
+import { TabmanDatabase } from '../src/database';
+
+configure({ asyncUtilTimeout: 5000 });
 
 interface StoredMessage {
   type: string;
   [key: string]: unknown;
+}
+
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
 }
 
 function installBrowserMock(responses: Record<string, unknown> = {}) {
@@ -68,8 +93,18 @@ function installBrowserMock(responses: Record<string, unknown> = {}) {
 }
 
 describe('the dashboard', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     window.location.hash = '';
+    const db = new TabmanDatabase();
+    await Promise.all([
+      db.collections.clear(),
+      db.tabs.clear(),
+      db.tags.clear(),
+      db.sessions.clear(),
+      db.proposals.clear(),
+      db.settings.clear(),
+      db.corrections.clear(),
+    ]);
     installBrowserMock();
   });
 
@@ -252,5 +287,5 @@ describe('the provider panel', () => {
         true,
       );
     });
-  });
+  }, 15_000);
 });

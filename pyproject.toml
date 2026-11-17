@@ -1,6 +1,6 @@
 [project]
 name = "tabman"
-version = "0.6.6"
+version = "0.6.10"
 description = "Local-first tab collections and automation for Chromium browsers."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -24,8 +24,8 @@ classifiers = [
 dependencies = [
     "httpx>=0.28.1",
     "jsonschema>=4.26.0",
-    "platformdirs>=4.14.3",
-    "pydantic>=2.14.2",
+    "platformdirs>=4.14.5",
+    "pydantic>=2.14.3",
     "rich>=15.0.0",
     "rich-click>=1.9.9",
 ]
@@ -49,10 +49,10 @@ dev = [
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
-    "ruff>=0.17.3",
-    "ty>=0.0.95",
+    "ruff>=0.17.5",
+    "ty>=0.0.105",
     "types-jsonschema>=4.26.0.20261006",
-    "zizmor>=1.31.1",
+    "zizmor>=1.32.0",
 ]
 
 [tool.uv]

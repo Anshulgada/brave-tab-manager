@@ -659,19 +659,22 @@
   cursor: grabbing;
 }
 
+.collection-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
 .collect-bar {
   align-items: center;
-  background: linear-gradient(
-    120deg,
-    color-mix(in srgb, var(--brand) 12%, var(--surface)),
-    var(--surface)
-  );
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--brand) 6%, var(--surface));
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 12px 18px;
 }
 
 .collect-bar div {
@@ -902,10 +905,13 @@
   color: var(--brand-text);
   display: inline-flex;
   font-size: 12px;
-  gap: 4px;
+  gap: 5px;
   text-decoration: none;
   min-width: 0;
-  max-width: 180px;
+  max-width: 260px;
+}
+
+.hf-model-link span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -953,6 +959,17 @@
   font-family: ui-monospace, "Cascadia Code", monospace;
   font-size: 12.5px;
   min-width: 240px;
+  height: 34px;
+  box-sizing: border-box;
+}
+
+.storage-input-row .btn {
+  height: 34px;
+  min-height: 34px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .storage-scan-result {
@@ -1062,7 +1079,7 @@
     box-shadow 0.18s ease;
 }
 
-.benchmark-btn.btn {
+.benchmark-btn {
   height: 34px;
   min-height: 34px;
   display: inline-flex;

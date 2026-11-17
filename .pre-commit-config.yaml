@@ -1,5 +1,5 @@
 minimum_pre_commit_version: "4.0.0"
-default_install_hook_types: [pre-commit, pre-push]
+default_install_hook_types: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -43,14 +43,14 @@ repos:
 
       - id: biome
         name: Biome check
-        entry: scripts/run_if_present.sh bun --cwd extension run check
+        entry: scripts/run_if_present.sh bun run --cwd extension check
         language: system
         pass_filenames: false
         files: ^extension/
 
       - id: typescript
         name: TypeScript type check
-        entry: scripts/run_if_present.sh bun --cwd extension run typecheck
+        entry: scripts/run_if_present.sh bun run --cwd extension typecheck
         language: system
         pass_filenames: false
         files: ^extension/
@@ -77,7 +77,8 @@ repos:
 
       - id: path-filtered-gates
         name: Path-filtered build and test gates
-        entry: uv run python scripts/pre_push.py
+        entry: uv run python scripts/ci_gates.py
         language: system
-        pass_filenames: false
-        stages: [pre-push]
+        pass_filenames: true
+        require_serial: true
+        stages: [pre-commit]

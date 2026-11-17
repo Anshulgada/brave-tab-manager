@@ -357,3 +357,49 @@ def test_organize_uses_the_selected_provider(
     assert captured["name"] == "My Gateway"
     assert captured["kwargs"]["base_url"] == "https://api.example/v1"
     assert captured["kwargs"]["model"] == "m"
+
+
+def test_update_check_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tabman.update import VersionInfo
+
+    monkeypatch.setattr(
+        "tabman.cli.check_latest_version",
+        lambda: VersionInfo(current="0.6.6", latest="0.6.7", update_available=True),
+    )
+
+    result = invoke("update", "--check", "--json")
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["current"] == "0.6.6"
+    assert payload["latest"] == "0.6.7"
+    assert payload["update_available"] is True
+
+
+def test_upgrade_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tabman.update import VersionInfo
+
+    monkeypatch.setattr(
+        "tabman.cli.check_latest_version",
+        lambda: VersionInfo(current="0.6.6", latest="0.6.6", update_available=False),
+    )
+
+    result = invoke("upgrade", "--check")
+    assert result.exit_code == 0
+    assert "Tabman is up to date" in result.output
+
+
+def test_update_run_upgrade_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tabman.update import VersionInfo
+
+    monkeypatch.setattr(
+        "tabman.cli.check_latest_version",
+        lambda: VersionInfo(current="0.6.6", latest="0.6.7", update_available=True),
+    )
+    monkeypatch.setattr(
+        "tabman.cli.run_upgrade",
+        lambda: (True, "Successfully upgraded via uv"),
+    )
+
+    result = invoke("update")
+    assert result.exit_code == 0
+    assert "Successfully updated" in result.output

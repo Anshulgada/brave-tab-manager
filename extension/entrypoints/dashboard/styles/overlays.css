@@ -200,6 +200,11 @@
   justify-content: space-between;
 }
 
+.tag-manager-list li > .input {
+  flex: 1;
+  min-width: 100px;
+}
+
 .tag-manager-list li > .tag-info {
   align-items: center;
   display: flex;
@@ -222,6 +227,7 @@
 }
 
 .tag-manager-new {
+  align-items: center;
   display: flex;
   gap: 8px;
   margin-top: 4px;
@@ -229,17 +235,19 @@
 
 .tag-manager-new .input {
   flex: 1;
+  min-width: 120px;
 }
 
 .color-swatches {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, auto);
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  max-width: 160px;
+  max-width: none;
 }
 
 .color-swatches-sm {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -250,10 +258,13 @@
   border: 2px solid transparent;
   border-radius: 50%;
   cursor: pointer;
-  height: 20px;
+  flex-shrink: 0;
+  height: 22px;
   padding: 0;
-  width: 20px;
-  margin: 0 auto;
+  transition:
+    transform var(--fast),
+    border-color var(--fast);
+  width: 22px;
 }
 
 .color-swatches-sm .color-swatch {
@@ -593,7 +604,7 @@
 .collection-toolbar-redesigned {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -639,10 +650,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding-top: 2px;
+  padding: 4px 0 6px;
 }
 
 .collect-modal-select {
+  display: block;
   width: 100%;
 }
 

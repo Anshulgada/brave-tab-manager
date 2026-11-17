@@ -4,12 +4,17 @@ import type {
   ProviderProfile,
   ProviderSettings,
 } from '../../../src/ai';
+import { BorderBeam } from '../../../src/components/motion/border-beam';
+import { CardSpotlight } from '../../../src/components/motion/card-spotlight';
+import { NumberTicker } from '../../../src/components/motion/number-ticker';
+import { Button } from '../../../src/components/ui/button';
 import {
   type ComputeDeviceChoice,
   detectHardwareProfile,
   getDefaultModelStorageLocations,
   type HardwareProfile,
   type ModelPrecision,
+  scanDiskModels,
   TABMAN_OFFICIAL_MODELS,
   type TabmanOfficialModel,
 } from '../../../src/compute-device';
@@ -18,6 +23,7 @@ import {
   type HardwareBenchmarkReport,
   runHardwareBenchmark,
 } from '../../../src/hardware-benchmark';
+import { cn } from '../../../src/lib/utils';
 import { sendSwitchboardRequest } from '../../../src/runtime';
 import {
   CheckIcon,
@@ -86,6 +92,30 @@ function sortProvidersDeterministically(
     }
     return a.name.localeCompare(b.name);
   });
+}
+
+function matchesOfficialModel(
+  diskName: string,
+  diskPath: string,
+  official: TabmanOfficialModel,
+): boolean {
+  const normDiskName = diskName
+    .toLowerCase()
+    .replace(/\.onnx$/, '')
+    .replace(/^models--/, '')
+    .replace(/--/g, '/');
+  const normDiskPath = diskPath.toLowerCase().replace(/\\/g, '/');
+  const idLower = official.id.toLowerCase();
+  const repoLower = official.repo.toLowerCase();
+  const repoTail = repoLower.split('/').pop() ?? '';
+  return (
+    normDiskName === idLower ||
+    normDiskName === repoLower ||
+    normDiskName === repoTail ||
+    normDiskPath.includes(`/${idLower}`) ||
+    normDiskPath.includes(`/${repoTail}`) ||
+    normDiskPath.includes(`/${repoLower}`)
+  );
 }
 
 export function ProvidersPanel({ onNotify }: PanelProps) {
@@ -168,24 +198,60 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
   const storageLocations = getDefaultModelStorageLocations();
   const [modelStoragePath, setModelStoragePath] = useState<string>(() => {
     try {
-      return (
-        localStorage.getItem('tabman.modelStoragePath') ||
-        storageLocations.current
-      );
+      const stored = localStorage.getItem('tabman.modelStoragePath');
+      if (stored && /\\tabman\\/i.test(stored)) {
+        const normalized = stored.replace(/\\Tabman\\/g, '\\tabman\\');
+        localStorage.setItem('tabman.modelStoragePath', normalized);
+        return normalized;
+      }
+      return stored || storageLocations.current;
     } catch {
       return storageLocations.current;
     }
   });
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [downloadedRepos, setDownloadedRepos] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem('tabman.downloadedModels');
-      return raw ? (JSON.parse(raw) as string[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [downloadedRepos, setDownloadedRepos] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const resolvedDefault = getDefaultModelStorageLocations().current;
+    const targetDir =
+      (
+        modelStoragePath ||
+        storageLocations.current ||
+        resolvedDefault
+      ).trim() || resolvedDefault;
+    void scanDiskModels(targetDir).then((res) => {
+      if (!active) return;
+      if (res?.available && res.models && res.models.length > 0) {
+        const verified = TABMAN_OFFICIAL_MODELS.filter((m) =>
+          res.models.some((dm) => matchesOfficialModel(dm.name, dm.path, m)),
+        ).map((m) => m.repo.toLowerCase());
+        setDownloadedRepos(verified);
+        if (verified.length > 0) {
+          try {
+            localStorage.setItem(
+              'tabman.downloadedModels',
+              JSON.stringify(verified),
+            );
+          } catch {}
+        } else {
+          try {
+            localStorage.removeItem('tabman.downloadedModels');
+          } catch {}
+        }
+      } else {
+        setDownloadedRepos([]);
+        try {
+          localStorage.removeItem('tabman.downloadedModels');
+        } catch {}
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [modelStoragePath, storageLocations.current]);
 
   useEffect(() => {
     if (adding) {
@@ -354,52 +420,37 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     setIsScanning(true);
     setScanStatus(null);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      const stored = (() => {
-        try {
-          const raw = localStorage.getItem('tabman.downloadedModels');
-          return raw ? (JSON.parse(raw) as string[]) : [];
-        } catch {
-          return [];
-        }
-      })();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const resolvedDefault = getDefaultModelStorageLocations().current;
+      const targetDir =
+        (
+          modelStoragePath ||
+          storageLocations.current ||
+          resolvedDefault
+        ).trim() || resolvedDefault;
 
-      const localProviderRepos = (settings?.providers ?? [])
-        .filter((p) => p.apiFormat === 'tabman-local')
-        .map((p) => p.model.toLowerCase());
+      // Scan local disk directly via the Tabman native sidecar
+      const diskResult = await scanDiskModels(targetDir);
+      const verifiedRepos: string[] = [];
 
-      const downloadedSet = new Set(
-        [...stored, ...localProviderRepos].map((s) => s.toLowerCase()),
-      );
-
-      if (activeProfile?.apiFormat === 'tabman-local') {
-        downloadedSet.add(activeProfile.model.toLowerCase());
-      }
-
-      // Check Cache Storage in the browser for transformers.js or onnx model caches
-      if (typeof window !== 'undefined' && 'caches' in window) {
-        try {
-          const cacheKeys = await window.caches.keys();
-          for (const key of cacheKeys) {
-            const lowerKey = key.toLowerCase();
-            for (const m of TABMAN_OFFICIAL_MODELS) {
-              if (
-                lowerKey.includes(m.repo.toLowerCase()) ||
-                lowerKey.includes(m.id)
-              ) {
-                downloadedSet.add(m.repo.toLowerCase());
+      if (diskResult?.available && diskResult.models.length > 0) {
+        for (const diskModel of diskResult.models) {
+          for (const m of TABMAN_OFFICIAL_MODELS) {
+            const repoLower = m.repo.toLowerCase();
+            if (matchesOfficialModel(diskModel.name, diskModel.path, m)) {
+              if (!verifiedRepos.includes(repoLower)) {
+                verifiedRepos.push(repoLower);
               }
             }
           }
-        } catch {}
+        }
       }
 
       const verified = TABMAN_OFFICIAL_MODELS.filter((m) =>
-        downloadedSet.has(m.repo.toLowerCase()),
+        verifiedRepos.includes(m.repo.toLowerCase()),
       );
 
       if (verified.length > 0) {
-        const verifiedRepos = verified.map((m) => m.repo.toLowerCase());
         try {
           localStorage.setItem(
             'tabman.downloadedModels',
@@ -435,7 +486,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
         await load();
 
         const names = verified.map((m) => m.name).join(', ');
-        const message = `Scan complete: Found ${verified.length} verified Tabman local model(s) (${names}) ready for zero-dependency execution.`;
+        const message = `Disk scan complete: Found ${verified.length} verified Tabman local model(s) on disk (${names}) ready for zero-dependency execution.`;
         setScanStatus(message);
         onNotify(message, 'success');
       } else {
@@ -443,7 +494,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
         try {
           localStorage.removeItem('tabman.downloadedModels');
         } catch {}
-        const message = `No local models found in browser cache or ${modelStoragePath || storageLocations.current}. Click "Use Model" on any model above to download into browser cache.`;
+        const message = `No model files found on disk in ${diskResult?.path || targetDir}. Place ONNX weights into this folder for local execution.`;
         setScanStatus(message);
         onNotify(message, 'info');
       }
@@ -487,14 +538,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       if (!actRes.ok) {
         throw new Error(actRes.error);
       }
-
-      try {
-        const raw = localStorage.getItem('tabman.downloadedModels');
-        const curr = raw ? (JSON.parse(raw) as string[]) : [];
-        const next = Array.from(new Set([...curr, hfModel.repo.toLowerCase()]));
-        localStorage.setItem('tabman.downloadedModels', JSON.stringify(next));
-      } catch {}
-    }, `${hfModel.name} activated with local zero-dependency engine.`);
+    }, `${hfModel.name} activated.`);
 
   const handleSelectPreset = (val: string) => {
     setSelectedHfPreset(val);
@@ -726,89 +770,33 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               )}
 
               <Tooltip
-                maxWidth={380}
+                maxWidth={360}
                 content={
-                  hardwareProfile?.npuAvailableInBrowser ? (
-                    'Dedicated NPU (WebNN): Ultra-low power neural hardware execution.'
-                  ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      padding: '2px',
+                    }}
+                  >
                     <div
                       style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        padding: '2px',
+                        fontWeight: 600,
+                        color: 'var(--brand-text)',
+                        fontSize: '13px',
                       }}
                     >
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          color: 'var(--brand-text)',
-                          fontSize: '13px',
-                        }}
-                      >
-                        Chromium WebNN NPU Setup
-                      </div>
-                      <div
-                        style={{ fontSize: '12px', color: 'var(--text-soft)' }}
-                      >
-                        To activate your system NPU in Chrome/Brave, enable
-                        these 3 flags in <code>chrome://flags</code> or{' '}
-                        <code>brave://flags</code>:
-                      </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px',
-                          fontSize: '11.5px',
-                        }}
-                      >
-                        <div>
-                          <strong>1. Enables WebNN API</strong>{' '}
-                          <code style={{ fontSize: '10.5px' }}>
-                            #web-machine-learning-neural-network
-                          </code>
-                          <div style={{ color: 'var(--success)' }}>
-                            ➜ Set to: <strong>Enabled</strong> (Primary WebNN
-                            API)
-                          </div>
-                        </div>
-                        <div>
-                          <strong>2. ONNX Runtime backend for WebNN</strong>{' '}
-                          <code style={{ fontSize: '10.5px' }}>
-                            #webnn-onnxruntime
-                          </code>
-                          <div style={{ color: 'var(--success)' }}>
-                            ➜ Set to: <strong>Enabled</strong> (Routes to
-                            DirectML / OpenVINO NPU on Windows)
-                          </div>
-                        </div>
-                        <div>
-                          <strong>
-                            3. Enables experimental WebNN API features
-                          </strong>{' '}
-                          <code style={{ fontSize: '10.5px' }}>
-                            #experimental-web-machine-learning-neural-network
-                          </code>
-                          <div style={{ color: 'var(--text-muted)' }}>
-                            ➜ Set to: <strong>Enabled</strong> (Full operator
-                            support)
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '11px',
-                          color: 'var(--text-faint)',
-                          borderTop: '1px solid var(--border-subtle)',
-                          paddingTop: '6px',
-                        }}
-                      >
-                        Relaunch browser after enabling flags to activate NPU
-                        execution.
-                      </div>
+                      NPU Dedicated Neural Execution
                     </div>
-                  )
+                    <div
+                      style={{ fontSize: '12px', color: 'var(--text-soft)' }}
+                    >
+                      DirectML / WebNN neural inference for zero-latency tab
+                      embeddings. Runs natively with zero browser flags
+                      required.
+                    </div>
+                  </div>
                 }
               >
                 <button
@@ -822,9 +810,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 >
                   {deviceChoice === 'npu' && <CheckIcon size={13} />}
                   NPU (
-                  {hardwareProfile?.npuAvailableInBrowser
-                    ? `WebNN${getDeviceLatency('npu') !== undefined ? ` · ${getDeviceLatency('npu')} ms` : ''}`
-                    : 'WebNN Flag Required'}
+                  {getDeviceLatency('npu') !== undefined
+                    ? `DirectML · ${getDeviceLatency('npu')} ms`
+                    : 'DirectML / WebNN'}
                   )
                 </button>
               </Tooltip>
@@ -849,21 +837,23 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               </Tooltip>
 
               <Tooltip content="Run empirical matrix benchmark across all detected local GPUs, NPU, and CPU to verify real execution latency.">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
-                  className="btn btn-sm btn-ghost benchmark-btn"
+                  className="benchmark-btn"
                   style={{ marginLeft: 'auto', gap: '6px' }}
                   onClick={() => void handleTriggerBenchmark()}
                   disabled={isBenchmarking}
                 >
                   <RefreshIcon
-                    size={12}
+                    size={13}
                     className={isBenchmarking ? 'benchmark-spin' : ''}
                   />
                   <span>
                     {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
                   </span>
-                </button>
+                </Button>
               </Tooltip>
             </div>
           </div>
@@ -890,25 +880,28 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     title={`${res.name}: ${res.latencyMs} ms per pass (~${opsPerSec.toLocaleString()} ops/sec)`}
                   >
                     {isFastest && '🏆 '}
-                    <strong>{res.name}:</strong> {res.latencyMs} ms
+                    <strong>{res.name}:</strong>
                     <span
                       style={{
-                        opacity: 0.65,
-                        fontSize: '10.5px',
+                        opacity: 0.8,
+                        fontSize: '11px',
                         marginLeft: '4px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
                       }}
                     >
-                      ({opsPerSec.toLocaleString()} ops/s)
+                      <NumberTicker value={opsPerSec} />
+                      <span style={{ marginLeft: '3px' }}>ops/s</span>
                     </span>
                     {isFastest && (
                       <span
                         style={{
                           color: 'var(--success)',
                           fontWeight: 600,
-                          marginLeft: '4px',
+                          marginLeft: '6px',
                         }}
                       >
-                        · Fastest
+                        Fastest
                       </span>
                     )}
                   </span>
@@ -933,39 +926,42 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               precision === 'int8' ? hfModel.sizeInt8 : hfModel.sizeFp32;
             const isRecommended =
               hardwareProfile?.recommendedModelId === hfModel.id;
-            const isDownloaded =
-              downloadedRepos.includes(hfModel.repo.toLowerCase()) || isActive;
+            const isDownloaded = downloadedRepos.includes(
+              hfModel.repo.toLowerCase(),
+            );
 
             return (
-              <article
+              <CardSpotlight
                 key={hfModel.id}
-                className={isActive ? 'hf-model-card active' : 'hf-model-card'}
+                className={cn(
+                  'hf-model-card relative overflow-hidden transition-all duration-200',
+                  isActive ? 'active ring-1 ring-brand' : '',
+                )}
               >
+                {isActive && (
+                  <BorderBeam
+                    size={70}
+                    duration={6}
+                    colorFrom="var(--brand)"
+                    colorTo="#60a5fa"
+                  />
+                )}
                 <div className="hf-model-card-head">
                   <div className="hf-model-title">
                     <div className="hf-model-title-row">
                       <strong>{hfModel.name}</strong>
-                      {isDownloaded && (
-                        <Tooltip content="Cached locally on device (ready for zero-latency offline execution)">
-                          <span
-                            role="img"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'var(--success)',
-                              background:
-                                'color-mix(in srgb, var(--success) 14%, transparent)',
-                              borderRadius: '50%',
-                              width: '18px',
-                              height: '18px',
-                              flexShrink: 0,
-                            }}
-                            aria-label="Model cached locally"
-                          >
-                            <HardDriveIcon size={12} />
-                          </span>
-                        </Tooltip>
+                      {isRecommended && (
+                        <span
+                          className="hf-badge"
+                          style={{
+                            background:
+                              'color-mix(in srgb, var(--brand) 15%, transparent)',
+                            color: 'var(--brand-text)',
+                            borderColor: 'var(--brand)',
+                          }}
+                        >
+                          Recommended
+                        </span>
                       )}
                     </div>
                     <span>{hfModel.tier}</span>
@@ -977,27 +973,15 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                         Active
                       </span>
                     ) : (
-                      <button
-                        className="btn btn-sm"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         type="button"
                         disabled={busy}
                         onClick={() => void handleActivateHfModel(hfModel)}
                       >
                         Use Model
-                      </button>
-                    )}
-                    {isRecommended && (
-                      <span
-                        className="hf-badge"
-                        style={{
-                          background:
-                            'color-mix(in srgb, var(--brand) 15%, transparent)',
-                          color: 'var(--brand-text)',
-                          borderColor: 'var(--brand)',
-                        }}
-                      >
-                        Recommended
-                      </span>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -1013,12 +997,42 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     <SparkIcon size={13} />
                     <span>{hfModel.repo}</span>
                   </a>
-                  <span className="hf-badge">
-                    {precision.toUpperCase()}{' '}
-                    <span className="hf-badge-dot">•</span> {currentSize}
-                  </span>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    {isDownloaded && (
+                      <Tooltip content="Model weights verified on disk (ready for zero-latency offline execution)">
+                        <span
+                          role="img"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--success)',
+                            background:
+                              'color-mix(in srgb, var(--success) 14%, transparent)',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            flexShrink: 0,
+                          }}
+                          aria-label="Model weights verified on disk"
+                        >
+                          <HardDriveIcon size={12} />
+                        </span>
+                      </Tooltip>
+                    )}
+                    <span className="hf-badge">
+                      {precision.toUpperCase()}{' '}
+                      <span className="hf-badge-dot">•</span> {currentSize}
+                    </span>
+                  </div>
                 </div>
-              </article>
+              </CardSpotlight>
             );
           })}
         </div>
@@ -1043,16 +1057,18 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
             placeholder={storageLocations.current}
             title="Local folder path where models are saved"
           />
-          <button
-            className="btn btn-sm"
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             onClick={handleResetStoragePath}
             title="Reset to recommended default for this OS"
           >
             Reset to OS Default
-          </button>
-          <button
-            className="btn btn-sm"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             disabled={isScanning}
             onClick={() => void handleScanModels()}
@@ -1060,7 +1076,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
           >
             <SearchIcon size={13} />
             {isScanning ? 'Scanning...' : 'Scan Machine for Models'}
-          </button>
+          </Button>
         </div>
         {scanStatus && (
           <div className="storage-scan-result">
@@ -1089,14 +1105,15 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
             Active & Custom Providers
           </h2>
           {providers.length > 0 && !adding && (
-            <button
-              className="btn btn-sm"
+            <Button
+              variant="outline"
+              size="sm"
               type="button"
               onClick={() => setAdding(true)}
             >
               <PlusIcon size={14} />
               Add a provider
-            </button>
+            </Button>
           )}
         </div>
 
@@ -1110,14 +1127,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               Select an official Hugging Face model above for zero-dependency
               local clustering, or add a custom API provider endpoint.
             </p>
-            <button
-              className="btn btn-primary"
+            <Button
+              variant="default"
               type="button"
               onClick={() => setAdding(true)}
             >
               <PlusIcon size={15} />
               Add a provider
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1134,7 +1151,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                   <span>
                     {profile.model} · {profile.apiFormat}
                   </span>
-                  <code>{profile.baseUrl}</code>
+                  <code>
+                    {profile.baseUrl.replace(/\\Tabman\\/g, '\\tabman\\')}
+                  </code>
                 </div>
                 {active ? (
                   <span className="chip chip-brand">
@@ -1142,8 +1161,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     In use
                   </span>
                 ) : (
-                  <button
-                    className="btn btn-sm"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     disabled={busy}
                     onClick={() =>
@@ -1159,7 +1179,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     }
                   >
                     Use
-                  </button>
+                  </Button>
                 )}
               </header>
 
@@ -1181,16 +1201,39 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
+                      flexWrap: 'wrap',
                     }}
                   >
-                    <span className="chip chip-success">
-                      <CheckIcon size={12} /> Local AI Engine Ready
-                    </span>
-                    <span
-                      style={{ fontSize: '12px', color: 'var(--text-muted)' }}
-                    >
-                      Zero external dependencies · No API key needed
-                    </span>
+                    {downloadedRepos.includes(profile.model.toLowerCase()) ? (
+                      <>
+                        <span className="chip chip-success">
+                          <CheckIcon size={12} /> Model Cached on Disk
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '12px',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          Zero-latency local ONNX execution
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="chip chip-warning">
+                          <SparkIcon size={12} /> Ready on First Use
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '12px',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          Downloads on first embedding task, or place ONNX in
+                          storage directory
+                        </span>
+                      </>
+                    )}
                   </div>
                   <div
                     style={{
@@ -1240,16 +1283,18 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       value={keyDraft}
                       onChange={(event) => setKeyDraft(event.target.value)}
                     />
-                    <button
-                      className="btn btn-sm"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       type="button"
                       disabled={busy || !keyDraft.trim()}
                       onClick={() => void saveKey()}
                     >
                       Save key
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-icon btn-sm"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       type="button"
                       title="Forget the stored key"
                       aria-label="Forget the stored key"
@@ -1266,7 +1311,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       }
                     >
                       <CloseIcon size={14} />
-                    </button>
+                    </Button>
                   </div>
 
                   <label className="settings-toggle provider-remember">
@@ -1290,8 +1335,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                     ? '100% private · Neural clustering executes locally in your browser'
                     : 'Session only unless you turn the switch on.'}
                 </span>
-                <button
-                  className="btn btn-danger btn-sm"
+                <Button
+                  variant="destructive"
+                  size="sm"
                   type="button"
                   disabled={busy}
                   onClick={() =>
@@ -1308,7 +1354,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 >
                   <TrashIcon size={14} />
                   Remove
-                </button>
+                </Button>
               </footer>
             </article>
           );
@@ -1420,8 +1466,8 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               </label>
             </div>
             <div className="provider-actions">
-              <button
-                className="btn btn-primary"
+              <Button
+                variant="default"
                 type="submit"
                 disabled={
                   busy || !name.trim() || !baseUrl.trim() || !model.trim()
@@ -1429,9 +1475,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
               >
                 <PlusIcon size={15} />
                 Add provider
-              </button>
-              <button
-                className="btn btn-ghost"
+              </Button>
+              <Button
+                variant="ghost"
                 type="button"
                 onClick={() => {
                   setAdding(false);
@@ -1439,7 +1485,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 }}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         )}

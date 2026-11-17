@@ -1,4 +1,6 @@
+import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
 import { PencilIcon, PlusIcon, TrashIcon } from '../../../src/ui/icons';
 
@@ -51,11 +53,15 @@ export function TagManagerModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div
+      <motion.div
         className="dialog dialog-wide"
         role="dialog"
         aria-modal="true"
         aria-label="Manage tags"
+        initial={{ opacity: 0, scale: 0.98, y: -6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: -6 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <h2>Tags in {collection.name}</h2>
         <p className="settings-intro">
@@ -86,9 +92,16 @@ export function TagManagerModal({
                       );
                       return !usedByOther;
                     }).map((color) => (
-                      <button
+                      <motion.button
                         key={color || 'none'}
                         type="button"
+                        whileHover={{ scale: 1.18 }}
+                        whileTap={{ scale: 0.88 }}
+                        transition={{
+                          type: 'spring',
+                          stiffness: 500,
+                          damping: 25,
+                        }}
                         className={
                           renamingTagColor === color
                             ? 'color-swatch selected'
@@ -100,27 +113,31 @@ export function TagManagerModal({
                       />
                     ))}
                   </div>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    type="button"
-                    disabled={!renamingTagName.trim()}
-                    onClick={() => {
-                      void onUpdateTag(
-                        tag.id,
-                        renamingTagName,
-                        renamingTagColor || null,
-                      ).then(() => setRenamingTagId(undefined));
-                    }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    type="button"
-                    onClick={() => setRenamingTagId(undefined)}
-                  >
-                    Cancel
-                  </button>
+                  <div className="tag-actions">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      type="button"
+                      disabled={!renamingTagName.trim()}
+                      onClick={() => {
+                        void onUpdateTag(
+                          tag.id,
+                          renamingTagName,
+                          renamingTagColor || null,
+                        ).then(() => setRenamingTagId(undefined));
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      onClick={() => setRenamingTagId(undefined)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <>
@@ -135,8 +152,9 @@ export function TagManagerModal({
                     <span className="chip">{tag.name}</span>
                   </div>
                   <div className="tag-actions">
-                    <button
-                      className="btn btn-ghost btn-icon btn-sm"
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       type="button"
                       title="Rename tag"
                       aria-label={`Rename ${tag.name}`}
@@ -147,16 +165,17 @@ export function TagManagerModal({
                       }}
                     >
                       <PencilIcon size={13} />
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-icon btn-sm"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       type="button"
                       title="Delete tag"
                       aria-label={`Delete ${tag.name}`}
                       onClick={() => void onDeleteTag(tag.id)}
                     >
                       <TrashIcon size={13} />
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}
@@ -189,9 +208,16 @@ export function TagManagerModal({
               const used = collection.tags.some((t) => t.color === color);
               return !used;
             }).map((color) => (
-              <button
+              <motion.button
                 key={color || 'none'}
                 type="button"
+                whileHover={{ scale: 1.18 }}
+                whileTap={{ scale: 0.88 }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 500,
+                  damping: 25,
+                }}
                 className={
                   newTagColor === color
                     ? 'color-swatch selected'
@@ -203,22 +229,23 @@ export function TagManagerModal({
               />
             ))}
           </div>
-          <button
-            className="btn btn-primary btn-sm"
+          <Button
+            variant="default"
+            size="sm"
             type="submit"
             disabled={!newTagName.trim()}
           >
             <PlusIcon size={14} />
             Add tag
-          </button>
+          </Button>
         </form>
 
         <div className="dialog-actions">
-          <button className="btn" type="button" onClick={onClose}>
+          <Button variant="ghost" type="button" onClick={onClose}>
             Done
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

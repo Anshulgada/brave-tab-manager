@@ -189,6 +189,8 @@ export const settingsSchema = z.strictObject({
   defaultView: z.enum(['list', 'grid']),
   includeFullUrlInAi: z.boolean(),
   aiProvider: shortName.nullable(),
+  enableRichPreviews: z.boolean().optional(),
+  iframelyApiKey: z.string().max(256).nullable().optional(),
 });
 
 export const exportDocumentSchema = z

@@ -1,4 +1,10 @@
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import {
+  fetchIframelyPreview,
+  getCachedPreview,
+  type IframelyPreview,
+} from '../../../src/iframely';
 import type { LibraryCollection } from '../../../src/library';
 import { hostInitial, hostLabel, tabLabel } from '../../../src/ui/format';
 import {
@@ -20,6 +26,8 @@ export interface TabCardProps {
   onDelete: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
+  enableRichPreviews?: boolean;
+  iframelyApiKey?: string | null;
 }
 
 export function TabCard({
@@ -33,13 +41,39 @@ export function TabCard({
   onDelete,
   onDragStart,
   onDragEnd,
+  enableRichPreviews,
+  iframelyApiKey,
 }: TabCardProps) {
   const title = tabLabel(tab.title, tab.hostname, tab.url);
   const host = hostLabel(tab.hostname, tab.url);
   const tagColor = tags.find((t) => Boolean(t.color))?.color;
 
+  const [preview, setPreview] = useState<IframelyPreview | null>(() =>
+    getCachedPreview(tab.url),
+  );
+
+  useEffect(() => {
+    let active = true;
+    if (enableRichPreviews && iframelyApiKey?.trim() && !preview) {
+      void fetchIframelyPreview(tab.url, iframelyApiKey).then((res) => {
+        if (active && res) {
+          setPreview(res);
+        }
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [tab.url, enableRichPreviews, iframelyApiKey, preview]);
+
   return (
-    <article
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 8, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      whileHover={{ y: -3, transition: { duration: 0.16, ease: 'easeOut' } }}
+      transition={{ duration: 0.2 }}
       className={[
         'tab-card',
         selected ? 'selected' : '',
@@ -53,8 +87,9 @@ export function TabCard({
       }}
       draggable
       onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', tab.id);
+        const dragEvent = event as unknown as React.DragEvent;
+        dragEvent.dataTransfer.effectAllowed = 'move';
+        dragEvent.dataTransfer.setData('text/plain', tab.id);
         onDragStart();
       }}
       onDragEnd={onDragEnd}
@@ -143,6 +178,20 @@ export function TabCard({
         </div>
       </div>
 
+      {preview?.thumbnailUrl && (
+        <div className="tab-preview-cover">
+          <img
+            src={preview.thumbnailUrl}
+            alt=""
+            loading="lazy"
+            onError={(e) => {
+              const parent = e.currentTarget.parentElement;
+              if (parent) parent.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
       <a
         className="tab-title"
         href={tab.url}
@@ -150,8 +199,14 @@ export function TabCard({
         rel="noreferrer"
         title={tab.url}
       >
-        {title}
+        {preview?.title || title}
       </a>
+
+      {preview?.description && (
+        <p className="tab-preview-desc" title={preview.description}>
+          {preview.description}
+        </p>
+      )}
 
       {tags.length > 0 && (
         <div className="tab-tags">
@@ -169,7 +224,7 @@ export function TabCard({
           ))}
         </div>
       )}
-    </article>
+    </motion.article>
   );
 }
 
@@ -190,7 +245,13 @@ export function TabRow({
   const tagColor = tags.find((t) => Boolean(t.color))?.color;
 
   return (
-    <article
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      whileHover={{ x: 2, transition: { duration: 0.15 } }}
+      transition={{ duration: 0.18 }}
       className={[
         'tab-row',
         selected ? 'selected' : '',
@@ -204,8 +265,9 @@ export function TabRow({
       }}
       draggable
       onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', tab.id);
+        const dragEvent = event as unknown as React.DragEvent;
+        dragEvent.dataTransfer.effectAllowed = 'move';
+        dragEvent.dataTransfer.setData('text/plain', tab.id);
         onDragStart();
       }}
       onDragEnd={onDragEnd}
@@ -264,48 +326,48 @@ export function TabRow({
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className="btn btn-ghost btn-icon btn-sm"
+          className="tab-action-btn"
           type="button"
           title="Restore this tab"
           aria-label="Restore this tab"
           onClick={onRestore}
         >
-          <ArrowUpRightIcon size={15} />
+          <ArrowUpRightIcon size={14} />
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className={`btn btn-ghost btn-icon btn-sm ${tab.pinned ? 'is-pinned' : ''}`}
+          className={`tab-action-btn ${tab.pinned ? 'is-pinned' : ''}`}
           type="button"
           title={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
           aria-label={tab.pinned ? 'Unpin this tab' : 'Pin this tab'}
           onClick={onPin}
         >
-          {tab.pinned ? <PinSlashIcon size={15} /> : <PinIcon size={15} />}
+          {tab.pinned ? <PinSlashIcon size={14} /> : <PinIcon size={14} />}
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className="btn btn-ghost btn-icon btn-sm"
+          className="tab-action-btn"
           type="button"
           title="Edit this tab"
           aria-label="Edit this tab"
           onClick={onEdit}
         >
-          <PencilIcon size={15} />
+          <PencilIcon size={14} />
         </motion.button>
         <motion.button
           whileHover={{ scale: 1.15 }}
           whileTap={{ scale: 0.85 }}
-          className="btn btn-ghost btn-icon btn-sm"
+          className="tab-action-btn tab-action-delete"
           type="button"
           title="Delete this tab"
           aria-label="Delete this tab"
           onClick={onDelete}
         >
-          <CloseIcon size={15} />
+          <CloseIcon size={14} />
         </motion.button>
       </div>
-    </article>
+    </motion.article>
   );
 }

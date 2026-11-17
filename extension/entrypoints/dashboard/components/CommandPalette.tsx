@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { ChevronIcon, SearchIcon } from '../../../src/ui/icons';
 import type { Command } from '../types';
@@ -63,11 +64,15 @@ export function CommandPalette({
         aria-label="Close the command palette"
         onClick={onClose}
       />
-      <div
+      <motion.div
         className="palette"
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        initial={{ opacity: 0, scale: 0.98, y: -8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: -8 }}
+        transition={{ duration: 0.16, ease: [0.22, 0.61, 0.36, 1] }}
       >
         <div className="palette-input">
           <SearchIcon size={16} />
@@ -111,7 +116,7 @@ export function CommandPalette({
             ))
           )}
         </ul>
-      </div>
+      </motion.div>
     </div>
   );
 }

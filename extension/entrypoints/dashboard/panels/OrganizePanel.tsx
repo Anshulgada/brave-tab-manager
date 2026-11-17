@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion';
 import { useRef, useState } from 'react';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
 import { recordCorrection } from '../../../src/corrections';
 import { TabmanDatabase } from '../../../src/database';
 import type { LibraryCollection } from '../../../src/library';
@@ -395,13 +397,14 @@ export function OrganizePanel({
         </p>
         {sourceCollection && onBackToCollection && (
           <div style={{ marginTop: '8px' }}>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
-              className="btn btn-ghost btn-sm"
               onClick={onBackToCollection}
             >
               ← Back to {sourceCollection.name}
-            </button>
+            </Button>
           </div>
         )}
       </header>
@@ -409,73 +412,41 @@ export function OrganizePanel({
       <div className="organize-toolbar">
         <div className="organize-toolbar-left">
           <span className="organize-mode-label">Destination:</span>
-          <div className="segmented-pill-track">
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                destinationMode === 'single' ? 'active' : ''
-              }`}
-              onClick={() => {
-                setDestinationMode('single');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'single');
-                } catch {}
-              }}
-            >
-              {destinationMode === 'single' && (
-                <motion.div
-                  layoutId="destPill"
-                  className="segmented-pill-slider"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="segmented-pill-text">
-                Single collection (with tags)
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`segmented-pill-btn ${
-                destinationMode === 'multiple' ? 'active' : ''
-              }`}
-              onClick={() => {
-                setDestinationMode('multiple');
-                try {
-                  localStorage.setItem('tabman-organize-mode', 'multiple');
-                } catch {}
-              }}
-            >
-              {destinationMode === 'multiple' && (
-                <motion.div
-                  layoutId="destPill"
-                  className="segmented-pill-slider"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                />
-              )}
-              <span className="segmented-pill-text">Separate collections</span>
-            </button>
-          </div>
+          <AnimatedTabs<'single' | 'multiple'>
+            tabs={[
+              { id: 'single', label: 'Single collection (with tags)' },
+              { id: 'multiple', label: 'Separate collections' },
+            ]}
+            activeTab={destinationMode}
+            onChange={(val) => {
+              setDestinationMode(val);
+              try {
+                localStorage.setItem('tabman-organize-mode', val);
+              } catch {}
+            }}
+            layoutId="organizeDestPill"
+          />
         </div>
 
         <div className="organize-toolbar-right">
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="default"
             type="button"
             disabled={busy}
             onClick={() => void preview('provider')}
           >
             <SparkIcon size={15} />
             Preview with provider
-          </button>
-          <button
-            className="btn"
+          </Button>
+          <Button
+            variant="secondary"
             type="button"
             disabled={busy}
             onClick={() => void preview('deterministic')}
           >
             <LayersIcon size={15} />
             Preview with local rules
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -500,61 +471,28 @@ export function OrganizePanel({
               </span>
             </div>
             <div className="proposal-toolbar">
-              <div className="segmented-pill-track">
-                <button
-                  type="button"
-                  className={`segmented-pill-btn ${
-                    organizeView === 'board' ? 'active' : ''
-                  }`}
-                  onClick={() => setOrganizeView('board')}
-                  aria-label="Board view"
-                >
-                  {organizeView === 'board' && (
-                    <motion.div
-                      layoutId="organizeViewPill"
-                      className="segmented-pill-slider"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 500,
-                        damping: 35,
-                      }}
-                    />
-                  )}
-                  <span className="segmented-pill-text">Board</span>
-                </button>
-                <button
-                  type="button"
-                  className={`segmented-pill-btn ${
-                    organizeView === 'grid' ? 'active' : ''
-                  }`}
-                  onClick={() => setOrganizeView('grid')}
-                  aria-label="Grid view"
-                >
-                  {organizeView === 'grid' && (
-                    <motion.div
-                      layoutId="organizeViewPill"
-                      className="segmented-pill-slider"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 500,
-                        damping: 35,
-                      }}
-                    />
-                  )}
-                  <span className="segmented-pill-text">Grid</span>
-                </button>
-              </div>
+              <AnimatedTabs<'board' | 'grid'>
+                tabs={[
+                  { id: 'board', label: 'Board' },
+                  { id: 'grid', label: 'Grid' },
+                ]}
+                activeTab={organizeView}
+                onChange={setOrganizeView}
+                layoutId="organizeProposalViewPill"
+              />
 
-              <button
-                className="btn btn-ghost btn-sm"
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 onClick={approveAll}
                 title="Approve and include all tabs"
               >
                 Approve all
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 onClick={() => {
                   if (allCollapsed) {
@@ -565,7 +503,7 @@ export function OrganizePanel({
                 }}
               >
                 {allCollapsed ? 'Expand all' : 'Collapse all'}
-              </button>
+              </Button>
               {showAddGroup ? (
                 <div className="kanban-add-group-form">
                   <input
@@ -720,20 +658,24 @@ export function OrganizePanel({
                           >
                             {name}
                           </strong>
-                          <button
-                            className="btn btn-ghost btn-icon btn-xs kanban-rename-btn"
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="btn-xs kanban-rename-btn"
                             type="button"
                             title="Rename group"
                             onClick={() => startRenamingGroup(name)}
                           >
                             <PencilIcon size={11} />
-                          </button>
+                          </Button>
                         </>
                       )}
                       <span className="badge">{items.length}</span>
                     </div>
-                    <button
-                      className={`btn btn-ghost btn-icon btn-sm kanban-col-toggle ${
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`btn-sm kanban-col-toggle ${
                         isCollapsed ? 'collapsed' : ''
                       }`}
                       type="button"
@@ -748,7 +690,7 @@ export function OrganizePanel({
                       onClick={() => toggleCollapse(name)}
                     >
                       <ChevronDownIcon size={14} />
-                    </button>
+                    </Button>
                   </header>
 
                   {!isCollapsed && (
@@ -974,14 +916,15 @@ export function OrganizePanel({
           >
             <div className="dialog-title">
               <h2>Edit Tab in Proposal</h2>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 type="button"
-                className="btn btn-ghost btn-icon btn-sm"
                 onClick={() => setEditingTabItem(null)}
                 aria-label="Close"
               >
                 <CloseIcon size={14} />
-              </button>
+              </Button>
             </div>
 
             <div className="field">
@@ -1042,16 +985,16 @@ export function OrganizePanel({
             )}
 
             <div className="dialog-actions">
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="btn btn-ghost"
                 onClick={() => setEditingTabItem(null)}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="default"
                 type="button"
-                className="btn btn-primary"
                 onClick={() => {
                   let targetGroup = editTabGroup;
                   if (showModalNewGroupInput && modalNewGroupName.trim()) {
@@ -1082,7 +1025,7 @@ export function OrganizePanel({
                 }}
               >
                 Save changes
-              </button>
+              </Button>
             </div>
           </motion.div>
         </div>

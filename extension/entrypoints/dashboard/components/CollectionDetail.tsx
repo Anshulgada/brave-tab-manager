@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { type FormEvent, type RefObject, useEffect, useRef } from 'react';
+import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { Button } from '../../../src/components/ui/button';
 import type { TabRecord } from '../../../src/database';
 import type { LibraryCollection } from '../../../src/library';
 import { CustomSelect } from '../../../src/ui/CustomSelect';
@@ -54,6 +56,8 @@ export interface CollectionDetailProps {
   onPinTab: (tab: TabRecord) => void;
   onDragStartTab: (tabId: string) => void;
   onDragEndTab: () => void;
+  enableRichPreviews?: boolean;
+  iframelyApiKey?: string | null;
 }
 
 export function CollectBar({
@@ -72,15 +76,16 @@ export function CollectBar({
           open in the browser.
         </span>
       </div>
-      <button
-        className="btn btn-primary"
+      <Button
+        variant="secondary"
+        size="sm"
         type="button"
         disabled={busy}
         onClick={onCollect}
       >
         <ZapIcon size={15} />
         Collect all open tabs
-      </button>
+      </Button>
     </section>
   );
 }
@@ -106,9 +111,9 @@ export function EmptyCollection({
           : 'Park tabs from the side panel, or import a Tabman JSON export to fill it in one go.'}
       </p>
       {filtered && (
-        <button className="btn" type="button" onClick={onClear}>
+        <Button variant="outline" size="sm" type="button" onClick={onClear}>
           Clear filters
-        </button>
+        </Button>
       )}
     </section>
   );
@@ -147,6 +152,8 @@ export function CollectionDetail({
   onPinTab,
   onDragStartTab,
   onDragEndTab,
+  enableRichPreviews,
+  iframelyApiKey,
 }: CollectionDetailProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -178,9 +185,7 @@ export function CollectionDetail({
   }, []);
 
   return (
-    <>
-      <CollectBar busy={busy} onCollect={onCollect} />
-
+    <div className="collection-detail">
       <section className="collection-head">
         <div className="collection-title">
           {renaming ? (
@@ -198,16 +203,17 @@ export function CollectionDetail({
                   }
                 }}
               />
-              <button className="btn btn-primary btn-sm" type="submit">
+              <Button variant="default" size="sm" type="submit">
                 Save
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 onClick={onCancelRename}
               >
                 Cancel
-              </button>
+              </Button>
             </form>
           ) : (
             <button
@@ -239,8 +245,8 @@ export function CollectionDetail({
 
         <div className="collection-actions">
           {onOrganizeCollection && (
-            <button
-              className="btn btn-primary"
+            <Button
+              variant="default"
               type="button"
               disabled={busy || collection.tabs.length === 0}
               onClick={onOrganizeCollection}
@@ -248,28 +254,30 @@ export function CollectionDetail({
             >
               <SparkIcon size={15} />
               Organize
-            </button>
+            </Button>
           )}
-          <button
-            className="btn"
+          <Button
+            variant="secondary"
             type="button"
             disabled={busy || collection.tabs.length === 0}
             onClick={onRestoreCollection}
           >
             <RestoreIcon size={15} />
             Restore in new window
-          </button>
-          <button
-            className="btn btn-danger"
+          </Button>
+          <Button
+            variant="destructive"
             type="button"
             disabled={busy}
             onClick={onTrashCollection}
           >
             <TrashIcon size={15} />
             Trash
-          </button>
+          </Button>
         </div>
       </section>
+
+      <CollectBar busy={busy} onCollect={onCollect} />
 
       <section className="collection-toolbar-redesigned">
         <div className="collection-toolbar-main">
@@ -301,19 +309,21 @@ export function CollectionDetail({
                 </kbd>
               )}
               {query && (
-                <button
+                <Button
                   type="button"
-                  className="btn btn-ghost btn-icon btn-sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => onQueryChange('')}
                   aria-label="Clear search"
                 >
                   <CloseIcon size={12} />
-                </button>
+                </Button>
               )}
             </div>
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost btn-sm"
+              variant="ghost"
+              size="sm"
               onClick={onToggleSelectAll}
               title={
                 selectedTabs.size === visibleTabs.length &&
@@ -326,7 +336,7 @@ export function CollectionDetail({
               visibleTabs.length > 0
                 ? 'Deselect all'
                 : 'Select all'}
-            </button>
+            </Button>
           </div>
 
           <div className="collection-toolbar-right">
@@ -344,56 +354,15 @@ export function CollectionDetail({
               onChange={onSortOrderChange}
               ariaLabel="Sort saved tabs"
             />
-            <div className="segmented-pill-track">
-              <button
-                type="button"
-                className={`segmented-pill-btn ${
-                  view === 'grid' ? 'active' : ''
-                }`}
-                aria-pressed={view === 'grid'}
-                aria-label="Grid view"
-                onClick={() => onViewChange('grid')}
-              >
-                {view === 'grid' && (
-                  <motion.div
-                    layoutId="viewPill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  <GridIcon size={14} />
-                </span>
-              </button>
-              <button
-                type="button"
-                className={`segmented-pill-btn ${
-                  view === 'list' ? 'active' : ''
-                }`}
-                aria-pressed={view === 'list'}
-                aria-label="List view"
-                onClick={() => onViewChange('list')}
-              >
-                {view === 'list' && (
-                  <motion.div
-                    layoutId="viewPill"
-                    className="segmented-pill-slider"
-                    transition={{
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <span className="segmented-pill-text">
-                  <ListIcon size={14} />
-                </span>
-              </button>
-            </div>
+            <AnimatedTabs<'grid' | 'list'>
+              tabs={[
+                { id: 'grid', label: <GridIcon size={14} /> },
+                { id: 'list', label: <ListIcon size={14} /> },
+              ]}
+              activeTab={view}
+              onChange={onViewChange}
+              layoutId="collectionDetailViewPill"
+            />
           </div>
         </div>
 
@@ -472,6 +441,8 @@ export function CollectionDetail({
                   onPin={() => onPinTab(tab)}
                   onDragStart={() => onDragStartTab(tab.id)}
                   onDragEnd={onDragEndTab}
+                  enableRichPreviews={enableRichPreviews}
+                  iframelyApiKey={iframelyApiKey}
                 />
               ))}
             </motion.div>
@@ -499,12 +470,14 @@ export function CollectionDetail({
                   onPin={() => onPinTab(tab)}
                   onDragStart={() => onDragStartTab(tab.id)}
                   onDragEnd={onDragEndTab}
+                  enableRichPreviews={enableRichPreviews}
+                  iframelyApiKey={iframelyApiKey}
                 />
               ))}
             </motion.div>
           )}
         </AnimatePresence>
       )}
-    </>
+    </div>
   );
 }
