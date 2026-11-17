@@ -15,6 +15,7 @@ import type { Settings } from '../../../src/schema';
 import {
   ArrowUpRightIcon,
   CheckIcon,
+  CloseIcon,
   FolderIcon,
   GridIcon,
   RefreshIcon,
@@ -65,6 +66,7 @@ export function SettingsPanel({
     current: string;
     latest: string;
     hasUpdate: boolean;
+    failed?: boolean;
   } | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -172,12 +174,18 @@ export function SettingsPanel({
           }
           if (l < c) break;
         }
-        setUpdateStatus({ current: APP_VERSION, latest, hasUpdate });
+        setUpdateStatus({
+          current: APP_VERSION,
+          latest,
+          hasUpdate,
+          failed: false,
+        });
       } else {
         setUpdateStatus({
           current: APP_VERSION,
           latest: APP_VERSION,
           hasUpdate: false,
+          failed: true,
         });
       }
     } catch {
@@ -185,6 +193,7 @@ export function SettingsPanel({
         current: APP_VERSION,
         latest: APP_VERSION,
         hasUpdate: false,
+        failed: true,
       });
     } finally {
       setUpdateChecking(false);
@@ -248,11 +257,17 @@ export function SettingsPanel({
                 marginTop: '4px',
                 padding: '6px 12px',
                 borderRadius: 'var(--radius-sm)',
-                background: updateStatus.hasUpdate
-                  ? 'color-mix(in srgb, var(--brand) 14%, transparent)'
-                  : 'color-mix(in srgb, var(--success) 14%, transparent)',
+                background: updateStatus.failed
+                  ? 'color-mix(in srgb, #ef4444 14%, transparent)'
+                  : updateStatus.hasUpdate
+                    ? 'color-mix(in srgb, var(--brand) 14%, transparent)'
+                    : 'color-mix(in srgb, var(--success) 14%, transparent)',
                 border: `1px solid ${
-                  updateStatus.hasUpdate ? 'var(--brand)' : 'var(--success)'
+                  updateStatus.failed
+                    ? '#ef4444'
+                    : updateStatus.hasUpdate
+                      ? 'var(--brand)'
+                      : 'var(--success)'
                 }`,
                 fontSize: '12px',
                 display: 'flex',
@@ -260,7 +275,18 @@ export function SettingsPanel({
                 gap: '8px',
               }}
             >
-              {updateStatus.hasUpdate ? (
+              {updateStatus.failed ? (
+                <span
+                  style={{
+                    color: '#ef4444',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  <CloseIcon size={12} /> Check failed
+                </span>
+              ) : updateStatus.hasUpdate ? (
                 <>
                   <span style={{ color: 'var(--brand-text)', fontWeight: 600 }}>
                     v{updateStatus.latest} available!

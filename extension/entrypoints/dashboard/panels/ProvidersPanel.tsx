@@ -94,6 +94,30 @@ function sortProvidersDeterministically(
   });
 }
 
+function matchesOfficialModel(
+  diskName: string,
+  diskPath: string,
+  official: TabmanOfficialModel,
+): boolean {
+  const normDiskName = diskName
+    .toLowerCase()
+    .replace(/\.onnx$/, '')
+    .replace(/^models--/, '')
+    .replace(/--/g, '/');
+  const normDiskPath = diskPath.toLowerCase().replace(/\\/g, '/');
+  const idLower = official.id.toLowerCase();
+  const repoLower = official.repo.toLowerCase();
+  const repoTail = repoLower.split('/').pop() ?? '';
+  return (
+    normDiskName === idLower ||
+    normDiskName === repoLower ||
+    normDiskName === repoTail ||
+    normDiskPath.includes(`/${idLower}`) ||
+    normDiskPath.includes(`/${repoTail}`) ||
+    normDiskPath.includes(`/${repoLower}`)
+  );
+}
+
 export function ProvidersPanel({ onNotify }: PanelProps) {
   const [settings, setSettings] = useState<ProviderSettings>();
   const [hasKey, setHasKey] = useState(false);
@@ -191,15 +215,18 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
 
   useEffect(() => {
     let active = true;
-    void scanDiskModels().then((res) => {
+    const resolvedDefault = getDefaultModelStorageLocations().current;
+    const targetDir =
+      (
+        modelStoragePath ||
+        storageLocations.current ||
+        resolvedDefault
+      ).trim() || resolvedDefault;
+    void scanDiskModels(targetDir).then((res) => {
       if (!active) return;
       if (res?.available && res.models && res.models.length > 0) {
         const verified = TABMAN_OFFICIAL_MODELS.filter((m) =>
-          res.models.some(
-            (dm) =>
-              dm.name.toLowerCase().includes(m.repo.toLowerCase()) ||
-              m.repo.toLowerCase().includes(dm.name.toLowerCase()),
-          ),
+          res.models.some((dm) => matchesOfficialModel(dm.name, dm.path, m)),
         ).map((m) => m.repo.toLowerCase());
         setDownloadedRepos(verified);
         if (verified.length > 0) {
@@ -224,7 +251,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [modelStoragePath, storageLocations.current]);
 
   useEffect(() => {
     if (adding) {
@@ -394,7 +421,13 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
     setScanStatus(null);
     try {
       await new Promise((resolve) => setTimeout(resolve, 300));
-      const targetDir = modelStoragePath || storageLocations.current;
+      const resolvedDefault = getDefaultModelStorageLocations().current;
+      const targetDir =
+        (
+          modelStoragePath ||
+          storageLocations.current ||
+          resolvedDefault
+        ).trim() || resolvedDefault;
 
       // Scan local disk directly via the Tabman native sidecar
       const diskResult = await scanDiskModels(targetDir);
@@ -402,14 +435,9 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
 
       if (diskResult?.available && diskResult.models.length > 0) {
         for (const diskModel of diskResult.models) {
-          const modelName = diskModel.name.toLowerCase();
           for (const m of TABMAN_OFFICIAL_MODELS) {
             const repoLower = m.repo.toLowerCase();
-            if (
-              modelName.includes(repoLower) ||
-              repoLower.includes(modelName) ||
-              diskModel.path.toLowerCase().includes(repoLower)
-            ) {
+            if (matchesOfficialModel(diskModel.name, diskModel.path, m)) {
               if (!verifiedRepos.includes(repoLower)) {
                 verifiedRepos.push(repoLower);
               }

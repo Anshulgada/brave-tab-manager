@@ -182,7 +182,14 @@ export async function importExportDocument(
     await database.sessions.bulkPut(sessions);
     await database.proposals.bulkPut(proposals);
     if (replace) {
-      await database.settings.put(settings);
+      const existing = await database.settings.get(SETTINGS_ID);
+      await database.settings.put({
+        ...settings,
+        iframelyApiKey:
+          settings.iframelyApiKey !== undefined
+            ? settings.iframelyApiKey
+            : (existing?.iframelyApiKey ?? null),
+      });
     } else {
       const existing = await database.settings.get(SETTINGS_ID);
       if (existing) {

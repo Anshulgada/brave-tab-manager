@@ -91,6 +91,7 @@ def run_upgrade() -> tuple[bool, str]:
     Supports uv tool, pipx, standard pip, and official one-line release installers.
     Prioritizes upgrading the active virtual environment if invoked from one.
     """
+    info = check_latest_version()
     in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
 
     # 1. If running inside a virtual environment, upgrade that environment directly
@@ -116,6 +117,25 @@ def run_upgrade() -> tuple[bool, str]:
                 cmd, capture_output=True, text=True, check=False
             )
             if res.returncode == 0:
+                check_cmd = [uv_bin, "tool", "run", "tabman", "--version"]
+                ver_res = subprocess.run(  # nosec B603
+                    check_cmd, capture_output=True, text=True, check=False
+                )
+                installed_ver = (
+                    ver_res.stdout.strip().split()[-1]
+                    if ver_res.returncode == 0
+                    else ""
+                )
+                if (
+                    installed_ver
+                    and installed_ver == info.current
+                    and info.latest != info.current
+                ):
+                    return (
+                        False,
+                        f"Tabman version is pinned at {installed_ver}. "
+                        f"Run '{uv_bin} tool install --force tabman' to update.",
+                    )
                 return (
                     True,
                     f"Successfully upgraded via uv:\n{res.stdout or res.stderr}",
@@ -167,9 +187,12 @@ def run_upgrade() -> tuple[bool, str]:
             )
             import tempfile
 
-            with tempfile.NamedTemporaryFile("wb", delete=False, suffix=".sh") as tmp:
-                tmp_path = Path(tmp.name)
+            tmp_path: Path | None = None
             try:
+                with tempfile.NamedTemporaryFile(
+                    "wb", delete=False, suffix=".sh"
+                ) as tmp:
+                    tmp_path = Path(tmp.name)
                 dl_res = subprocess.run(  # nosec B603 B607
                     ["curl", "-LsSf", sh_url, "-o", str(tmp_path)],
                     capture_output=True,
@@ -189,8 +212,11 @@ def run_upgrade() -> tuple[bool, str]:
                             True,
                             f"Successfully upgraded via official installer:\n{out}",
                         )
+            except Exception:  # nosec B110
+                pass
             finally:
-                tmp_path.unlink(missing_ok=True)
+                if tmp_path is not None:
+                    tmp_path.unlink(missing_ok=True)
 
     # 5. Fallback to pip
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "tabman"]

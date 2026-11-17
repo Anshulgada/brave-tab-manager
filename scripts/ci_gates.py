@@ -37,19 +37,19 @@ def changed_paths(check_all: bool, filenames: tuple[str, ...] = ()) -> set[str]:
     if check_all:
         return {"pyproject.toml", "extension/package.json", "packages/schema/"}
 
-    if filenames:
-        return {path.replace("\\", "/") for path in filenames if path}
-
-    # Staged changes take precedence in pre-commit hooks
+    paths = {path.replace("\\", "/") for path in filenames if path}
+    # Include staged changes and staged deletions
     try:
         staged_output = _git("diff", "--cached", "--name-only")
         staged = {
             path.replace("\\", "/") for path in staged_output.splitlines() if path
         }
-        if staged:
-            return staged
+        paths.update(staged)
     except Exception:
         pass
+
+    if paths:
+        return paths
 
     from_ref = os.environ.get("PRE_COMMIT_FROM_REF", "")
     if not from_ref or from_ref == ZERO_REF:

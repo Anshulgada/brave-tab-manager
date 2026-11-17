@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-11-18
+
+### Fixed
+- Sidecar request routing parses JSON request type exactly, unescapes directory paths, isolates child process stdio, and executes preview save/delete operations to disk.
+- Pre-commit path-filtered test gates enforce serial execution (`require_serial: true`) and include staged file deletions.
+- Extension dialogs render above modal backdrops (`z-[70]`), ConfirmModal traps keyboard focus, and update checks display distinct failure states.
+- Provider model scanner uses exact identifier matching against supported local models and resolves OS default directories.
+- CLI auto-updater gracefully recovers from tempfile and environment upgrade errors and verifies version pin constraints.
+
 ## [0.5.0]
 
 ### Added

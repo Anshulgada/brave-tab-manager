@@ -80,4 +80,5 @@ repos:
         entry: uv run python scripts/ci_gates.py
         language: system
         pass_filenames: true
+        require_serial: true
         stages: [pre-commit]

@@ -13,6 +13,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
 }) {
   const cancelBtnRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -26,6 +27,29 @@ export function ConfirmDialog({
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         onCancel();
+        return;
+      }
+      if (event.key === 'Tab') {
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const focusables = dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (!first || !last) return;
+        if (event.shiftKey) {
+          if (document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -41,6 +65,7 @@ export function ConfirmDialog({
         onClick={onCancel}
       />
       <motion.div
+        ref={dialogRef}
         className="dialog"
         role="alertdialog"
         aria-modal="true"

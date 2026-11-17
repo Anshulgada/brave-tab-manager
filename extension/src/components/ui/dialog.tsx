@@ -29,10 +29,10 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'dialog fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
+        'dialog fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70]',
         className,
       )}
-      style={{ margin: '0 auto', ...props.style }}
+      style={{ zIndex: 70, margin: '0 auto', ...props.style }}
       {...props}
     >
       {children}
