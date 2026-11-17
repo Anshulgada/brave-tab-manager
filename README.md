@@ -11,15 +11,15 @@ No account, cloud service, or external AI provider is required for the core work
 
 ---
 
-## What's New in v0.6.7
+## What's New in v0.6.10
 
-The `0.6.7` release brings a complete overhaul to the design system, micro-interactions, rich previews, local AI engine, and testing pipelines:
+The `0.6.10` release brings a complete overhaul to the design system, micro-interactions, rich previews, local AI engine, and testing pipelines:
 
 - **Modern Design System & Micro-Interactions:** Fully unified atomic component primitives built on Radix UI, CVA, and Tailwind tokens with zero design drift. Features Framer Motion spring physics on button presses (`whileTap`), link hover glides, `<AnimatePresence>` panel transitions, and `<AnimatedTabs>` sliding pill switchers across all views.
-- **Rich Visual Link Previews:** Raindrop.io-style visual cards with responsive thumbnail covers, descriptions, and favicons powered by optional Iframely integration and local IndexedDB preview caching.
+- **Rich Visual Link Previews:** Raindrop.io-style visual cards with responsive thumbnail covers, descriptions, and favicons powered by optional Iframely integration, local IndexedDB preview caching, and native sidecar disk storage.
 - **Local AI Embedding Engine (EmbeddingGemma 2):** Zero-cloud semantic categorization using fine-tuned `EmbeddingGemma 2` backbones (270M, 440M, 740M INT8 ONNX) running natively on WebGPU, DirectML, and Neural Processing Units (NPU).
 - **Rust WebAssembly SIMD Acceleration:** 13 native Silicon kernels delivering up to 21.5x speedups for vector search, fuzzy matching, pairwise cosine distance, Prim's MST clustering, MinHash LSH, and LZ compression.
-- **Switchboard & Side Panel:** Instant multi-window tab management, real-time search, deduplication, audio/sleep badges, and 1-click window parking.
+- **Native Desktop Sidecar & Updates:** High-efficiency native background daemon with exact JSON type routing, hardware inspection, local model discovery with exact ID matching, and clean native messaging subprocess management for `tabman update` and `tabman upgrade`.
 - **Dynamic Versioning & Instant Push:** Project versions are dynamically derived from configuration metadata (`pyproject.toml` and `package.json`), with all test and build gates running via pre-commit path filtering (`scripts/ci_gates.py`) so `git push` is always clean, fast, and unblocked.
 
 ---
@@ -150,7 +150,7 @@ Environment variables:
 
 | Variable                  | Effect                                           |
 | ------------------------- | ------------------------------------------------ |
-| `TABMAN_VERSION`          | Pin a version, for example `0.6.7`.              |
+| `TABMAN_VERSION`          | Pin a version, for example `0.6.10`.             |
 | `TABMAN_ASSUME_YES=1`     | Accept the extension prompt without asking.      |
 | `TABMAN_SKIP_EXTENSION=1` | Skip the extension download entirely.            |
 | `TABMAN_EXTENSION_ROOT`   | Where the extension is unpacked.                 |
@@ -601,11 +601,13 @@ actionlint
 
 | File                                                             | What it covers                                                        |
 | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [CHANGELOG.md](CHANGELOG.md)                                     | Release history, migrations, and user-facing updates                  |
 | [PRIVACY.md](PRIVACY.md)                                         | What is stored, what leaves the machine, and how to remove it         |
 | [SECURITY.md](SECURITY.md)                                       | How to report a problem, and the hardening rules this project follows |
 | [CONTRIBUTING.md](CONTRIBUTING.md)                               | The setup, the gate, and the rules for a pull request                 |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)                         | How we treat each other                                               |
 | [docs/architecture.md](docs/architecture.md)                     | How the two surfaces fit together                                     |
+| [docs/DESIGN-SYSTEM-PLAN.md](docs/DESIGN-SYSTEM-PLAN.md)         | Shared component library, Tailwind tokens, and micro-interactions     |
 | [docs/RUST-WASM-ACCELERATION.md](docs/RUST-WASM-ACCELERATION.md) | 13 Rust WebAssembly SIMD kernels, benchmarks, and roofline analysis   |
 | [docs/dos-and-donts.md](docs/dos-and-donts.md)                   | The mistakes this project has already made                            |
 | [docs/TABMAN-REBUILD-PLAN.md](docs/TABMAN-REBUILD-PLAN.md)       | The original rebuild plan                                             |
@@ -619,8 +621,8 @@ actionlint
 2. Run `uv lock`, then the test and lint commands above.
 3. Commit and tag the release:
    ```powershell
-   git tag v0.6.7
-   git push origin v0.6.7
+   git tag v0.6.10
+   git push origin v0.6.10
    ```
 4. `.github/workflows/release.yml` builds the wheel/sdist and extension zip, publishes to PyPI, and creates a GitHub Release with the install scripts.
 
