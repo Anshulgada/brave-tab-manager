@@ -869,7 +869,7 @@ export async function runHardwareBenchmark(
         name: 'NPU (DirectML / Native Silicon)',
         category: 'npu',
         latencyMs: 0.85,
-        available: true,
+        available: false,
       });
     }
   }

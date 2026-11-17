@@ -303,6 +303,7 @@ export async function exportDatabase(
         id: _id,
         lastImportedAt: _lastImportedAt,
         parkingCollectionIds: _parkingCollectionIds,
+        iframelyApiKey: _iframelyApiKey,
         ...settings
       } = settingsRecord;
 

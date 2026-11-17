@@ -565,13 +565,13 @@ export function App() {
       const input: unknown = JSON.parse(text);
       requestConfirm({
         title: 'Import library backup',
-        body: 'Replace the entire local library with this export? Existing items not in this file will be overwritten.',
-        confirmLabel: 'Replace Library',
-        tone: 'danger',
+        body: 'Merge this backup with your local library? Saved tabs and collections will be merged safely without deleting existing items.',
+        confirmLabel: 'Merge Library',
+        tone: 'brand',
         onConfirm: () => {
           void runMutation(async () => {
-            await importLibrary(database, input, true);
-          }, 'Library replaced from export.');
+            await importLibrary(database, input, false);
+          }, 'Library merged from export.');
         },
       });
     } catch (err) {

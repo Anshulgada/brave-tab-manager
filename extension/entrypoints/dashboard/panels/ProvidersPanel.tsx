@@ -397,7 +397,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       const targetDir = modelStoragePath || storageLocations.current;
 
       // Scan local disk directly via the Tabman native sidecar
-      const diskResult = await scanDiskModels();
+      const diskResult = await scanDiskModels(targetDir);
       const verifiedRepos: string[] = [];
 
       if (diskResult?.available && diskResult.models.length > 0) {

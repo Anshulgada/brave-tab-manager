@@ -28,7 +28,10 @@ export const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn('dialog', className)}
+      className={cn(
+        'dialog fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
+        className,
+      )}
       style={{ margin: '0 auto', ...props.style }}
       {...props}
     >

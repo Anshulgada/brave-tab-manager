@@ -69,20 +69,38 @@ pub fn scan_local_models(dir: &Path) -> Vec<LocalModelInfo> {
                     is_verified: true,
                 });
             } else if path.is_dir() {
-                // Check if directory actually contains ONNX / model weight files
+                // Check if directory or its subdirectories (like onnx/) contains model weight files
                 let mut dir_size = 0u64;
                 let mut has_model_weights = false;
                 if let Ok(sub) = std::fs::read_dir(&path) {
                     for f in sub.flatten() {
+                        let sub_path = f.path();
                         let sub_name = f.file_name().to_string_lossy().to_string();
-                        if sub_name.ends_with(".onnx")
-                            || sub_name.ends_with(".bin")
-                            || sub_name.ends_with(".safetensors")
-                        {
-                            has_model_weights = true;
-                        }
-                        if let Ok(meta) = f.metadata() {
-                            dir_size += meta.len();
+                        if sub_path.is_file() {
+                            if sub_name.ends_with(".onnx")
+                                || sub_name.ends_with(".bin")
+                                || sub_name.ends_with(".safetensors")
+                            {
+                                has_model_weights = true;
+                            }
+                            if let Ok(meta) = f.metadata() {
+                                dir_size += meta.len();
+                            }
+                        } else if sub_path.is_dir() {
+                            if let Ok(nested) = std::fs::read_dir(&sub_path) {
+                                for nf in nested.flatten() {
+                                    let nf_name = nf.file_name().to_string_lossy().to_string();
+                                    if nf_name.ends_with(".onnx")
+                                        || nf_name.ends_with(".bin")
+                                        || nf_name.ends_with(".safetensors")
+                                    {
+                                        has_model_weights = true;
+                                    }
+                                    if let Ok(meta) = nf.metadata() {
+                                        dir_size += meta.len();
+                                    }
+                                }
+                            }
                         }
                     }
                 }

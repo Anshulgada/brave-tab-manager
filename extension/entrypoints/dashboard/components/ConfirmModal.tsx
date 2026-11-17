@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button } from '../../../src/components/ui/button';
 import type { ConfirmRequest } from '../types';
 
@@ -12,6 +12,16 @@ export function ConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const cancelBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    cancelBtnRef.current?.focus();
+    return () => {
+      previous?.focus?.();
+    };
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -43,7 +53,12 @@ export function ConfirmDialog({
         <h2>{request.title}</h2>
         <p>{request.body}</p>
         <div className="dialog-actions">
-          <Button variant="ghost" type="button" onClick={onCancel}>
+          <Button
+            ref={cancelBtnRef}
+            variant="ghost"
+            type="button"
+            onClick={onCancel}
+          >
             Cancel
           </Button>
           <Button

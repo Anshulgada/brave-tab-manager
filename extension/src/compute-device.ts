@@ -332,7 +332,7 @@ export async function probeNativeSidecar(): Promise<{
  * Scan the local disk model directory via the native Tabman sidecar.
  * Returns only models physically present on the device filesystem.
  */
-export async function scanDiskModels(): Promise<{
+export async function scanDiskModels(targetPath?: string): Promise<{
   available: boolean;
   path: string;
   count: number;
@@ -366,7 +366,7 @@ export async function scanDiskModels(): Promise<{
     try {
       runtime.sendNativeMessage?.(
         'com.tabman.sidecar',
-        { type: 'models/scan' },
+        { type: 'models/scan', path: targetPath },
         (response) => {
           if (runtime.lastError || !response || response.status !== 'ok') {
             resolve(null);

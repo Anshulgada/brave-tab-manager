@@ -44,7 +44,21 @@ fn handle_json_request(request_json: &str) -> String {
     }
 
     if request_json.contains("models/scan") || request_json.contains("scan") {
-        let dir = models::get_default_model_dir();
+        let dir = if let Some(idx) = request_json.find("\"path\":\"") {
+            let start = idx + 8;
+            if let Some(end) = request_json[start..].find('"') {
+                let p = &request_json[start..start + end];
+                if !p.is_empty() {
+                    std::path::PathBuf::from(p)
+                } else {
+                    models::get_default_model_dir()
+                }
+            } else {
+                models::get_default_model_dir()
+            }
+        } else {
+            models::get_default_model_dir()
+        };
         let found = models::scan_local_models(&dir);
         let items: Vec<String> = found
             .iter()
@@ -93,7 +107,15 @@ fn handle_json_request(request_json: &str) -> String {
     }
 
     if request_json.contains("\"type\":\"upgrade\"") || request_json.contains("upgrade") {
-        return r#"{"status":"ok","message":"Tabman upgrade requested"}"#.to_string();
+        let status = std::process::Command::new("tabman").arg("upgrade").status();
+        match status {
+            Ok(s) if s.success() => {
+                return r#"{"status":"ok","message":"Tabman upgraded successfully."}"#.to_string();
+            }
+            _ => {
+                return r#"{"status":"manual_action_required","message":"Run 'tabman upgrade' in your terminal."}"#.to_string();
+            }
+        }
     }
 
     // Default echo / ack

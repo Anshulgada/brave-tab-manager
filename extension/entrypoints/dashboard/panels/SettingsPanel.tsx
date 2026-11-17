@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
 import { Button } from '../../../src/components/ui/button';
 import {

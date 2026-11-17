@@ -10,6 +10,7 @@ import shutil
 import subprocess  # nosec B404
 import sys
 import urllib.request
+from pathlib import Path
 from typing import NamedTuple
 
 from tabman import __version__
@@ -88,8 +89,25 @@ def run_upgrade() -> tuple[bool, str]:
     """Execute the best available package manager upgrade command.
 
     Supports uv tool, pipx, standard pip, and official one-line release installers.
+    Prioritizes upgrading the active virtual environment if invoked from one.
     """
-    # 1. Check uv first (Used by official one-line install scripts)
+    in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+
+    # 1. If running inside a virtual environment, upgrade that environment directly
+    if in_venv:
+        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "tabman"]
+        with contextlib.suppress(Exception):
+            res = subprocess.run(  # nosec B603
+                cmd, capture_output=True, text=True, check=False
+            )
+            if res.returncode == 0:
+                out = res.stdout or res.stderr
+                return (
+                    True,
+                    f"Successfully upgraded in active virtual environment:\n{out}",
+                )
+
+    # 2. Check uv tool (Used by official one-line install scripts)
     uv_bin = find_uv_binary()
     if uv_bin:
         cmd = [uv_bin, "tool", "upgrade", "tabman"]
@@ -103,7 +121,7 @@ def run_upgrade() -> tuple[bool, str]:
                     f"Successfully upgraded via uv:\n{res.stdout or res.stderr}",
                 )
 
-    # 2. Check pipx
+    # 3. Check pipx
     if shutil.which("pipx"):
         cmd = ["pipx", "upgrade", "tabman"]
         with contextlib.suppress(Exception):
@@ -116,7 +134,7 @@ def run_upgrade() -> tuple[bool, str]:
                     f"Successfully upgraded via pipx:\n{res.stdout or res.stderr}",
                 )
 
-    # 3. Check official PowerShell / curl release installer if installed via one-liner
+    # 4. Check official PowerShell / curl release installer if installed via one-liner
     if sys.platform == "win32":
         ps = shutil.which("pwsh") or shutil.which("powershell")
         if ps:
@@ -147,22 +165,34 @@ def run_upgrade() -> tuple[bool, str]:
                 "https://raw.githubusercontent.com/Anshulgada/"
                 "brave-tab-manager/main/scripts/install.sh"
             )
-            install_cmd = [
-                "sh",
-                "-c",
-                f"curl -LsSf {sh_url} | sh",
-            ]
-            with contextlib.suppress(Exception):
-                res = subprocess.run(  # nosec B603
-                    install_cmd, capture_output=True, text=True, check=False
-                )
-                if res.returncode == 0:
-                    return (
-                        True,
-                        f"Successfully upgraded via official installer:\n{res.stdout}",
-                    )
+            import tempfile
 
-    # 4. Fallback to pip
+            with tempfile.NamedTemporaryFile("wb", delete=False, suffix=".sh") as tmp:
+                tmp_path = Path(tmp.name)
+            try:
+                dl_res = subprocess.run(  # nosec B603 B607
+                    ["curl", "-LsSf", sh_url, "-o", str(tmp_path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if dl_res.returncode == 0 and tmp_path.stat().st_size > 0:
+                    install_res = subprocess.run(  # nosec B603 B607
+                        ["sh", str(tmp_path)],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    if install_res.returncode == 0:
+                        out = install_res.stdout
+                        return (
+                            True,
+                            f"Successfully upgraded via official installer:\n{out}",
+                        )
+            finally:
+                tmp_path.unlink(missing_ok=True)
+
+    # 5. Fallback to pip
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "tabman"]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)  # nosec B603

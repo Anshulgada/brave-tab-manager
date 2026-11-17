@@ -32,10 +32,13 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
-def changed_paths(check_all: bool) -> set[str]:
+def changed_paths(check_all: bool, filenames: tuple[str, ...] = ()) -> set[str]:
     """Return repository-relative paths included in the commit or push."""
     if check_all:
         return {"pyproject.toml", "extension/package.json", "packages/schema/"}
+
+    if filenames:
+        return {path.replace("\\", "/") for path in filenames if path}
 
     # Staged changes take precedence in pre-commit hooks
     try:
@@ -57,9 +60,14 @@ def changed_paths(check_all: bool) -> set[str]:
 
     try:
         output = _git("diff", "--name-only", f"{from_ref}..HEAD")
-        return {path.replace("\\", "/") for path in output.splitlines() if path}
+        paths = {path.replace("\\", "/") for path in output.splitlines() if path}
+        if paths:
+            return paths
     except Exception:
-        return set()
+        pass
+
+    # If git cannot determine changed scope, safely run all gates
+    return {"pyproject.toml", "extension/package.json", "packages/schema/"}
 
 
 def _matches(paths: set[str], prefixes: tuple[str, ...]) -> bool:
@@ -81,9 +89,10 @@ def _run(command: list[str], cwd: Path = ROOT) -> None:
     is_flag=True,
     help="Run every gate instead of only the ones for the changed paths.",
 )
-def main(check_all: bool) -> None:
+@click.argument("filenames", nargs=-1, type=click.Path())
+def main(check_all: bool, filenames: tuple[str, ...]) -> None:
     """Run the pre-commit gates for the paths in the outgoing commit."""
-    paths = changed_paths(check_all)
+    paths = changed_paths(check_all, filenames)
     python_changed = _matches(
         paths,
         (
