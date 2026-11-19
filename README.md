@@ -11,9 +11,9 @@ No account, cloud service, or external AI provider is required for the core work
 
 ---
 
-## What's New in v0.6.10
+## Highlights & Core Capabilities
 
-The `0.6.10` release brings a complete overhaul to the design system, micro-interactions, rich previews, local AI engine, and testing pipelines:
+Tabman delivers a unified design system, micro-interactions, rich visual previews, local AI categorization, and high-performance Rust WASM acceleration:
 
 - **Modern Design System & Micro-Interactions:** Fully unified atomic component primitives built on Radix UI, CVA, and Tailwind tokens with zero design drift. Features Framer Motion spring physics on button presses (`whileTap`), link hover glides, `<AnimatePresence>` panel transitions, and `<AnimatedTabs>` sliding pill switchers across all views.
 - **Rich Visual Link Previews:** Raindrop.io-style visual cards with responsive thumbnail covers, descriptions, and favicons powered by optional Iframely integration, local IndexedDB preview caching, and native sidecar disk storage.
@@ -26,7 +26,7 @@ The `0.6.10` release brings a complete overhaul to the design system, micro-inte
 
 ## Status
 
-The `0.6.x` release is production-ready and fully accelerated. It features:
+Tabman is production-ready and fully accelerated. It features:
 
 - **Switchboard & Side Panel:** Instant multi-window tab management, real-time search, deduplication, and parking.
 - **Local Tab Library:** Full-page library with collections, tags, trash recovery, command palette (`Ctrl`/`Cmd` + `K`), and dark/light modes.
@@ -150,7 +150,7 @@ Environment variables:
 
 | Variable                  | Effect                                           |
 | ------------------------- | ------------------------------------------------ |
-| `TABMAN_VERSION`          | Pin a version, for example `0.6.10`.             |
+| `TABMAN_VERSION`          | Pin a specific release version (e.g. `0.6.x`).   |
 | `TABMAN_ASSUME_YES=1`     | Accept the extension prompt without asking.      |
 | `TABMAN_SKIP_EXTENSION=1` | Skip the extension download entirely.            |
 | `TABMAN_EXTENSION_ROOT`   | Where the extension is unpacked.                 |
@@ -621,8 +621,8 @@ actionlint
 2. Run `uv lock`, then the test and lint commands above.
 3. Commit and tag the release:
    ```powershell
-   git tag v0.6.10
-   git push origin v0.6.10
+   git tag v<version>
+   git push origin v<version>
    ```
 4. `.github/workflows/release.yml` builds the wheel/sdist and extension zip, publishes to PyPI, and creates a GitHub Release with the install scripts.
 
