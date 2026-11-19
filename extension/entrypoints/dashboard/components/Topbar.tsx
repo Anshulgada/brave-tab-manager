@@ -33,6 +33,12 @@ export function Topbar({
   onOpenHelp,
   onOpenSettings,
 }: TopbarProps) {
+  const isDark =
+    currentTheme === 'dark' ||
+    (currentTheme === 'system' &&
+      typeof window !== 'undefined' &&
+      Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches));
+
   return (
     <header className="topbar">
       <div className="brand">
@@ -40,13 +46,8 @@ export function Topbar({
           src="/logo.png"
           alt={PRODUCT_NAME}
           className="brand-logo"
-          width="48"
-          height="48"
-          style={{
-            objectFit: 'contain',
-            flexShrink: 0,
-            filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25))',
-          }}
+          width="44"
+          height="44"
         />
         <div className="brand-copy">
           <strong>{PRODUCT_NAME}</strong>
@@ -86,18 +87,14 @@ export function Topbar({
           size="icon"
           type="button"
           title={
-            currentTheme === 'dark'
-              ? 'Switch to the light theme'
-              : 'Switch to the dark theme'
+            isDark ? 'Switch to the light theme' : 'Switch to the dark theme'
           }
           aria-label={
-            currentTheme === 'dark'
-              ? 'Switch to the light theme'
-              : 'Switch to the dark theme'
+            isDark ? 'Switch to the light theme' : 'Switch to the dark theme'
           }
           onClick={onToggleTheme}
         >
-          {currentTheme === 'dark' ? <MoonIcon /> : <SunIcon />}
+          {isDark ? <SunIcon /> : <MoonIcon />}
         </Button>
         <Button
           variant="ghost"
