@@ -5,8 +5,8 @@ import { cn } from '../../lib/utils';
 export function CardSpotlight({
   children,
   className,
-  spotlightColor = 'rgba(124, 139, 255, 0.10)',
-  radius = 280,
+  spotlightColor = 'rgba(124, 139, 255, 0.06)',
+  radius = 180,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
   spotlightColor?: string;
@@ -39,7 +39,7 @@ export function CardSpotlight({
         className="pointer-events-none absolute -inset-px opacity-0 transition-opacity duration-300 rounded-[inherit]"
         style={{
           opacity,
-          background: `radial-gradient(${radius}px circle at ${position.x}px ${position.y}px, ${spotlightColor}, transparent 80%)`,
+          background: `radial-gradient(${radius}px circle at ${position.x}px ${position.y}px, ${spotlightColor}, transparent 70%)`,
         }}
       />
       {children}

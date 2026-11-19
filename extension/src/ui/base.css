@@ -151,6 +151,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 html,
 body {
   margin: 0;
@@ -275,6 +279,11 @@ textarea {
     color var(--fast),
     transform var(--fast);
   white-space: nowrap;
+}
+
+.btn svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 .btn:hover:not(:disabled) {
@@ -643,5 +652,60 @@ input[type="checkbox"]:not(.switch):checked::after,
     --motion-fast: 0.01ms;
     --motion-normal: 0.01ms;
     --motion-slow: 0.01ms;
+  }
+}
+
+/* Sonner Toast close button positioned on top-right corner, half out / half inside */
+[data-sonner-toaster] [data-close-button],
+[data-sonner-toaster][dir="ltr"] [data-close-button],
+[data-sonner-toast] [data-close-button],
+.sonner-toast [data-close-button] {
+  left: auto !important;
+  right: 0 !important;
+  top: 0 !important;
+  transform: translate(35%, -35%) !important;
+}
+
+/* Brand logo dark mode luminosity and styling */
+.brand-logo {
+  border-radius: 10px;
+  object-fit: contain;
+  flex-shrink: 0;
+  transition:
+    transform 0.2s ease,
+    filter 0.25s ease;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.2));
+}
+
+:root[data-theme="dark"] .brand-logo {
+  filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.45))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-logo {
+    filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.45))
+      drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+  }
+}
+
+.welcome img {
+  border-radius: 18px;
+  object-fit: contain;
+  transition:
+    transform 0.2s ease,
+    filter 0.25s ease;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.2));
+}
+
+:root[data-theme="dark"] .welcome img {
+  filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.5))
+    drop-shadow(0 8px 24px rgba(0, 0, 0, 0.7));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .welcome img {
+    filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.5))
+      drop-shadow(0 8px 24px rgba(0, 0, 0, 0.7));
   }
 }

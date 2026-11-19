@@ -9,6 +9,7 @@ import type { OrganizeProposal } from '../../../src/messages';
 import { sendSwitchboardRequest } from '../../../src/runtime';
 import { hostInitial, hostLabel } from '../../../src/ui/format';
 import {
+  ArrowLeftIcon,
   CheckIcon,
   ChevronDownIcon,
   CloseIcon,
@@ -402,8 +403,14 @@ export function OrganizePanel({
               size="sm"
               type="button"
               onClick={onBackToCollection}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
             >
-              ← Back to {sourceCollection.name}
+              <ArrowLeftIcon size={14} />
+              <span>Back to {sourceCollection.name}</span>
             </Button>
           </div>
         )}
@@ -432,20 +439,22 @@ export function OrganizePanel({
           <Button
             variant="default"
             type="button"
+            className="organize-action-btn"
             disabled={busy}
             onClick={() => void preview('provider')}
           >
-            <SparkIcon size={15} />
-            Preview with provider
+            <SparkIcon size={15} className={busy ? 'benchmark-spin' : ''} />
+            <span>{busy ? 'Organizing with AI...' : 'Organize with AI'}</span>
           </Button>
           <Button
             variant="secondary"
             type="button"
+            className="organize-action-btn"
             disabled={busy}
             onClick={() => void preview('deterministic')}
           >
             <LayersIcon size={15} />
-            Preview with local rules
+            <span>Preview with local rules</span>
           </Button>
         </div>
       </div>
@@ -893,6 +902,22 @@ export function OrganizePanel({
           <p>
             Start with the provider you configured, or preview the local rules
             that group tabs by hostname without any network call.
+          </p>
+        </div>
+      )}
+
+      {!proposal && busy && (
+        <div
+          className="empty"
+          style={{ animation: 'hfFadeSlideIn 0.3s ease both' }}
+        >
+          <span className="empty-mark" aria-hidden="true">
+            <SparkIcon size={24} className="benchmark-spin" />
+          </span>
+          <h2>Organizing tabs with AI...</h2>
+          <p>
+            Analyzing tab titles and URLs, computing semantic embeddings, and
+            grouping related tabs into an organized proposal.
           </p>
         </div>
       )}

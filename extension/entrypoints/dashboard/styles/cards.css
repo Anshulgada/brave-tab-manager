@@ -31,9 +31,9 @@
 }
 
 .tab-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+  box-shadow: 0 8px 24px -6px color-mix(in srgb, var(--brand) 16%, transparent);
+  transform: translateY(-2px);
 }
 
 .tab-card.selected {

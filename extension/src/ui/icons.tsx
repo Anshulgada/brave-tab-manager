@@ -175,7 +175,11 @@ export function PencilIcon(props: IconProps) {
 export function ZapIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M13 3 5 13h6l-1 8 8-10h-6Z" {...stroke} />
+      <path
+        d="M13 2 4.5 13.5h6L9.5 22 19.5 10.5h-6.5L13 2Z"
+        fill="currentColor"
+        stroke="none"
+      />
     </Icon>
   );
 }
@@ -205,7 +209,7 @@ export function CloseIcon(props: IconProps) {
 export function CheckIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="m5 12.5 4.5 4.5L19 7" {...stroke} />
+      <path d="m5 12.5 4.5 4.5L19 7" {...stroke} strokeWidth={2.5} />
     </Icon>
   );
 }
@@ -389,7 +393,70 @@ export function HuggingFaceIcon({ size = 16, className }: IconProps) {
 export function RefreshIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.19" />
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" {...stroke} />
+      <path d="M21 3v5h-5" {...stroke} />
+    </Icon>
+  );
+}
+
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m12 19-7-7 7-7" {...stroke} />
+      <path d="M19 12H5" {...stroke} />
+    </Icon>
+  );
+}
+
+export function TrophyIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M6 3h12v6a6 6 0 0 1-5 5.92V17h3a1 1 0 0 1 0 2h-1.07c-.45 1.72-1.92 3-3.93 3s-3.48-1.28-3.93-3H7a1 1 0 0 1 0-2h3v-2.08A6 6 0 0 1 6 9V3Zm-1 2H3a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4h1V5Zm14 0v7h1a4 4 0 0 0 4-4V7a2 2 0 0 0-2-2h-3Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </Icon>
+  );
+}
+
+export function MedalIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      {/* Ribbons */}
+      <path
+        d="M7.2 2h3.1l2.2 4.5L10 8.2 7.2 2Zm9.6 0h-3.1L11.5 6.5 14 8.2l2.8-6.2Z"
+        fill="currentColor"
+        opacity="0.8"
+        stroke="none"
+      />
+      {/* Center ribbon */}
+      <path
+        d="M10.2 2h3.6l-1.8 4.2-1.8-4.2Z"
+        fill="currentColor"
+        opacity="0.95"
+        stroke="none"
+      />
+      {/* Solid medal disc with star */}
+      <circle cx="12" cy="15" r="6" fill="currentColor" stroke="none" />
+      <polygon
+        points="12,11.8 13.1,14.2 15.6,14.5 13.7,16.3 14.2,18.8 12,17.5 9.8,18.8 10.3,16.3 8.4,14.5 10.9,14.2"
+        fill="var(--surface, #14141a)"
+        stroke="none"
+      />
+    </Icon>
+  );
+}
+
+export function LightbulbIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"
+        {...stroke}
+      />
+      <path d="M9 18h6" {...stroke} />
+      <path d="M10 22h4" {...stroke} />
     </Icon>
   );
 }

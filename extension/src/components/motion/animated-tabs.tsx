@@ -52,8 +52,9 @@ export function AnimatedTabs<T extends string = string>({
                 className={cn('segmented-pill-slider', activeClassName)}
                 transition={{
                   type: 'spring',
-                  stiffness: 500,
-                  damping: 35,
+                  stiffness: 280,
+                  damping: 28,
+                  mass: 0.8,
                 }}
               />
             )}

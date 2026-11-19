@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { DEFAULT_PREBUILT_RULES_JSONL } from '../../../src/ai';
 import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { CardSpotlight } from '../../../src/components/motion/card-spotlight';
 import { Button } from '../../../src/components/ui/button';
 import {
   CheckIcon,
@@ -267,168 +268,188 @@ export function RulesPanel({
         </div>
       </div>
 
-      {mode === 'visual' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="rules-visual-grid">
-            <AnimatePresence>
-              {items.map((item) => (
-                <motion.div
-                  className="rule-group-card"
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.96 }}
-                  whileHover={{ y: -2 }}
-                  transition={{ duration: 0.18 }}
-                >
-                  <div className="rule-group-card-head">
-                    <div className="rule-group-card-title">
-                      <FolderIcon size={15} />
-                      <span>{item.name}</span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rule-group-delete-btn"
-                      title={`Delete rule group "${item.name}"`}
-                      aria-label={`Delete rule group ${item.name}`}
-                      onClick={() => removeGroup(item.id)}
-                    >
-                      <CloseIcon size={14} />
-                    </Button>
-                  </div>
-
-                  <div className="rule-patterns-wrap">
-                    {item.patterns.length === 0 ? (
-                      <span
-                        style={{ fontSize: '12px', color: 'var(--text-muted)' }}
-                      >
-                        No patterns yet. Add one below.
-                      </span>
-                    ) : (
-                      item.patterns.map((pat, pIdx) => (
-                        <span
-                          className="rule-pattern-chip"
-                          key={`${item.id}-${pat}`}
-                        >
-                          <span>{pat}</span>
-                          <button
-                            type="button"
-                            className="rule-pattern-remove"
-                            title={`Remove ${pat}`}
-                            aria-label={`Remove pattern ${pat}`}
-                            onClick={() => removePattern(item.id, pIdx)}
-                          >
-                            <CloseIcon size={11} />
-                          </button>
-                        </span>
-                      ))
-                    )}
-                  </div>
-
-                  <form
-                    className="rule-pattern-add-form"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      addPattern(item.id);
-                    }}
-                  >
-                    <input
-                      className="input input-compact"
-                      placeholder="e.g. *domain.com*"
-                      value={newPatterns[item.id] || ''}
-                      onChange={(e) =>
-                        setNewPatterns({
-                          ...newPatterns,
-                          [item.id]: e.target.value,
-                        })
-                      }
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      type="submit"
-                      disabled={!(newPatterns[item.id] || '').trim()}
-                    >
-                      <PlusIcon size={12} />
-                      Add
-                    </Button>
-                  </form>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--surface)',
-              border: '1px dashed var(--border)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-            }}
+      <AnimatePresence mode="wait">
+        {mode === 'visual' ? (
+          <motion.div
+            key="visual"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
           >
-            <input
+            <div className="rules-visual-grid">
+              <AnimatePresence>
+                {items.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    whileHover={{ y: -2 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <CardSpotlight className="rule-group-card">
+                      <div className="rule-group-card-head">
+                        <div className="rule-group-card-title">
+                          <FolderIcon size={15} />
+                          <span>{item.name}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="rule-group-delete-btn"
+                          title={`Delete rule group "${item.name}"`}
+                          aria-label={`Delete rule group ${item.name}`}
+                          onClick={() => removeGroup(item.id)}
+                        >
+                          <CloseIcon size={14} />
+                        </Button>
+                      </div>
+
+                      <div className="rule-patterns-wrap">
+                        {item.patterns.length === 0 ? (
+                          <span
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            No patterns yet. Add one below.
+                          </span>
+                        ) : (
+                          item.patterns.map((pat, pIdx) => (
+                            <span
+                              className="rule-pattern-chip"
+                              key={`${item.id}-${pat}`}
+                            >
+                              <span>{pat}</span>
+                              <button
+                                type="button"
+                                className="rule-pattern-remove"
+                                title={`Remove ${pat}`}
+                                aria-label={`Remove pattern ${pat}`}
+                                onClick={() => removePattern(item.id, pIdx)}
+                              >
+                                <CloseIcon size={11} />
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+
+                      <form
+                        className="rule-pattern-add-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          addPattern(item.id);
+                        }}
+                      >
+                        <input
+                          className="input input-compact"
+                          placeholder="e.g. *domain.com*"
+                          value={newPatterns[item.id] || ''}
+                          onChange={(e) =>
+                            setNewPatterns({
+                              ...newPatterns,
+                              [item.id]: e.target.value,
+                            })
+                          }
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          type="submit"
+                          disabled={!(newPatterns[item.id] || '').trim()}
+                        >
+                          <PlusIcon size={12} />
+                          Add
+                        </Button>
+                      </form>
+                    </CardSpotlight>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+
+            <div
+              style={{
+                background: 'var(--surface)',
+                border: '1px dashed var(--border)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+            >
+              <input
+                className="input"
+                placeholder="New rule group name (e.g. Shopping, Finance)..."
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addGroup();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                disabled={!newGroupName.trim()}
+                onClick={addGroup}
+              >
+                <PlusIcon size={14} />
+                Add group
+              </Button>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="code"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="rules-code-editor"
+          >
+            <textarea
               className="input"
-              placeholder="New rule group name (e.g. Shopping, Finance)..."
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addGroup();
-                }
+              rows={12}
+              placeholder='{"name": "AI", "patterns": ["*chatgpt.com*", "*claude.ai*"]}'
+              value={rules}
+              onChange={(e) => {
+                onChange(e.target.value);
+                saveToStorage(e.target.value);
               }}
             />
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              disabled={!newGroupName.trim()}
-              onClick={addGroup}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
             >
-              <PlusIcon size={14} />
-              Add group
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="rules-code-editor">
-          <textarea
-            className="input"
-            rows={12}
-            placeholder='{"name": "AI", "patterns": ["*chatgpt.com*", "*claude.ai*"]}'
-            value={rules}
-            onChange={(e) => {
-              onChange(e.target.value);
-              saveToStorage(e.target.value);
-            }}
-          />
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Format: One JSON object per line with <code>name</code> and{' '}
-              <code>patterns</code> array.
-            </span>
-            <Button
-              variant="default"
-              size="sm"
-              type="button"
-              onClick={() => saveToStorage(rules)}
-            >
-              Save rules
-            </Button>
-          </div>
-        </div>
-      )}
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Format: One JSON object per line with <code>name</code> and{' '}
+                <code>patterns</code> array.
+              </span>
+              <Button
+                variant="default"
+                size="sm"
+                type="button"
+                onClick={() => saveToStorage(rules)}
+              >
+                Save rules
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

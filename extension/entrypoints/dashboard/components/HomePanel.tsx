@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import { CardSpotlight } from '../../../src/components/motion/card-spotlight';
 import { NumberTicker } from '../../../src/components/motion/number-ticker';
 import { Button } from '../../../src/components/ui/button';
 import type { LibraryCollection } from '../../../src/library';
@@ -39,9 +40,7 @@ export function WelcomeState({
         width="88"
         height="88"
         style={{
-          objectFit: 'contain',
           marginBottom: '6px',
-          filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.3))',
         }}
       />
       <h2>Your tab library starts here</h2>
@@ -277,7 +276,6 @@ export function HomePanel({
                 <motion.div
                   key={collection.id}
                   layout
-                  className={`collection-card ${isSelected ? 'selected' : ''}`}
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   whileHover={{ y: -3, transition: { duration: 0.16 } }}
@@ -286,60 +284,64 @@ export function HomePanel({
                     delay: Math.min(index * 0.02, 0.3),
                   }}
                 >
-                  <span
-                    className="collection-card-checkbox"
-                    title={
-                      isSelected ? 'Deselect collection' : 'Select collection'
-                    }
+                  <CardSpotlight
+                    className={`collection-card ${isSelected ? 'selected' : ''}`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        toggleSelect(collection.id);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`Select ${collection.name}`}
-                    />
-                  </span>
-                  <button
-                    type="button"
-                    className="collection-card-body"
-                    onClick={() => {
-                      if (selectedIds.size > 0) {
-                        toggleSelect(collection.id);
-                      } else {
-                        onSelectCollection(collection.id);
+                    <span
+                      className="collection-card-checkbox"
+                      title={
+                        isSelected ? 'Deselect collection' : 'Select collection'
                       }
-                    }}
-                  >
-                    <div className="collection-card-header">
-                      <span
-                        className="collection-color"
-                        style={{
-                          background: collection.color || 'var(--brand)',
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(collection.id);
                         }}
-                        aria-hidden="true"
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Select ${collection.name}`}
                       />
-                      <h3>{collection.name}</h3>
-                    </div>
-                    <div className="collection-card-meta">
-                      <span>
-                        {collection.tabs.length} tab
-                        {collection.tabs.length !== 1 ? 's' : ''}
-                      </span>
-                      <span>
-                        {collection.tags.length} tag
-                        {collection.tags.length !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    {collection.description && (
-                      <p className="collection-card-desc">
-                        {collection.description}
-                      </p>
-                    )}
-                  </button>
+                    </span>
+                    <button
+                      type="button"
+                      className="collection-card-body"
+                      onClick={() => {
+                        if (selectedIds.size > 0) {
+                          toggleSelect(collection.id);
+                        } else {
+                          onSelectCollection(collection.id);
+                        }
+                      }}
+                    >
+                      <div className="collection-card-header">
+                        <span
+                          className="collection-color"
+                          style={{
+                            background: collection.color || 'var(--brand)',
+                          }}
+                          aria-hidden="true"
+                        />
+                        <h3>{collection.name}</h3>
+                      </div>
+                      <div className="collection-card-meta">
+                        <span>
+                          {collection.tabs.length} tab
+                          {collection.tabs.length !== 1 ? 's' : ''}
+                        </span>
+                        <span>
+                          {collection.tags.length} tag
+                          {collection.tags.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      {collection.description && (
+                        <p className="collection-card-desc">
+                          {collection.description}
+                        </p>
+                      )}
+                    </button>
+                  </CardSpotlight>
                 </motion.div>
               );
             })}

@@ -4,6 +4,7 @@ export function Toaster() {
   return (
     <SonnerToaster
       position="bottom-right"
+      offset={20}
       richColors
       closeButton
       theme="system"

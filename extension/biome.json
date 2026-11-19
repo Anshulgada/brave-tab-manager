@@ -17,6 +17,9 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
+      "complexity": {
+        "noImportantStyles": "off"
+      },
       "style": {
         "noDescendingSpecificity": "off"
       },
