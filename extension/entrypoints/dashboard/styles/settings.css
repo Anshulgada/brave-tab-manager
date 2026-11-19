@@ -31,7 +31,8 @@
 .settings-intro {
   color: var(--text-muted);
   font-size: 13.5px;
-  max-width: 62ch;
+  line-height: 1.55;
+  max-width: 100%;
 }
 
 .eyebrow {

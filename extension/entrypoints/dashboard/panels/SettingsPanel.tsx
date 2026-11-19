@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatedTabs } from '../../../src/components/motion/animated-tabs';
+import { CardSpotlight } from '../../../src/components/motion/card-spotlight';
 import { Button } from '../../../src/components/ui/button';
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogTitle,
 } from '../../../src/components/ui/dialog';
 import { Switch } from '../../../src/components/ui/switch';
+import { toast } from '../../../src/components/ui/toaster';
 import { testIframelyApiKey } from '../../../src/iframely';
 import type { Settings } from '../../../src/schema';
 import {
@@ -32,11 +34,13 @@ export function SettingsPanel({
   busy: _busy,
   onApplyTheme,
   onSave,
+  onNotify,
 }: {
   settings: Settings;
   busy: boolean;
   onApplyTheme: (theme: string) => void;
   onSave: (settings: Settings) => void;
+  onNotify?: (message: string, tone?: 'info' | 'success' | 'danger') => void;
 }) {
   const [draft, setDraft] = useState<Settings>(settings);
   const [organizeMode, setOrganizeMode] = useState<'multiple' | 'single'>(
@@ -180,6 +184,13 @@ export function SettingsPanel({
           hasUpdate,
           failed: false,
         });
+        if (hasUpdate) {
+          toast.info(`Tabman v${latest} is available!`);
+          onNotify?.(`Tabman v${latest} is available!`, 'info');
+        } else {
+          toast.success(`Tabman is up to date (v${APP_VERSION}).`);
+          onNotify?.(`Tabman is up to date (v${APP_VERSION}).`, 'success');
+        }
       } else {
         setUpdateStatus({
           current: APP_VERSION,
@@ -187,6 +198,11 @@ export function SettingsPanel({
           hasUpdate: false,
           failed: true,
         });
+        toast.error('Failed to check for updates. Check network connection.');
+        onNotify?.(
+          'Failed to check for updates. Check network connection.',
+          'danger',
+        );
       }
     } catch {
       setUpdateStatus({
@@ -195,6 +211,11 @@ export function SettingsPanel({
         hasUpdate: false,
         failed: true,
       });
+      toast.error('Failed to check for updates. Check network connection.');
+      onNotify?.(
+        'Failed to check for updates. Check network connection.',
+        'danger',
+      );
     } finally {
       setUpdateChecking(false);
     }
@@ -228,97 +249,58 @@ export function SettingsPanel({
             gap: '6px',
           }}
         >
-          <Button
-            type="button"
-            variant="default"
-            disabled={updateChecking}
-            onClick={() => void handleCheckUpdates()}
+          <div
             style={{
-              display: 'inline-flex',
+              display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              padding: '9px 16px',
-              fontSize: '13px',
-              fontWeight: 600,
+              justifyContent: 'flex-end',
+              flexWrap: 'wrap',
+              gap: '10px',
             }}
           >
-            <RefreshIcon
-              size={14}
-              className={updateChecking ? 'benchmark-spin' : ''}
-            />
-            {updateChecking ? 'Checking Updates...' : 'Check for Updates'}
-          </Button>
+            {updateStatus?.hasUpdate && (
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                onClick={() => setShowUpdateModal(true)}
+              >
+                Upgrade to v{updateStatus.latest}
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="default"
+              disabled={updateChecking}
+              onClick={() => void handleCheckUpdates()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '7px',
+                padding: '0 16px',
+                height: '36px',
+                fontSize: '13px',
+                fontWeight: 600,
+              }}
+            >
+              <RefreshIcon
+                size={14}
+                className={updateChecking ? 'benchmark-spin' : ''}
+              />
+              <span>
+                {updateChecking ? 'Checking Updates...' : 'Check for Updates'}
+              </span>
+            </Button>
+          </div>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             v{APP_VERSION} · CLI Vault &amp; WASM Engine
           </span>
-          {updateStatus && (
-            <div
-              style={{
-                marginTop: '4px',
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-sm)',
-                background: updateStatus.failed
-                  ? 'color-mix(in srgb, #ef4444 14%, transparent)'
-                  : updateStatus.hasUpdate
-                    ? 'color-mix(in srgb, var(--brand) 14%, transparent)'
-                    : 'color-mix(in srgb, var(--success) 14%, transparent)',
-                border: `1px solid ${
-                  updateStatus.failed
-                    ? '#ef4444'
-                    : updateStatus.hasUpdate
-                      ? 'var(--brand)'
-                      : 'var(--success)'
-                }`,
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}
-            >
-              {updateStatus.failed ? (
-                <span
-                  style={{
-                    color: '#ef4444',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                  }}
-                >
-                  <CloseIcon size={12} /> Check failed
-                </span>
-              ) : updateStatus.hasUpdate ? (
-                <>
-                  <span style={{ color: 'var(--brand-text)', fontWeight: 600 }}>
-                    v{updateStatus.latest} available!
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="default"
-                    onClick={() => setShowUpdateModal(true)}
-                  >
-                    Upgrade
-                  </Button>
-                </>
-              ) : (
-                <span
-                  style={{
-                    color: 'var(--success)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                  }}
-                >
-                  <CheckIcon size={12} /> Up to date
-                </span>
-              )}
-            </div>
-          )}
         </div>
       </header>
 
       <div className="settings-grid">
-        <div className="settings-card">
+        <CardSpotlight className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <SunIcon size={16} />
@@ -344,9 +326,9 @@ export function SettingsPanel({
             className="w-full flex"
             tabClassName="flex-1"
           />
-        </div>
+        </CardSpotlight>
 
-        <div className="settings-card">
+        <CardSpotlight className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <GridIcon size={16} />
@@ -370,9 +352,9 @@ export function SettingsPanel({
             className="w-full flex"
             tabClassName="flex-1"
           />
-        </div>
+        </CardSpotlight>
 
-        <div className="settings-card">
+        <CardSpotlight className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <ShieldIcon size={16} />
@@ -399,9 +381,9 @@ export function SettingsPanel({
             Off sends only titles and hostnames. Tabman never reads the page
             body.
           </p>
-        </div>
+        </CardSpotlight>
 
-        <div className="settings-card">
+        <CardSpotlight className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <FolderIcon size={16} />
@@ -433,9 +415,9 @@ export function SettingsPanel({
               ? 'Puts all tabs into one dated collection and tags them with their group name.'
               : 'Creates a distinct collection for each group or domain rule.'}
           </p>
-        </div>
+        </CardSpotlight>
 
-        <div className="settings-card">
+        <CardSpotlight className="settings-card">
           <div
             className="settings-card-head"
             style={{
@@ -514,10 +496,17 @@ export function SettingsPanel({
                   fontSize: '11.5px',
                   color: iframelyStatus.ok ? 'var(--success)' : 'var(--danger)',
                   marginTop: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
                 }}
               >
-                {iframelyStatus.ok ? '✓ ' : '✕ '}
-                {iframelyStatus.message}
+                {iframelyStatus.ok ? (
+                  <CheckIcon size={12} />
+                ) : (
+                  <CloseIcon size={12} />
+                )}
+                <span>{iframelyStatus.message}</span>
               </p>
             )}
             <div
@@ -547,9 +536,9 @@ export function SettingsPanel({
               </a>
             </div>
           </div>
-        </div>
+        </CardSpotlight>
 
-        <div className="settings-card">
+        <CardSpotlight className="settings-card">
           <div className="settings-card-head">
             <span className="settings-icon">
               <ZapIcon size={16} />
@@ -593,7 +582,7 @@ export function SettingsPanel({
               </div>
             </li>
           </ul>
-        </div>
+        </CardSpotlight>
       </div>
 
       <Dialog open={showUpdateModal} onOpenChange={setShowUpdateModal}>

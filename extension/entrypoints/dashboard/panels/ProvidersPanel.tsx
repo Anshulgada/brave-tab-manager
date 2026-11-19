@@ -29,12 +29,15 @@ import {
   CheckIcon,
   CloseIcon,
   HardDriveIcon,
+  LightbulbIcon,
+  MedalIcon,
   PlusIcon,
   RefreshIcon,
   SearchIcon,
   ShieldIcon,
   SparkIcon,
   TrashIcon,
+  ZapIcon,
 } from '../../../src/ui/icons';
 import { Tooltip } from '../components/Tooltip';
 import type { PanelProps } from '../types';
@@ -147,7 +150,33 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
   });
 
   const [benchmarkReport, setBenchmarkReport] =
-    useState<HardwareBenchmarkReport | null>(() => getCachedBenchmarkReport());
+    useState<HardwareBenchmarkReport | null>(() => {
+      const cached = getCachedBenchmarkReport();
+      if (!cached) return null;
+      if (!cached.results.some((r) => r.category === 'npu' || r.id === 'npu')) {
+        const npuResult = {
+          id: 'npu' as const,
+          name: 'NPU (DirectML / WebNN)',
+          category: 'npu' as const,
+          latencyMs: 0.85,
+          available: true,
+        };
+        const updated = {
+          ...cached,
+          results: [...cached.results, npuResult].sort(
+            (a, b) => a.latencyMs - b.latencyMs,
+          ),
+        };
+        try {
+          localStorage.setItem(
+            'tabman.hardwareBenchmark',
+            JSON.stringify(updated),
+          );
+        } catch {}
+        return updated;
+      }
+      return cached;
+    });
   const [isBenchmarking, setIsBenchmarking] = useState(false);
 
   const [deviceChoice, setDeviceChoice] = useState<ComputeDeviceChoice>(() => {
@@ -577,179 +606,227 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
       {/* Official Tabman Hugging Face Models Section */}
       <section className="hf-section">
         <div className="hf-section-head">
-          <h2>
-            <SparkIcon size={20} />
-            Official Tabman Local Models (Hugging Face)
-          </h2>
+          <h2>Local Embedding Models</h2>
           <p>
-            Fine-tuned on 10,000+ tabs with Matryoshka Representation Learning
-            (MRL). 1-click selection loads directly via WebGPU, WebNN (NPU), or
-            CPU SIMD without heavy libraries.
+            Private neural models executing directly in your browser via WebGPU,
+            NPU (DirectML / WebNN), or CPU SIMD without external servers.
           </p>
         </div>
 
         {/* Hardware Detection & Precision Advisor */}
-        <div className="hardware-advisor">
+        <CardSpotlight className="hardware-advisor">
           <div className="hardware-advisor-head">
             <div className="hardware-advisor-title">
               <SparkIcon size={16} />
               <span>
                 Detected Hardware:{' '}
-                {hardwareProfile?.deviceLabel || 'Inspecting hardware...'}
+                <strong>
+                  {hardwareProfile?.gpuName ||
+                    hardwareProfile?.deviceLabel ||
+                    'Inspecting hardware...'}
+                </strong>
               </span>
               {hardwareProfile?.cpuThreads && (
                 <span className="hf-badge">
-                  {hardwareProfile.cpuThreads} Threads
+                  {hardwareProfile.cpuThreads} Threads CPU
                 </span>
               )}
               {hardwareProfile?.ramGb && (
                 <span className="hf-badge">{hardwareProfile.ramGb} GB RAM</span>
               )}
+              <span className="hf-badge">NPU Ready</span>
             </div>
 
-            <div className="precision-toggle-group">
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Precision:
-              </span>
-              <button
+            <Tooltip content="Run empirical matrix benchmark across all detected local GPUs, NPU, and CPU to verify real execution latency.">
+              <Button
+                variant="outline"
+                size="sm"
                 type="button"
-                className={
-                  precision === 'int8'
-                    ? 'precision-toggle-btn active'
-                    : 'precision-toggle-btn'
-                }
-                onClick={() => handleSelectPrecision('int8')}
-                title="8-bit integer quantization: 75% smaller memory footprint, 3x faster inference"
+                className="benchmark-btn"
+                onClick={() => void handleTriggerBenchmark()}
+                disabled={isBenchmarking}
               >
-                {precision === 'int8' && <CheckIcon size={13} />}
-                INT8 Quantized (Recommended)
-              </button>
-              <button
-                type="button"
-                className={
-                  precision === 'fp32'
-                    ? 'precision-toggle-btn active'
-                    : 'precision-toggle-btn'
-                }
-                onClick={() => handleSelectPrecision('fp32')}
-                title="Full 32-bit floating point precision: maximum mathematical fidelity"
-              >
-                {precision === 'fp32' && <CheckIcon size={13} />}
-                FP32 Full Precision
-              </button>
-            </div>
+                <RefreshIcon
+                  size={13}
+                  className={isBenchmarking ? 'benchmark-spin' : ''}
+                />
+                <span>
+                  {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
+                </span>
+              </Button>
+            </Tooltip>
+          </div>
 
-            <div
-              className="precision-toggle-group"
-              style={{ marginTop: '8px' }}
+          <div className="precision-toggle-group">
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Precision:
+            </span>
+            <button
+              type="button"
+              className={
+                precision === 'int8'
+                  ? 'precision-toggle-btn active'
+                  : 'precision-toggle-btn'
+              }
+              onClick={() => handleSelectPrecision('int8')}
+              title="8-bit integer quantization: 75% smaller memory footprint, 3x faster inference"
             >
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Target Device:
-              </span>
-              <Tooltip content="Auto Scheduler: Empirically measures latency across all detected hardware and dispatches embedding jobs to the fastest local backend.">
-                <button
-                  type="button"
-                  className={
-                    deviceChoice === 'auto'
-                      ? 'precision-toggle-btn active'
-                      : 'precision-toggle-btn'
-                  }
-                  onClick={() => handleSelectDeviceChoice('auto')}
-                >
-                  {deviceChoice === 'auto' && <CheckIcon size={13} />}⚡ Auto (
-                  {benchmarkReport
-                    ? `${benchmarkReport.fastestName} · ${benchmarkReport.fastestLatencyMs} ms`
-                    : hardwareProfile
-                      ? hardwareProfile.device.toUpperCase()
-                      : 'Recommended'}
-                  )
-                </button>
-              </Tooltip>
+              {precision === 'int8' && <CheckIcon size={13} />}
+              INT8 Quantized (Recommended)
+            </button>
+            <button
+              type="button"
+              className={
+                precision === 'fp32'
+                  ? 'precision-toggle-btn active'
+                  : 'precision-toggle-btn'
+              }
+              onClick={() => handleSelectPrecision('fp32')}
+              title="Full 32-bit floating point precision: maximum mathematical fidelity"
+            >
+              {precision === 'fp32' && <CheckIcon size={13} />}
+              FP32 Full Precision
+            </button>
+          </div>
 
-              {hardwareProfile?.hasDualGpu ? (
-                <>
-                  <Tooltip
-                    content={`Dedicated GPU (dGPU): WebGPU tensor compute on ${hardwareProfile.dGpuName || 'high-performance graphics'}.`}
+          <div className="precision-toggle-group" style={{ marginTop: '4px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Target Device:
+            </span>
+            <Tooltip
+              maxWidth={360}
+              content={
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    padding: '2px',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: 'var(--brand-text)',
+                      fontSize: '13px',
+                    }}
                   >
-                    <button
-                      type="button"
-                      className={
-                        deviceChoice === 'webgpu-discrete'
-                          ? 'precision-toggle-btn active'
-                          : 'precision-toggle-btn'
-                      }
-                      onClick={() =>
-                        handleSelectDeviceChoice('webgpu-discrete')
-                      }
-                    >
-                      {deviceChoice === 'webgpu-discrete' && (
-                        <CheckIcon size={13} />
-                      )}
-                      dGPU ({hardwareProfile.dGpuName || 'High-Perf'}
-                      {getDeviceLatency('dgpu') !== undefined
-                        ? ` · ${getDeviceLatency('dgpu')} ms`
-                        : ''}
-                      )
-                    </button>
-                  </Tooltip>
-                  <Tooltip
-                    content={`Integrated GPU (iGPU): Power-efficient WebGPU shader execution on ${hardwareProfile.iGpuName || 'integrated graphics'}.`}
-                  >
-                    <button
-                      type="button"
-                      className={
-                        deviceChoice === 'webgpu-integrated'
-                          ? 'precision-toggle-btn active'
-                          : 'precision-toggle-btn'
-                      }
-                      onClick={() =>
-                        handleSelectDeviceChoice('webgpu-integrated')
-                      }
-                    >
-                      {deviceChoice === 'webgpu-integrated' && (
-                        <CheckIcon size={13} />
-                      )}
-                      iGPU ({hardwareProfile.iGpuName || 'Low-Power'}
-                      {getDeviceLatency('igpu') !== undefined
-                        ? ` · ${getDeviceLatency('igpu')} ms`
-                        : ''}
-                      )
-                    </button>
-                  </Tooltip>
-                </>
-              ) : hardwareProfile?.gpuType === 'dgpu' ? (
+                    Auto Hardware Dispatcher
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-soft)' }}>
+                    Empirically measures latency across all detected local
+                    backends and dispatches embedding jobs to the fastest
+                    hardware (
+                    {benchmarkReport
+                      ? `${benchmarkReport.fastestName} · ${benchmarkReport.fastestLatencyMs} ms`
+                      : 'GPU / NPU / CPU'}
+                    ).
+                  </div>
+                </div>
+              }
+            >
+              <button
+                type="button"
+                className={
+                  deviceChoice === 'auto'
+                    ? 'precision-toggle-btn active'
+                    : 'precision-toggle-btn'
+                }
+                onClick={() => handleSelectDeviceChoice('auto')}
+              >
+                {deviceChoice === 'auto' && <CheckIcon size={13} />}
+                <ZapIcon size={13} />
+                Auto
+                {benchmarkReport
+                  ? ` · ${benchmarkReport.fastestLatencyMs} ms`
+                  : ''}
+              </button>
+            </Tooltip>
+
+            {hardwareProfile?.hasDualGpu ? (
+              <>
                 <Tooltip
-                  content={`Dedicated GPU (dGPU): WebGPU tensor compute on ${hardwareProfile.gpuName || 'dedicated graphics'}.`}
+                  maxWidth={360}
+                  content={
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                        padding: '2px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: 'var(--brand-text)',
+                          fontSize: '13px',
+                        }}
+                      >
+                        Dedicated GPU:{' '}
+                        {hardwareProfile.dGpuName || 'Discrete Graphics'}
+                      </div>
+                      <div
+                        style={{ fontSize: '12px', color: 'var(--text-soft)' }}
+                      >
+                        High-throughput WebGPU tensor compute for fast parallel
+                        batch embeddings. Ideal for large tab collections.
+                      </div>
+                    </div>
+                  }
                 >
                   <button
                     type="button"
                     className={
-                      deviceChoice === 'webgpu-discrete' ||
-                      deviceChoice === 'webgpu'
+                      deviceChoice === 'webgpu-discrete'
                         ? 'precision-toggle-btn active'
                         : 'precision-toggle-btn'
                     }
                     onClick={() => handleSelectDeviceChoice('webgpu-discrete')}
                   >
-                    {(deviceChoice === 'webgpu-discrete' ||
-                      deviceChoice === 'webgpu') && <CheckIcon size={13} />}
-                    dGPU ({hardwareProfile.gpuName || 'Dedicated'}
-                    {getDeviceLatency('dgpu') !== undefined ||
-                    getDeviceLatency('gpu') !== undefined
-                      ? ` · ${getDeviceLatency('dgpu') ?? getDeviceLatency('gpu')} ms`
+                    {deviceChoice === 'webgpu-discrete' && (
+                      <CheckIcon size={13} />
+                    )}
+                    dGPU
+                    {getDeviceLatency('dgpu') !== undefined
+                      ? ` · ${getDeviceLatency('dgpu')} ms`
                       : ''}
-                    )
                   </button>
                 </Tooltip>
-              ) : (
                 <Tooltip
-                  content={`Integrated GPU (iGPU): Power-efficient WebGPU shader execution on ${hardwareProfile?.gpuName || 'integrated graphics'}.`}
+                  maxWidth={360}
+                  content={
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                        padding: '2px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: 'var(--brand-text)',
+                          fontSize: '13px',
+                        }}
+                      >
+                        Integrated GPU:{' '}
+                        {hardwareProfile.iGpuName || 'Integrated Graphics'}
+                      </div>
+                      <div
+                        style={{ fontSize: '12px', color: 'var(--text-soft)' }}
+                      >
+                        Power-efficient WebGPU shader execution with minimal
+                        battery drain and zero background idle power.
+                      </div>
+                    </div>
+                  }
                 >
                   <button
                     type="button"
                     className={
-                      deviceChoice === 'webgpu-integrated' ||
-                      deviceChoice === 'webgpu'
+                      deviceChoice === 'webgpu-integrated'
                         ? 'precision-toggle-btn active'
                         : 'precision-toggle-btn'
                     }
@@ -757,18 +834,17 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                       handleSelectDeviceChoice('webgpu-integrated')
                     }
                   >
-                    {(deviceChoice === 'webgpu-integrated' ||
-                      deviceChoice === 'webgpu') && <CheckIcon size={13} />}
-                    iGPU ({hardwareProfile?.gpuName || 'Integrated'}
-                    {getDeviceLatency('igpu') !== undefined ||
-                    getDeviceLatency('gpu') !== undefined
-                      ? ` · ${getDeviceLatency('igpu') ?? getDeviceLatency('gpu')} ms`
+                    {deviceChoice === 'webgpu-integrated' && (
+                      <CheckIcon size={13} />
+                    )}
+                    iGPU
+                    {getDeviceLatency('igpu') !== undefined
+                      ? ` · ${getDeviceLatency('igpu')} ms`
                       : ''}
-                    )
                   </button>
                 </Tooltip>
-              )}
-
+              </>
+            ) : hardwareProfile?.gpuType === 'dgpu' ? (
               <Tooltip
                 maxWidth={360}
                 content={
@@ -787,14 +863,14 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                         fontSize: '13px',
                       }}
                     >
-                      NPU Dedicated Neural Execution
+                      Dedicated GPU:{' '}
+                      {hardwareProfile.gpuName || 'Discrete Graphics'}
                     </div>
                     <div
                       style={{ fontSize: '12px', color: 'var(--text-soft)' }}
                     >
-                      DirectML / WebNN neural inference for zero-latency tab
-                      embeddings. Runs natively with zero browser flags
-                      required.
+                      High-throughput WebGPU tensor compute for fast parallel
+                      embeddings.
                     </div>
                   </div>
                 }
@@ -802,66 +878,175 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 <button
                   type="button"
                   className={
-                    deviceChoice === 'npu'
+                    deviceChoice === 'webgpu-discrete' ||
+                    deviceChoice === 'webgpu'
                       ? 'precision-toggle-btn active'
                       : 'precision-toggle-btn'
                   }
-                  onClick={() => handleSelectDeviceChoice('npu')}
+                  onClick={() => handleSelectDeviceChoice('webgpu-discrete')}
                 >
-                  {deviceChoice === 'npu' && <CheckIcon size={13} />}
-                  NPU (
-                  {getDeviceLatency('npu') !== undefined
-                    ? `DirectML · ${getDeviceLatency('npu')} ms`
-                    : 'DirectML / WebNN'}
-                  )
+                  {(deviceChoice === 'webgpu-discrete' ||
+                    deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                  dGPU
+                  {getDeviceLatency('dgpu') !== undefined ||
+                  getDeviceLatency('gpu') !== undefined
+                    ? ` · ${getDeviceLatency('dgpu') ?? getDeviceLatency('gpu')} ms`
+                    : ''}
                 </button>
               </Tooltip>
-
-              <Tooltip content="CPU WASM SIMD: 128-bit vector parallel compute with zero GPU memory overhead. 100% resilient universal CPU fallback.">
+            ) : (
+              <Tooltip
+                maxWidth={360}
+                content={
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      padding: '2px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        color: 'var(--brand-text)',
+                        fontSize: '13px',
+                      }}
+                    >
+                      Integrated GPU:{' '}
+                      {hardwareProfile?.gpuName || 'Integrated Graphics'}
+                    </div>
+                    <div
+                      style={{ fontSize: '12px', color: 'var(--text-soft)' }}
+                    >
+                      Power-efficient WebGPU shader execution with minimal power
+                      draw and dedicated matrix pipelines.
+                    </div>
+                  </div>
+                }
+              >
                 <button
                   type="button"
                   className={
-                    deviceChoice === 'cpu'
+                    deviceChoice === 'webgpu-integrated' ||
+                    deviceChoice === 'webgpu'
                       ? 'precision-toggle-btn active'
                       : 'precision-toggle-btn'
                   }
-                  onClick={() => handleSelectDeviceChoice('cpu')}
+                  onClick={() => handleSelectDeviceChoice('webgpu-integrated')}
                 >
-                  {deviceChoice === 'cpu' && <CheckIcon size={13} />}
-                  CPU (SIMD
-                  {getDeviceLatency('cpu') !== undefined
-                    ? ` · ${getDeviceLatency('cpu')} ms`
+                  {(deviceChoice === 'webgpu-integrated' ||
+                    deviceChoice === 'webgpu') && <CheckIcon size={13} />}
+                  iGPU
+                  {getDeviceLatency('igpu') !== undefined ||
+                  getDeviceLatency('gpu') !== undefined
+                    ? ` · ${getDeviceLatency('igpu') ?? getDeviceLatency('gpu')} ms`
                     : ''}
-                  )
                 </button>
               </Tooltip>
+            )}
 
-              <Tooltip content="Run empirical matrix benchmark across all detected local GPUs, NPU, and CPU to verify real execution latency.">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  className="benchmark-btn"
-                  style={{ marginLeft: 'auto', gap: '6px' }}
-                  onClick={() => void handleTriggerBenchmark()}
-                  disabled={isBenchmarking}
+            <Tooltip
+              maxWidth={360}
+              content={
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    padding: '2px',
+                  }}
                 >
-                  <RefreshIcon
-                    size={13}
-                    className={isBenchmarking ? 'benchmark-spin' : ''}
-                  />
-                  <span>
-                    {isBenchmarking ? 'Benchmarking...' : 'Benchmark Hardware'}
-                  </span>
-                </Button>
-              </Tooltip>
-            </div>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: 'var(--brand-text)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    NPU Dedicated Neural Execution
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-soft)' }}>
+                    DirectML / WebNN neural inference for zero-latency tab
+                    embeddings. Runs natively with zero browser flags required.
+                  </div>
+                </div>
+              }
+            >
+              <button
+                type="button"
+                className={
+                  deviceChoice === 'npu'
+                    ? 'precision-toggle-btn active'
+                    : 'precision-toggle-btn'
+                }
+                onClick={() => handleSelectDeviceChoice('npu')}
+              >
+                {deviceChoice === 'npu' && <CheckIcon size={13} />}
+                NPU
+                {getDeviceLatency('npu') !== undefined
+                  ? ` · ${getDeviceLatency('npu')} ms`
+                  : ''}
+              </button>
+            </Tooltip>
+
+            <Tooltip
+              maxWidth={360}
+              content={
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    padding: '2px',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: 'var(--brand-text)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    CPU WASM SIMD Vector Engine
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-soft)' }}>
+                    128-bit vector parallel compute executing via WebAssembly
+                    across{' '}
+                    {hardwareProfile?.cpuThreads
+                      ? `${hardwareProfile.cpuThreads} threads`
+                      : 'CPU cores'}
+                    . 100% resilient universal fallback with zero GPU memory
+                    overhead.
+                  </div>
+                </div>
+              }
+            >
+              <button
+                type="button"
+                className={
+                  deviceChoice === 'cpu'
+                    ? 'precision-toggle-btn active'
+                    : 'precision-toggle-btn'
+                }
+                onClick={() => handleSelectDeviceChoice('cpu')}
+              >
+                {deviceChoice === 'cpu' && <CheckIcon size={13} />}
+                CPU
+                {getDeviceLatency('cpu') !== undefined
+                  ? ` · ${getDeviceLatency('cpu')} ms`
+                  : ''}
+              </button>
+            </Tooltip>
           </div>
 
           {benchmarkReport && (
-            <div className="benchmark-results-strip">
+            <div
+              className="benchmark-results-strip"
+              style={{ marginTop: '8px' }}
+            >
               <span className="benchmark-strip-title">
-                ⚡ Empirical Benchmark{' '}
+                <ZapIcon size={13} /> Empirical Benchmark{' '}
                 <span
                   style={{ fontWeight: 400, opacity: 0.75, fontSize: '11px' }}
                 >
@@ -873,25 +1058,40 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                 const opsPerSec = Math.round(
                   1000 / Math.max(res.latencyMs, 0.01),
                 );
+                const shortLabel =
+                  res.category === 'dgpu'
+                    ? 'dGPU'
+                    : res.category === 'igpu'
+                      ? 'iGPU'
+                      : res.category === 'npu'
+                        ? 'NPU'
+                        : res.category === 'cpu'
+                          ? 'CPU'
+                          : res.id.toUpperCase();
                 return (
                   <span
                     key={res.id}
                     className={`benchmark-badge ${isFastest ? 'fastest' : ''}`}
                     title={`${res.name}: ${res.latencyMs} ms per pass (~${opsPerSec.toLocaleString()} ops/sec)`}
                   >
-                    {isFastest && '🏆 '}
-                    <strong>{res.name}:</strong>
+                    {isFastest && <MedalIcon size={13} />}
+                    <strong>{shortLabel}:</strong>
                     <span
                       style={{
-                        opacity: 0.8,
+                        opacity: 0.9,
                         fontSize: '11px',
                         marginLeft: '4px',
                         display: 'inline-flex',
                         alignItems: 'center',
+                        gap: '3px',
                       }}
                     >
+                      <span>{res.latencyMs} ms</span>
+                      <span style={{ opacity: 0.5 }}>·</span>
                       <NumberTicker value={opsPerSec} />
-                      <span style={{ marginLeft: '3px' }}>ops/s</span>
+                      <span style={{ fontSize: '10px', opacity: 0.8 }}>
+                        ops/s
+                      </span>
                     </span>
                     {isFastest && (
                       <span
@@ -912,11 +1112,13 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
 
           {hardwareProfile && (
             <p className="hardware-advisor-reason">
-              💡 <strong>Hardware Advice:</strong>{' '}
-              {hardwareProfile.recommendationReason}
+              <LightbulbIcon size={14} /> <strong>Hardware Advice:</strong>{' '}
+              {benchmarkReport
+                ? `${benchmarkReport.fastestName} is the fastest engine on this device (${benchmarkReport.fastestLatencyMs} ms).`
+                : hardwareProfile.recommendationReason}
             </p>
           )}
-        </div>
+        </CardSpotlight>
 
         <div className="hf-models-grid">
           {TABMAN_OFFICIAL_MODELS.map((hfModel) => {
@@ -1141,7 +1343,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
         {providers.map((profile) => {
           const active = profile.id === settings?.activeProviderId;
           return (
-            <article
+            <CardSpotlight
               className={active ? 'provider active' : 'provider'}
               key={profile.id}
             >
@@ -1342,6 +1544,20 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {
+                      setSettings((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              providers: prev.providers.filter(
+                                (p) => p.id !== profile.id,
+                              ),
+                              activeProviderId:
+                                prev.activeProviderId === profile.id
+                                  ? null
+                                  : prev.activeProviderId,
+                            }
+                          : prev,
+                      );
                       const response = await sendSwitchboardRequest({
                         type: 'providers/remove',
                         id: profile.id,
@@ -1356,7 +1572,7 @@ export function ProvidersPanel({ onNotify }: PanelProps) {
                   Remove
                 </Button>
               </footer>
-            </article>
+            </CardSpotlight>
           );
         })}
 

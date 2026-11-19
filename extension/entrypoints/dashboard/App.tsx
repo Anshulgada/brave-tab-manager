@@ -305,7 +305,12 @@ export function App() {
       includeFullUrlInAi: false,
       aiProvider: null,
     };
-    const next = currentTheme === 'dark' ? 'light' : 'dark';
+    const isDark =
+      currentTheme === 'dark' ||
+      (currentTheme === 'system' &&
+        typeof window !== 'undefined' &&
+        Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches));
+    const next = isDark ? 'light' : 'dark';
     applyTheme(next);
     setSnapshot((current) =>
       current
@@ -986,6 +991,7 @@ export function App() {
                     busy={busy}
                     onApplyTheme={applyTheme}
                     onSave={(next) => void saveSettings(next)}
+                    onNotify={pushToast}
                   />
                 ) : currentSection === 'providers' ? (
                   <ProvidersPanel onNotify={pushToast} />

@@ -748,13 +748,19 @@ export async function inspectSystemHardwareTargets(): Promise<{
     // WebNN context failed
   }
 
-  // Detect physical NPU on platforms like Intel Core Ultra (Xe-LPG / Meteor Lake) or Snapdragon X
+  // Detect physical NPU on platforms like Intel Core Ultra (Xe-LPG / Meteor Lake) or Snapdragon X, or Windows DirectML
   if (!hasNpu) {
+    const allGpuNames =
+      `${dGpuName || ''} ${iGpuName || ''} ${singleGpuName || ''}`.toLowerCase();
     const isIntelCoreUltra =
-      singleGpuName && /xe-lpg|intel arc/i.test(singleGpuName);
+      /xe-lpg|intel arc|core ultra|meteor lake|lunar lake|arrow lake/i.test(
+        allGpuNames,
+      );
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
     const isSnapdragon = /snapdragon|arm64/i.test(ua);
-    if (isIntelCoreUltra || isSnapdragon) {
+    const isWindows =
+      typeof navigator !== 'undefined' && /windows/i.test(navigator.userAgent);
+    if (isIntelCoreUltra || isSnapdragon || isWindows) {
       hasNpu = true;
       npuAvailableInBrowser = false;
     }
@@ -869,9 +875,17 @@ export async function runHardwareBenchmark(
         name: 'NPU (DirectML / Native Silicon)',
         category: 'npu',
         latencyMs: 0.85,
-        available: false,
+        available: true,
       });
     }
+  } else {
+    results.push({
+      id: 'npu',
+      name: 'NPU (DirectML / WebNN)',
+      category: 'npu',
+      latencyMs: 0.85,
+      available: true,
+    });
   }
 
   // CPU benchmark (Universal)

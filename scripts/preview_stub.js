@@ -140,23 +140,62 @@
           };
         }
         if (message && message.type === 'providers/get') {
+          let settings = { providers: [], activeProviderId: null, rememberKey: false };
+          try {
+            const raw = localStorage.getItem('tabman_preview_providers');
+            if (raw) settings = JSON.parse(raw);
+          } catch {}
           return {
             ok: true,
-            settings: {
-              providers: [
-                {
-                  id: '11111111-1111-4111-8111-111111111111',
-                  name: 'Local Ollama',
-                  baseUrl: 'http://127.0.0.1:11434/v1',
-                  model: 'qwen3',
-                  apiFormat: 'openai',
-                },
-              ],
-              activeProviderId: '11111111-1111-4111-8111-111111111111',
-              rememberKey: false,
-            },
+            settings,
             hasKey: true,
           };
+        }
+        if (message && message.type === 'providers/remove') {
+          let settings = { providers: [], activeProviderId: null, rememberKey: false };
+          try {
+            const raw = localStorage.getItem('tabman_preview_providers');
+            if (raw) settings = JSON.parse(raw);
+          } catch {}
+          settings.providers = settings.providers.filter((p) => p.id !== message.id);
+          if (settings.activeProviderId === message.id) {
+            settings.activeProviderId = null;
+          }
+          try {
+            localStorage.setItem('tabman_preview_providers', JSON.stringify(settings));
+          } catch {}
+          return { ok: true, settings };
+        }
+        if (message && message.type === 'providers/save') {
+          let settings = { providers: [], activeProviderId: null, rememberKey: false };
+          try {
+            const raw = localStorage.getItem('tabman_preview_providers');
+            if (raw) settings = JSON.parse(raw);
+          } catch {}
+          const profile = message.profile;
+          settings.providers = [
+            ...settings.providers.filter((p) => p.id !== profile.id),
+            profile,
+          ];
+          if (!settings.activeProviderId) {
+            settings.activeProviderId = profile.id;
+          }
+          try {
+            localStorage.setItem('tabman_preview_providers', JSON.stringify(settings));
+          } catch {}
+          return { ok: true, settings };
+        }
+        if (message && message.type === 'providers/activate') {
+          let settings = { providers: [], activeProviderId: null, rememberKey: false };
+          try {
+            const raw = localStorage.getItem('tabman_preview_providers');
+            if (raw) settings = JSON.parse(raw);
+          } catch {}
+          settings.activeProviderId = message.id;
+          try {
+            localStorage.setItem('tabman_preview_providers', JSON.stringify(settings));
+          } catch {}
+          return { ok: true, settings };
         }
         return { ok: true };
       },
